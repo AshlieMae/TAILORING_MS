@@ -54,6 +54,7 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const [emailSub, setEmailSub] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isCareGuideOpen, setIsCareGuideOpen] = useState(false);
 
   return (
     <div
@@ -215,12 +216,24 @@ export default function LandingPage() {
             >
               Fall Collection Care Guide
             </span>
-            <div className="w-16 h-16 rounded-full border border-[#EFE7D8]/70 flex items-center justify-center cursor-pointer hover:scale-105 hover:border-[#C9A66B] transition-all">
+            <button type="button" onClick={() => setIsCareGuideOpen(true)} aria-label="Play Fall Collection Care Guide" className="w-16 h-16 rounded-full border border-[#EFE7D8]/70 flex items-center justify-center hover:scale-105 hover:border-[#C9A66B] transition-all">
               <Play className="w-5 h-5 fill-current ml-1" />
-            </div>
+            </button>
           </div>
         </div>
       </section>
+
+      {isCareGuideOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button type="button" aria-label="Close video" onClick={() => setIsCareGuideOpen(false)} className="absolute inset-0 bg-black/75 backdrop-blur-sm" />
+          <section role="dialog" aria-modal="true" aria-label="Fall Collection Care Guide video" className="relative w-full max-w-4xl overflow-hidden rounded-sm border border-[#C9A66B]/60 bg-[#14120D] shadow-2xl">
+            <button type="button" onClick={() => setIsCareGuideOpen(false)} className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-[#EFE7D8] hover:bg-black" aria-label="Close video"><X className="h-5 w-5" /></button>
+            <div className="aspect-video">
+              <iframe className="h-full w-full" src="https://www.youtube-nocookie.com/embed/aqz-KE-bpKQ?autoplay=1&rel=0" title="Fall Collection Care Guide" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* ---------------- REVIEWS ---------------- */}
       <section id="reviews" className="max-w-7xl mx-auto px-6 sm:px-8 py-20">

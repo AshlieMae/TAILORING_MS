@@ -4,6 +4,7 @@ import { Camera, CheckCircle2, UserRound } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const authToken = () => localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '';
+const profileCompletionKey = (user: any) => `profileCompleted:${user?.id || user?._id || user?.email || 'current-user'}`;
 
 type ProfileForm = {
   fullName: string;
@@ -25,13 +26,16 @@ export default function CompleteProfile() {
   const navigate = useNavigate();
   const fileInput = useRef<HTMLInputElement>(null);
   const user = savedUser();
+  const isMasterTailor = user?.role === 'tailor';
+  const dashboardPath = isMasterTailor ? '/master' : '/frontdesk';
+  const roleLabel = isMasterTailor ? 'Master Tailor' : 'Front Desk';
   const [form, setForm] = useState<ProfileForm>({
     fullName: user?.full_name || '',
     email: user?.email || '',
     contactNumber: user?.contact_number || '',
     address: user?.address || '',
     employeeId: user?.employee_id || '',
-    position: user?.position || 'Front Desk Associate',
+    position: user?.position || (isMasterTailor ? 'Master Tailor' : 'Front Desk Associate'),
     dateHired: user?.date_hired ? String(user.date_hired).slice(0, 10) : '',
     profilePicture: user?.profile_picture || '',
   });
@@ -69,8 +73,16 @@ export default function CompleteProfile() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Unable to save your profile.');
       const storage = localStorage.getItem('authToken') ? localStorage : sessionStorage;
-      storage.setItem('currentUser', JSON.stringify(data.user));
-      navigate('/frontdesk', { replace: true });
+      // Some API responses return the updated profile fields but omit this flag.
+      // Keep the authenticated session in sync so the dashboard guard can proceed.
+      const completedUser = {
+        ...user,
+        ...data.user,
+        profile_completed: true,
+      };
+      storage.setItem('currentUser', JSON.stringify(completedUser));
+      localStorage.setItem(profileCompletionKey(completedUser), 'true');
+      navigate(dashboardPath, { replace: true });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to save your profile.');
     } finally {
@@ -82,9 +94,9 @@ export default function CompleteProfile() {
     <main className="min-h-screen bg-[#FAF7F2] px-4 py-10 text-[#2A211D] sm:px-8">
       <div className="mx-auto max-w-3xl rounded-2xl border border-[#E8DFD3] bg-white p-6 shadow-[0_24px_70px_-30px_rgba(42,33,29,0.28)] sm:p-10">
         <div className="mb-8">
-          <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-[#A46B48]">Front Desk Setup</span>
+          <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-[#A46B48]">{roleLabel} Setup</span>
           <h1 className="mt-2 font-serif text-4xl">Complete your profile</h1>
-          <p className="mt-3 max-w-xl text-sm leading-relaxed text-[#766A62]">Your account is approved. Complete these details before accessing the Front Desk dashboard.</p>
+          <p className="mt-3 max-w-xl text-sm leading-relaxed text-[#766A62]">Your account is approved. Complete these details before accessing the {roleLabel} dashboard.</p>
         </div>
 
         <form onSubmit={saveProfile} className="space-y-6">

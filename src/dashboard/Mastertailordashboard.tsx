@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import {
   LayoutDashboard,
@@ -17,6 +18,7 @@ import {
   ArrowRight,
   PackageCheck,
   User,
+  LogOut,
 } from 'lucide-react';
 
 /* ---------------------------------------------------------------
@@ -72,6 +74,22 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 function authToken() {
   return localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '';
+}
+
+function LiveDateTime() {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return <MonoLabel className="hidden sm:inline">{now.toLocaleString(undefined, { weekday: 'short', month: 'short', day: '2-digit', hour: 'numeric', minute: '2-digit' })}</MonoLabel>;
+}
+
+function currentUser() {
+  const stored = localStorage.getItem('currentUser') || sessionStorage.getItem('currentUser');
+  try { return stored ? JSON.parse(stored) : null; } catch { return null; }
 }
 
 const STAGES = ['Measuring', 'Pattern Cutting', 'Initial Assembly', 'First Fitting', 'Final Alterations', 'Completed', 'Ready for Pickup'];
@@ -520,8 +538,17 @@ function StatCard({ label, value, icon, delay = 0, tone = 'default' }: { label: 
 ================================================================== */
 
 export default function MasterTailorDashboard({ initialView = 'dashboard' }: { initialView?: ViewKey }) {
+  const navigate = useNavigate();
+  const profile = currentUser();
   const [navOpen, setNavOpen] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [view, setView] = useState<ViewKey>(initialView);
+
+  const signOut = () => {
+    localStorage.removeItem('authToken'); localStorage.removeItem('currentUser');
+    sessionStorage.removeItem('authToken'); sessionStorage.removeItem('currentUser');
+    navigate('/login', { replace: true });
+  };
 
   const currentNavLabel = NAV.find((n) => n.view === view)?.label ?? 'Dashboard';
 
@@ -587,18 +614,23 @@ export default function MasterTailorDashboard({ initialView = 'dashboard' }: { i
           </nav>
         </div>
 
-        <div className="px-8 py-7 border-t border-[#45443E] flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-[#E8C547]/20 border border-[#E8C547]/50 flex items-center justify-center">
-            <span className="text-[#E8C547] text-xs font-medium">
-              {TAILOR.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
-            </span>
-          </div>
-          <div className="leading-tight">
-            <div className="text-[13px] text-[#EDEAE2]">{TAILOR.name}</div>
-            <MonoLabel className="text-[#9C9686]">{TAILOR.role}</MonoLabel>
-          </div>
+        <div className="px-8 py-7 border-t border-[#45443E] space-y-4">
+          <button type="button" onClick={() => setShowProfile(true)} className="flex w-full items-center gap-3 rounded-sm p-1 text-left transition-colors hover:bg-[#333230]">
+            <div className="w-9 h-9 overflow-hidden rounded-full bg-[#E8C547]/20 border border-[#E8C547]/50 flex items-center justify-center">
+              {profile?.profile_picture ? <img src={profile.profile_picture} alt="Profile" className="h-full w-full object-cover" /> : <span className="text-[#E8C547] text-xs font-medium">{profile?.full_name?.split(' ').map((name: string) => name[0]).join('').slice(0, 2) || 'MT'}</span>}
+            </div>
+            <div className="min-w-0 leading-tight">
+              <div className="truncate text-[13px] text-[#EDEAE2]">{profile?.full_name || TAILOR.name}</div>
+              <MonoLabel className="text-[#9C9686]">{profile?.position || TAILOR.role}</MonoLabel>
+            </div>
+          </button>
+          <button onClick={signOut} className="group flex w-full items-center justify-between border border-[#45443E] bg-[#333230] px-3.5 py-2.5 rounded-sm text-[10px] font-semibold tracking-[0.16em] uppercase text-[#B4AF9E] transition-all hover:border-[#E8C547]/60 hover:text-[#EDEAE2]">
+            Sign out <LogOut className="h-3.5 w-3.5 text-[#E8C547] transition-transform group-hover:translate-x-0.5" />
+          </button>
         </div>
       </aside>
+
+      {showProfile && <MasterTailorProfileModal profile={profile} onClose={() => setShowProfile(false)} onEdit={() => navigate('/complete-profile')} />}
 
       {navOpen && <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={() => setNavOpen(false)} />}
 
@@ -630,7 +662,7 @@ export default function MasterTailorDashboard({ initialView = 'dashboard' }: { i
               <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#C0392B] ring-2 ring-[#F3F1E7]" />
             </button>
             <div className="h-6 w-px bg-[#D6D2C0] hidden sm:block" />
-            <MonoLabel className="hidden sm:inline">Sun, Aug 02</MonoLabel>
+            <LiveDateTime />
           </div>
         </header>
 
@@ -640,4 +672,28 @@ export default function MasterTailorDashboard({ initialView = 'dashboard' }: { i
       </div>
     </div>
   );
+}
+
+function MasterTailorProfileModal({ profile, onClose, onEdit }: { profile: any; onClose: () => void; onEdit: () => void }) {
+  const details: [string, string | undefined][] = [
+    ['Employee ID', profile?.employee_id], ['Position', profile?.position || 'Master Tailor'],
+    ['Department', 'Production & Alterations'], ['Date Hired', profile?.date_hired ? new Date(profile.date_hired).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : undefined],
+    ['Account Status', profile?.status || 'Approved'],
+  ];
+  const responsibilities = ['Review assigned job cards', 'Take and verify measurements', 'Create patterns and cut fabric', 'Update production stages', 'Record fabric usage', 'Complete fittings and alterations'];
+  const Section = ({ title, items }: { title: string; items: [string, string | undefined][] }) => <div><h3 className="text-lg text-[#262420]" style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 700 }}>{title}</h3><dl className="mt-3 grid gap-x-6 gap-y-4 sm:grid-cols-2">{items.map(([label, value]) => <div key={label}><dt className="text-[10px] uppercase tracking-[0.16em] text-[#7A7568]">{label}</dt><dd className="mt-1 text-sm text-[#262420]">{value || 'Not set'}</dd></div>)}</dl></div>;
+  return <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <button aria-label="Close profile" onClick={onClose} className="absolute inset-0 bg-black/45 backdrop-blur-sm" />
+    <section className="relative max-h-[92vh] w-full max-w-3xl overflow-y-auto border border-[#D6D2C0] bg-[#FAF8F0] shadow-2xl">
+      <header className="flex items-start justify-between border-b border-[#D6D2C0] px-6 py-6 sm:px-8"><div><MonoLabel>Master Tailor Profile</MonoLabel><h2 className="mt-1 text-3xl text-[#262420]" style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 700 }}>{profile?.full_name || TAILOR.name}</h2></div><button onClick={onClose} className="p-2 text-[#6E6A5C] hover:bg-[#EDEAE2]"><X className="h-5 w-5" /></button></header>
+      <div className="space-y-8 p-6 sm:p-8">
+        <div className="flex items-center gap-5 border border-[#D6D2C0] bg-[#F3F1E7] p-5"><div className="h-20 w-20 overflow-hidden rounded-full border border-[#E8C547]/60 bg-[#E8C547]/15">{profile?.profile_picture ? <img src={profile.profile_picture} alt="Profile" className="h-full w-full object-cover" /> : <User className="m-6 h-8 w-8 text-[#8A6A18]" />}</div><div><div className="text-lg font-medium">{profile?.full_name || TAILOR.name}</div><p className="text-sm text-[#6E6A5C]">{profile?.position || TAILOR.role}</p><p className="mt-1 text-xs text-[#7A7568]">{profile?.email || 'No email'}</p></div></div>
+        <Section title="Personal Information" items={[["Full Name", profile?.full_name], ['Email Address', profile?.email], ['Contact Number', profile?.contact_number], ['Address', profile?.address]]} />
+        <Section title="Employment Information" items={details} />
+        <Section title="Account Information" items={[["Username", profile?.email?.split('@')[0]], ['Role', 'Master Tailor'], ['Last Login', 'Current session'], ['Password', '••••••••••••']]} />
+        <div><h3 className="text-lg text-[#262420]" style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 700 }}>Responsibilities</h3><ul className="mt-3 grid gap-2 sm:grid-cols-2">{responsibilities.map((item) => <li key={item} className="flex gap-2 text-sm text-[#6E6A5C]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#8A6A18]" />{item}</li>)}</ul></div>
+        <div className="flex flex-wrap gap-3 border-t border-[#D6D2C0] pt-6"><button onClick={onEdit} className="bg-[#2A2A28] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#EDEAE2]">Edit Profile</button><button onClick={onEdit} className="border border-[#B4AF9E] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#55503F]">Change Photo</button></div>
+      </div>
+    </section>
+  </div>;
 }

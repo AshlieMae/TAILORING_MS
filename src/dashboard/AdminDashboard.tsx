@@ -22,7 +22,15 @@ import {
   UserCog,
   LogOut,
 } from 'lucide-react';
-import { UserManagementView } from '../pages/UserAccounts';
+import { UserManagementView } from '../Pages_Admin/UserAccounts';
+import { AdminCustomersView } from '../Pages_Admin/Customers';
+import { AdminOrdersView } from '../Pages_Admin/Orders';
+import { AdminProductionView } from '../Pages_Admin/Production';
+import { AdminInventoryManagementView } from '../Pages_Admin/InventoryManagement';
+import { AdminPaymentsView } from '../Pages_Admin/Payments';
+import { AdminReportsView } from '../Pages_Admin/Reports';
+import { AdminSettingsWideView } from '../Pages_Admin/SettingsWide';
+import { AdminProfileModal } from '../Pages_Admin/AdminProfile';
 
 /* ---------------------------------------------------------------
    ADMIN — Dashboard + User Management
@@ -122,7 +130,7 @@ const NAV: { label: string; icon: typeof LayoutDashboard; view: ViewKey }[] = [
    DASHBOARD VIEW
 ================================================================== */
 
-function DashboardView() {
+function DashboardView({ onGoToInventory }: { onGoToInventory: () => void }) {
   const maxRevenue = Math.max(...WEEK_REVENUE.map((d) => d.amount));
   const totalStageCount = STAGES.reduce((s, x) => s + x.count, 0);
 
@@ -208,7 +216,7 @@ function DashboardView() {
               );
             })}
           </div>
-          <button className="mt-6 w-full text-center text-[11px] tracking-[0.14em] uppercase text-[#5D7480] border border-[#C7D2CE] py-2.5 hover:border-[#4FB6C4] hover:text-[#122029] transition-colors">
+          <button onClick={onGoToInventory} className="mt-6 w-full text-center text-[11px] tracking-[0.14em] uppercase text-[#5D7480] border border-[#C7D2CE] py-2.5 hover:border-[#4FB6C4] hover:text-[#122029] transition-colors">
             Go to inventory
           </button>
         </div>
@@ -310,10 +318,12 @@ function StatCard({ label, value, trend, trendUp, icon, delay = 0, tone = 'defau
 
 export default function AdminDashboard({ initialView = 'dashboard' }: { initialView?: ViewKey }) {
   const navigate = useNavigate();
+  const [profile, setProfile] = useState(() => currentUser());
   const [navOpen, setNavOpen] = useState(false);
   const [view, setView] = useState<ViewKey>(initialView);
   const [quickSearch, setQuickSearch] = useState('');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const signOut = () => {
     localStorage.removeItem('authToken'); localStorage.removeItem('currentUser');
     sessionStorage.removeItem('authToken'); sessionStorage.removeItem('currentUser');
@@ -325,9 +335,23 @@ export default function AdminDashboard({ initialView = 'dashboard' }: { initialV
   function renderView() {
     switch (view) {
       case 'dashboard':
-        return <DashboardView />;
+        return <DashboardView onGoToInventory={() => setView('inventory')} />;
       case 'users':
         return <UserManagementView externalQuery={quickSearch} />;
+      case 'customers':
+        return <AdminCustomersView externalQuery={quickSearch} />;
+      case 'orders':
+        return <AdminOrdersView externalQuery={quickSearch} />;
+      case 'production':
+        return <AdminProductionView />;
+      case 'inventory':
+        return <AdminInventoryManagementView />;
+      case 'payments':
+        return <AdminPaymentsView />;
+      case 'reports':
+        return <AdminReportsView />;
+      case 'settings':
+        return <AdminSettingsWideView />;
       default:
         return <ComingSoonView label={currentNavLabel} />;
     }
@@ -387,20 +411,19 @@ export default function AdminDashboard({ initialView = 'dashboard' }: { initialV
         </div>
 
         <div className="px-8 py-6 border-t border-[#24404F] space-y-4">
-          <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-[#4FB6C4]/15 border border-[#4FB6C4]/50 flex items-center justify-center">
-            <span className="text-[#4FB6C4] text-xs font-medium">AD</span>
-          </div>
-          <div className="leading-tight">
-            <div className="text-[13px] text-[#EAF3F5]">Admin</div>
-            <MonoLabel className="text-[#6E93A0]">Shop owner</MonoLabel>
-          </div>
-          </div>
+          <button type="button" onClick={() => setShowProfile(true)} className="flex w-full items-center gap-3 p-1 text-left transition-colors hover:bg-[#16283B]">
+            <div className="w-9 h-9 overflow-hidden rounded-full bg-[#4FB6C4]/15 border border-[#4FB6C4]/50 flex items-center justify-center">
+              {profile?.profile_picture ? <img src={profile.profile_picture} alt="Profile" className="h-full w-full object-cover" /> : <span className="text-[#4FB6C4] text-xs font-medium">{profile?.full_name?.split(' ').map((name: string) => name[0]).join('').slice(0, 2) || 'AD'}</span>}
+            </div>
+            <div className="min-w-0 leading-tight"><div className="truncate text-[13px] text-[#EAF3F5]">{profile?.full_name || 'Admin'}</div><MonoLabel className="text-[#6E93A0]">{profile?.position || 'Shop owner'}</MonoLabel></div>
+          </button>
           <button onClick={signOut} className="group flex w-full items-center justify-between border border-[#2C4A57] px-3 py-2.5 text-[10px] tracking-[0.16em] uppercase text-[#B7CDD3] transition-colors hover:border-[#4FB6C4] hover:bg-[#4FB6C4]/10 hover:text-[#EAF3F5]">
             Sign out <LogOut className="h-3.5 w-3.5 text-[#4FB6C4] transition-transform group-hover:translate-x-0.5" />
           </button>
         </div>
       </aside>
+
+      {showProfile && <AdminProfileModal profile={profile} onClose={() => setShowProfile(false)} onSave={setProfile} />}
 
       {navOpen && <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={() => setNavOpen(false)} />}
 
@@ -413,9 +436,6 @@ export default function AdminDashboard({ initialView = 'dashboard' }: { initialV
             </button>
             <div className="min-w-0">
               <MonoLabel className="block">Admin / {currentNavLabel}</MonoLabel>
-              <div className="text-[15px] text-[#122029] truncate" style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>
-                {currentNavLabel}
-              </div>
             </div>
           </div>
           <div className="flex items-center gap-3 sm:gap-5 flex-shrink-0">
@@ -468,4 +488,9 @@ function LiveDateTime() {
     return () => window.clearInterval(timer);
   }, []);
   return <MonoLabel className="hidden sm:inline">{now.toLocaleString(undefined, { weekday: 'short', month: 'short', day: '2-digit', hour: 'numeric', minute: '2-digit' })}</MonoLabel>;
+}
+
+function currentUser() {
+  const stored = localStorage.getItem('currentUser') || sessionStorage.getItem('currentUser');
+  try { return stored ? JSON.parse(stored) : null; } catch { return null; }
 }

@@ -126,17 +126,20 @@ export default function LoginPage() {
       const otherStorage = remember ? sessionStorage : localStorage;
       otherStorage.removeItem('authToken');
       otherStorage.removeItem('currentUser');
+      const profileCompletionKey = `profileCompleted:${data.user?.id || data.user?._id || data.user?.email || 'current-user'}`;
+      const profilePreviouslyCompleted = localStorage.getItem(profileCompletionKey) === 'true';
+      const user = profilePreviouslyCompleted ? { ...data.user, profile_completed: true } : data.user;
       storage.setItem('authToken', data.token);
-      storage.setItem('currentUser', JSON.stringify(data.user));
-      const destination = data.requiresProfile
+      storage.setItem('currentUser', JSON.stringify(user));
+      const destination = data.requiresProfile && !profilePreviouslyCompleted
         ? '/complete-profile'
-        : data.user.role === 'admin'
+        : user.role === 'admin'
         ? '/admin'
-        : data.user.role === 'front_desk'
+        : user.role === 'front_desk'
           ? '/frontdesk'
-          : data.user.role === 'customer'
+          : user.role === 'customer'
             ? '/customer'
-            : data.user.role === 'tailor'
+            : user.role === 'tailor'
               ? '/master'
               : '/';
       navigate(destination, { replace: true });
