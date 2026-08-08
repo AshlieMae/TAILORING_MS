@@ -18,18 +18,28 @@ import {
 
 /* ---------------------------------------------------------------
    ADMIN — User Management
-   Same atelier ticket language as the rest of the app: linen
-   ground, pine + brass + thread-red accents, IBM Plex Mono
-   "garment tag" labels. Each account renders as a fitting card;
-   status reads like a care-label stamp.
+   "The Fitting Register"
+   Staff and customer accounts read like entries in a tailor's
+   appointment register: navy ink, brass as the working accent, and
+   status shown as a wax-seal stamp rather than a pill badge. Each
+   row carries a thin colored tab on its left edge — the register's
+   index-card system.
 ------------------------------------------------------------------ */
+
+const INK = '#20242E';
+const PAPER = '#FBF9F2';
+const PAGE = '#EDE7D6';
+const LINE = '#D8CFAE';
+const MUTED = '#847A5F';
+const FAINT = '#A69A76';
+const NAVY = '#232B3A';
+const NAVY_HOVER = '#2C3548';
+const BRASS = '#B8892B';
+const RED = '#A63D40';
 
 function MonoLabel({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <span
-      className={`text-[10px] tracking-[0.22em] uppercase text-[#8A8060] ${className}`}
-      style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-    >
+    <span className={`text-[10px] tracking-[0.22em] uppercase text-[#A69A76] ${className}`} style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
       {children}
     </span>
   );
@@ -58,11 +68,13 @@ const ROLE_LABEL: Record<UserRole, string> = {
   customer: 'Customer',
 };
 
-const STATUS_META: Record<AccountStatus, { label: string; text: string; bg: string; border: string }> = {
-  pending: { label: 'Pending', text: '#8A6A2E', bg: '#F4E6C4', border: '#D8B96B' },
-  approved: { label: 'Approved', text: '#2F5233', bg: '#DCE7D3', border: '#8FAE85' },
-  rejected: { label: 'Rejected', text: '#8B3235', bg: '#F2DCDB', border: '#C98A8C' },
-  disabled: { label: 'Disabled', text: '#5A5648', bg: '#E4E0D2', border: '#B5AE94' },
+/* Wax-seal stamp tones — the register's index-tab colors, reused
+   for both the row's left edge and the round stamp. */
+const STATUS_META: Record<AccountStatus, { label: string; ink: string; ring: string; wash: string }> = {
+  pending: { label: 'Pending', ink: '#8A6A2E', ring: '#D8B96B', wash: '#F4E6C4' },
+  approved: { label: 'Approved', ink: '#2F5233', ring: '#8FAE85', wash: '#DCE7D3' },
+  rejected: { label: 'Rejected', ink: '#8B3235', ring: '#C98A8C', wash: '#F2DCDB' },
+  disabled: { label: 'Disabled', ink: '#5A5648', ring: '#B5AE94', wash: '#E4E0D2' },
 };
 
 const FILTERS: { key: AccountStatus | 'all'; label: string }[] = [
@@ -73,20 +85,23 @@ const FILTERS: { key: AccountStatus | 'all'; label: string }[] = [
   { key: 'disabled', label: 'Disabled' },
 ];
 
-function StatusTag({ status }: { status: AccountStatus }) {
+/* Signature element: a round wax-seal stamp instead of a pill badge. */
+function StatusStamp({ status }: { status: AccountStatus }) {
   const meta = STATUS_META[status];
   return (
     <span
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border text-[10px] tracking-[0.16em] uppercase font-medium"
-      style={{
-        color: meta.text,
-        backgroundColor: meta.bg,
-        borderColor: meta.border,
-        fontFamily: "'IBM Plex Mono', monospace",
-      }}
+      className="inline-flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border"
+      style={{ borderColor: meta.ring, background: meta.wash }}
     >
-      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: meta.text }} />
-      {meta.label}
+      <span
+        className="flex h-4 w-4 items-center justify-center rounded-full border-2"
+        style={{ borderColor: meta.ink, background: PAPER }}
+      >
+        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: meta.ink }} />
+      </span>
+      <span className="text-[10px] tracking-[0.14em] uppercase font-medium" style={{ color: meta.ink, fontFamily: "'IBM Plex Mono', monospace" }}>
+        {meta.label}
+      </span>
     </span>
   );
 }
@@ -137,17 +152,14 @@ function CreateAccountModal({
 
       <div className="relative w-full max-w-3xl bg-[#FBF9F2] border border-[#D8CFAE] rounded-sm shadow-[0_25px_70px_-25px_rgba(35,30,15,0.45)]">
         <div className="flex items-center justify-between px-7 sm:px-10 pt-8">
-          <MonoLabel>New account</MonoLabel>
-          <button onClick={onClose} aria-label="Close" className="text-[#A69A76] hover:text-[#242017] transition-colors">
+          <MonoLabel>New register entry</MonoLabel>
+          <button onClick={onClose} aria-label="Close" className="text-[#A69A76] hover:text-[#20242E] transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <div className="px-7 sm:px-10 pb-9 pt-3">
-          <h2
-            className="text-3xl leading-tight mb-2 text-[#242017]"
-            style={{ fontFamily: "'Fraunces', serif", fontWeight: 500 }}
-          >
+          <h2 className="text-3xl leading-tight mb-2 text-[#20242E]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 500, fontStyle: 'italic' }}>
             Create account
           </h2>
           <p className="text-[14px] text-[#847A5F] font-light mb-8 leading-relaxed">
@@ -164,26 +176,26 @@ function CreateAccountModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
               <div>
                 <label htmlFor="lastName" className="block mb-2"><MonoLabel>Last name</MonoLabel></label>
-                <div className="relative flex items-center border-b border-[#D8CFAE] focus-within:border-[#A63D40] transition-colors">
+                <div className="relative flex items-center border-b border-[#D8CFAE] focus-within:border-[#B8892B] transition-colors">
                   <User className="w-4 h-4 text-[#A69A76]" strokeWidth={1.5} />
                   <input id="lastName" value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} placeholder="Dela Cruz" className="w-full bg-transparent placeholder-[#B6AC8E] text-[14px] pl-3 py-2.5 focus:outline-none" />
                 </div>
               </div>
               <div>
                 <label htmlFor="middleName" className="block mb-2"><MonoLabel>Middle name</MonoLabel></label>
-                <div className="border-b border-[#D8CFAE] focus-within:border-[#A63D40] transition-colors">
+                <div className="border-b border-[#D8CFAE] focus-within:border-[#B8892B] transition-colors">
                   <input id="middleName" value={form.middleName} onChange={(e) => setForm((f) => ({ ...f, middleName: e.target.value }))} placeholder="Santos" className="w-full bg-transparent placeholder-[#B6AC8E] text-[14px] py-2.5 focus:outline-none" />
                 </div>
               </div>
               <div>
                 <label htmlFor="firstName" className="block mb-2"><MonoLabel>First name</MonoLabel></label>
-                <div className="border-b border-[#D8CFAE] focus-within:border-[#A63D40] transition-colors">
+                <div className="border-b border-[#D8CFAE] focus-within:border-[#B8892B] transition-colors">
                   <input id="firstName" value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} placeholder="Juana" className="w-full bg-transparent placeholder-[#B6AC8E] text-[14px] py-2.5 focus:outline-none" />
                 </div>
               </div>
               <div>
                 <label htmlFor="suffix" className="block mb-2"><MonoLabel>Suffix (optional)</MonoLabel></label>
-                <div className="border-b border-[#D8CFAE] focus-within:border-[#A63D40] transition-colors">
+                <div className="border-b border-[#D8CFAE] focus-within:border-[#B8892B] transition-colors">
                   <input id="suffix" value={form.suffix} onChange={(e) => setForm((f) => ({ ...f, suffix: e.target.value }))} placeholder="Jr., Sr., III" className="w-full bg-transparent placeholder-[#B6AC8E] text-[14px] py-2.5 focus:outline-none" />
                 </div>
               </div>
@@ -191,7 +203,7 @@ function CreateAccountModal({
 
             <div>
               <label htmlFor="newEmail" className="block mb-2"><MonoLabel>Email address</MonoLabel></label>
-              <div className="relative flex items-center border-b border-[#D8CFAE] focus-within:border-[#A63D40] transition-colors">
+              <div className="relative flex items-center border-b border-[#D8CFAE] focus-within:border-[#B8892B] transition-colors">
                 <Mail className="w-4 h-4 text-[#A69A76]" strokeWidth={1.5} />
                 <input
                   id="newEmail"
@@ -214,7 +226,7 @@ function CreateAccountModal({
                     onClick={() => setForm((f) => ({ ...f, role: r }))}
                     className={`px-2 py-2.5 rounded-sm border text-[11px] tracking-[0.08em] uppercase transition-colors ${
                       form.role === r
-                        ? 'bg-[#232B22] border-[#232B22] text-[#F3EEDD]'
+                        ? 'bg-[#232B3A] border-[#232B3A] text-[#F3EEDD]'
                         : 'border-[#D8CFAE] text-[#847A5F] hover:border-[#A69A76]'
                     }`}
                   >
@@ -226,7 +238,7 @@ function CreateAccountModal({
 
             <div>
               <label htmlFor="tempPassword" className="block mb-2"><MonoLabel>Temporary password</MonoLabel></label>
-              <div className="relative flex items-center border-b border-[#D8CFAE] focus-within:border-[#A63D40] transition-colors">
+              <div className="relative flex items-center border-b border-[#D8CFAE] focus-within:border-[#B8892B] transition-colors">
                 <Lock className="w-4 h-4 text-[#A69A76]" strokeWidth={1.5} />
                 <input
                   id="tempPassword"
@@ -240,7 +252,7 @@ function CreateAccountModal({
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute right-0 text-[#A69A76] hover:text-[#A63D40] transition-colors"
+                  className="absolute right-0 text-[#A69A76] hover:text-[#B8892B] transition-colors"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -258,7 +270,7 @@ function CreateAccountModal({
               </button>
               <button
                 type="submit"
-                className="flex-1 px-4 py-3 rounded-sm bg-[#232B22] text-[#F3EEDD] text-[11px] tracking-[0.14em] uppercase hover:bg-[#2C3629] transition-colors"
+                className="flex-1 px-4 py-3 rounded-sm bg-[#232B3A] text-[#F3EEDD] text-[11px] tracking-[0.14em] uppercase hover:bg-[#2C3548] transition-colors"
               >
                 Create account
               </button>
@@ -368,14 +380,11 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
   }
 
   return (
-    <div className="w-full space-y-8">
+    <div className="w-full space-y-8" style={{ color: INK }}>
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <MonoLabel>Admin — Account approval</MonoLabel>
-          <h1
-            className="text-3xl sm:text-4xl leading-tight mt-1 text-[#242017]"
-            style={{ fontFamily: "'Fraunces', serif", fontWeight: 500 }}
-          >
+          <h1 className="text-3xl sm:text-4xl leading-tight mt-1" style={{ fontFamily: "'Fraunces', serif", fontWeight: 500, fontStyle: 'italic', color: INK }}>
             User management
           </h1>
           <p className="text-[14px] text-[#847A5F] font-light mt-3 max-w-3xl leading-relaxed">
@@ -386,7 +395,10 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
 
         <button
           onClick={() => setShowCreateModal(true)}
-          className="flex-shrink-0 inline-flex items-center gap-2 bg-[#232B22] text-[#F3EEDD] text-[11px] tracking-[0.16em] uppercase font-medium px-6 py-4 rounded-sm shadow-[0_4px_14px_-4px_rgba(35,30,15,0.35)] hover:bg-[#2C3629] hover:-translate-y-px hover:shadow-[0_6px_18px_-4px_rgba(35,30,15,0.4)] transition-all"
+          className="flex-shrink-0 inline-flex items-center gap-2 text-[#F3EEDD] text-[11px] tracking-[0.16em] uppercase font-medium px-6 py-4 rounded-sm shadow-[0_4px_14px_-4px_rgba(35,30,15,0.35)] hover:-translate-y-px hover:shadow-[0_6px_18px_-4px_rgba(35,30,15,0.4)] transition-all"
+          style={{ background: NAVY }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = NAVY_HOVER; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = NAVY; }}
         >
           <Plus className="w-4 h-4" />
           Create account
@@ -403,7 +415,7 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
 
       {/* ---------------- SEARCH + FILTERS ---------------- */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-        <div className="relative flex items-center border-b border-[#D8CFAE] focus-within:border-[#A63D40] transition-colors flex-1 max-w-sm">
+        <div className="relative flex items-center border-b border-[#D8CFAE] focus-within:border-[#B8892B] transition-colors flex-1 max-w-sm">
           <Search className="w-4 h-4 text-[#A69A76]" strokeWidth={1.5} />
           <input
             type="text"
@@ -422,12 +434,12 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
               <button
                 key={f.key}
                 onClick={() => setActiveFilter(f.key)}
-                className={`px-3.5 py-1.5 rounded-full text-[10px] tracking-[0.14em] uppercase border transition-all ${
-                  active
-                    ? 'bg-[#232B22] text-[#F3EEDD] border-[#232B22] shadow-[0_2px_6px_-1px_rgba(35,30,15,0.25)]'
-                    : 'bg-[#FBF9F2] text-[#847A5F] border-[#D8CFAE] hover:border-[#A69A76] hover:text-[#242017]'
-                }`}
-                style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+                className="px-3.5 py-1.5 rounded-full text-[10px] tracking-[0.14em] uppercase border transition-all"
+                style={active
+                  ? { background: NAVY, color: '#F3EEDD', borderColor: NAVY, boxShadow: '0 2px 6px -1px rgba(35,30,15,0.25)' }
+                  : { background: PAPER, color: MUTED, borderColor: LINE }}
+                onMouseEnter={(e) => { if (!active) e.currentTarget.style.borderColor = FAINT; }}
+                onMouseLeave={(e) => { if (!active) e.currentTarget.style.borderColor = LINE; }}
               >
                 {f.label}
                 {f.key !== 'all' && (
@@ -442,7 +454,7 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
       {/* ---------------- TABLE ---------------- */}
       <div className="bg-[#FBF9F2] rounded-sm border border-[#D8CFAE] overflow-x-auto shadow-[0_1px_3px_rgba(35,30,15,0.06)]">
         <div className="min-w-[940px]">
-        <div className="hidden md:grid grid-cols-[1.25fr_1.55fr_0.9fr_0.85fr_0.85fr_1.15fr] gap-6 px-8 py-4 border-b border-[#D8CFAE] bg-[#F3EEDD]/60">
+        <div className="hidden md:grid grid-cols-[1.25fr_1.55fr_0.9fr_0.85fr_0.95fr_1.15fr] gap-6 px-8 py-4 border-b border-[#D8CFAE] bg-[#F3EEDD]/60">
           {['Name', 'Email', 'Role', 'Requested', 'Status', 'Actions'].map((h) => (
             <span key={h} className="text-[10px] tracking-[0.2em] uppercase text-[#A69A76]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
               {h}
@@ -465,11 +477,13 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
         {filtered.map((user) => {
           const actions = actionsFor(user.status);
           const confirming = pendingConfirm?.id === user.id;
+          const tab = STATUS_META[user.status];
           return (
             <div
               key={user.id}
-              className="grid min-w-[940px] grid-cols-[1.25fr_1.55fr_0.9fr_0.85fr_0.85fr_1.15fr] gap-6 px-8 py-5 border-b border-[#D8CFAE] last:border-b-0 items-center hover:bg-[#F3EEDD]/50 transition-colors"
+              className="relative grid min-w-[940px] grid-cols-[1.25fr_1.55fr_0.9fr_0.85fr_0.95fr_1.15fr] gap-6 pl-8 pr-8 py-5 border-b border-[#D8CFAE] last:border-b-0 items-center hover:bg-[#F3EEDD]/50 transition-colors"
             >
+              <span className="absolute left-0 top-0 bottom-0 w-1" style={{ background: tab.ring }} aria-hidden="true" />
               <div>
                 <div className="text-[14px] font-medium">{user.fullName}</div>
                 <div className="text-[11px] text-[#A69A76]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
@@ -480,7 +494,7 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
               <div className="text-[12px] text-[#5C563F]">{ROLE_LABEL[user.role]}</div>
               <div className="text-[12px] text-[#847A5F]">{user.requestedAt}</div>
               <div>
-                <StatusTag status={user.status} />
+                <StatusStamp status={user.status} />
               </div>
 
               <div className="flex items-center justify-end gap-2 whitespace-nowrap">
@@ -491,7 +505,8 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
                     </span>
                     <button
                       onClick={() => applyStatusChange(user.id, pendingConfirm.action)}
-                      className="px-2.5 py-1 rounded-sm bg-[#232B22] text-[#F3EEDD] text-[10px] tracking-[0.1em] uppercase"
+                      className="px-2.5 py-1 rounded-sm text-[#F3EEDD] text-[10px] tracking-[0.1em] uppercase"
+                      style={{ background: NAVY }}
                     >
                       Yes
                     </button>
@@ -541,12 +556,12 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
 /* Default export renders the page standalone (e.g. routed at /users) */
 export default function UserManagementPage() {
   return (
-    <div className="min-h-screen bg-[#EDE7D6] text-[#242017] antialiased" style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div className="min-h-screen bg-[#EDE7D6] text-[#20242E] antialiased" style={{ fontFamily: "'Inter', sans-serif" }}>
       <div
         className="fixed inset-0 pointer-events-none opacity-[0.05]"
         style={{
           backgroundImage:
-            'repeating-linear-gradient(0deg, #242017 0px, #242017 1px, transparent 1px, transparent 6px), repeating-linear-gradient(90deg, #242017 0px, #242017 1px, transparent 1px, transparent 6px)',
+            'repeating-linear-gradient(0deg, #20242E 0px, #20242E 1px, transparent 1px, transparent 6px), repeating-linear-gradient(90deg, #20242E 0px, #20242E 1px, transparent 1px, transparent 6px)',
         }}
       />
       <div className="relative max-w-6xl mx-auto px-6 sm:px-10 py-10">

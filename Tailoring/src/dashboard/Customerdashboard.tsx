@@ -7,7 +7,7 @@ function LiveDateTime() {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
-  return <MonoLabel className="hidden sm:inline">{now.toLocaleString(undefined, { weekday: 'short', month: 'short', day: '2-digit', hour: 'numeric', minute: '2-digit' })}</MonoLabel>;
+  return <Eyebrow className="hidden sm:inline">{now.toLocaleString(undefined, { weekday: 'short', month: 'short', day: '2-digit', hour: 'numeric', minute: '2-digit' })}</Eyebrow>;
 }
 
 import type { ReactNode } from 'react';
@@ -26,51 +26,96 @@ import {
   PackageCheck,
   Download,
   LogOut,
-  Check,
+  ArrowUpDown,
 } from 'lucide-react';
 
 /* ---------------------------------------------------------------
    CUSTOMER — Dashboard
-   "The Job Docket", light + sidebar
-   Workshop-docket language — pinned paper tickets, brass rivets,
-   typewriter type, a checklist instead of a progress bar — set on
-   a light kraft-paper canvas with navigation in a left sidebar.
+   "The Pattern Sheet" — a cutting-table / drafting-room theme,
+   recolored to a navy-and-white palette. White tissue panels with
+   navy dashed cutting lines, a navy sidebar, and navy notch marks
+   standing in for bullets and checkmarks. Same data contract,
+   routing, and API wiring as the original.
 ------------------------------------------------------------------ */
 
 const FONT_IMPORT = `
-@import url('https://fonts.googleapis.com/css2?family=Special+Elite&family=Courier+Prime:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap');
 
 @keyframes riseIn {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
-@keyframes pulseRivet {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(193,68,59,0.35); }
-  50% { box-shadow: 0 0 0 6px rgba(193,68,59,0); }
+@keyframes pinGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(31,59,107,0.35); }
+  50% { box-shadow: 0 0 0 7px rgba(31,59,107,0); }
 }
 .dash-in { opacity: 0; animation: riseIn 0.5s cubic-bezier(0.22,1,0.36,1) forwards; }
 `;
 
 const CUSTOMER_THEME = `
-.customer-theme { background: #EDE6D3; color: #241F16; }
-.customer-theme aside { background: #201B17; }
-.customer-theme header { background: rgba(237, 230, 211, .95); border-color: #D9CFAE; }
-.customer-theme .docket { background: #F8F4E6; border-color: #D9CFAE; box-shadow: 0 1px 3px rgba(36,31,22,0.08); }
+.customer-theme { background: #FFFFFF; color: #0F1F3D; }
+.customer-theme aside { background: #0B1B36; }
+.customer-theme header { background: rgba(255,255,255,.92); border-color: #D7DEE9; }
+.pattern-sheet {
+  background: #FFFFFF;
+  border: 1px dashed #4C6E93;
+  position: relative;
+}
+.pattern-sheet::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border: 1px solid rgba(15,31,61,0.08);
+  pointer-events: none;
+}
 `;
 
-function MonoLabel({ children, className = '' }: { children: ReactNode; className?: string }) {
+function Eyebrow({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <span
-      className={`text-[10px] tracking-[0.22em] uppercase text-[#8A7F63] ${className}`}
-      style={{ fontFamily: "'Courier Prime', monospace" }}
+      className={`text-[10px] tracking-[0.24em] uppercase text-[#4C6E93] ${className}`}
+      style={{ fontFamily: "'IBM Plex Mono', monospace" }}
     >
       {children}
     </span>
   );
 }
 
-function Rivet({ className = '' }: { className?: string }) {
-  return <span className={`absolute w-2.5 h-2.5 rounded-full bg-[#C89B4A] ring-2 ring-[#B4863C] shadow-[0_1px_2px_rgba(0,0,0,.25)] ${className}`} aria-hidden="true" />;
+/* A sewing notch — the little triangular sync-mark cut into a pattern
+   edge — reused everywhere a bullet, active-state, or checkmark would
+   normally go. */
+function Notch({ tone = '#1F3B6B', className = '' }: { tone?: string; className?: string }) {
+  return (
+    <span
+      className={`inline-block flex-shrink-0 ${className}`}
+      style={{ width: 0, height: 0, borderTop: '5px solid transparent', borderBottom: '5px solid transparent', borderLeft: `7px solid ${tone}` }}
+      aria-hidden="true"
+    />
+  );
+}
+
+/* The printed corner block every real pattern piece carries: piece
+   name, size, how many to cut. Doubles here as a panel's ID tag. */
+function PatternTag({ code, cut = 1 }: { code: string; cut?: number }) {
+  return (
+    <div
+      className="absolute top-3 right-3 sm:top-4 sm:right-4 border border-[#4C6E93] px-2.5 py-1.5 text-right leading-tight"
+      style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+    >
+      <div className="text-[9px] tracking-[0.18em] text-[#4C6E93]">NO.</div>
+      <div className="text-[11px] text-[#0F1F3D] font-medium">{code}</div>
+      <div className="text-[9px] tracking-[0.14em] text-[#1F3B6B] mt-0.5">CUT {cut}</div>
+    </div>
+  );
+}
+
+function GrainlineArrow({ label = 'GRAINLINE' }: { label?: string }) {
+  return (
+    <div className="flex items-center gap-2" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+      <ArrowUpDown className="w-3 h-3 text-[#1F3B6B]" strokeWidth={2} />
+      <span className="text-[9px] tracking-[0.2em] text-[#1F3B6B]">{label}</span>
+    </div>
+  );
 }
 
 /* ---------------- Sample data (wire to real API) ---------------- */
@@ -116,9 +161,9 @@ const NOTIFICATIONS: { time: string; label: string; detail: string; kind: 'fitti
 ];
 
 const NOTIF_META: Record<string, { icon: typeof CalendarClock; tone: string }> = {
-  fitting: { icon: CalendarClock, tone: '#4C6B8A' },
-  pickup: { icon: PackageCheck, tone: '#3F6B4A' },
-  reminder: { icon: Bell, tone: '#C1443B' },
+  fitting: { icon: CalendarClock, tone: '#1F3B6B' },
+  pickup: { icon: PackageCheck, tone: '#4C6E93' },
+  reminder: { icon: Bell, tone: '#0F1F3D' },
 };
 
 const PAYMENT_HISTORY = [
@@ -147,26 +192,26 @@ const NAV: { label: string; icon: typeof LayoutDashboard; view: ViewKey }[] = [
    DASHBOARD VIEW
 ================================================================== */
 
-function DashboardView({ customer, orders, measurements, notifications, payments }: { customer: typeof CUSTOMER; orders: typeof ACTIVE_ORDERS; measurements: typeof MEASUREMENTS; notifications: typeof NOTIFICATIONS; payments: typeof PAYMENT_HISTORY }) {
+function DashboardView({ orders, measurements, notifications, payments }: { customer: typeof CUSTOMER; orders: typeof ACTIVE_ORDERS; measurements: typeof MEASUREMENTS; notifications: typeof NOTIFICATIONS; payments: typeof PAYMENT_HISTORY }) {
   const [selectedOrder, setSelectedOrder] = useState(orders[0]?.id || '');
   const order = orders.find((o) => o.id === selectedOrder) ?? orders[0];
 
   return (
     <div className="space-y-10">
       <div className="dash-in">
-        <MonoLabel>Welcome back</MonoLabel>
-        <h1 className="text-2xl sm:text-3xl leading-tight mt-2 text-[#241F16]" style={{ fontFamily: "'Special Elite', cursive" }}>
-          {customer.name.split(' ')[0] || 'Welcome'}, here's where your garments stand.
+        <Eyebrow>Cutting table / today</Eyebrow>
+        <h1 className="text-2xl sm:text-3xl leading-tight mt-2 text-[#0F1F3D]" style={{ fontFamily: "'Big Shoulders Display', sans-serif", fontWeight: 700 }}>
+          Here's where every garment stands on the sheet.
         </h1>
       </div>
 
-      {/* ---------------- THE JOB DOCKET (signature element) ---------------- */}
-      <div className="dash-in docket relative border rounded-sm" style={{ transform: 'rotate(-0.4deg)' }}>
-        <Rivet className="-top-1.5 left-8" />
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-6 sm:px-8 pt-7">
+      {/* ---------------- THE PATTERN SHEET (signature element) ---------------- */}
+      <div className="dash-in pattern-sheet rounded-sm">
+        <PatternTag code={order?.id || '—'} cut={1} />
+        <div className="px-6 sm:px-8 pt-7 flex items-center justify-between gap-4 pr-28 sm:pr-32">
           <div>
-            <MonoLabel>Job docket</MonoLabel>
-            <h2 className="text-lg mt-1 text-[#241F16]" style={{ fontFamily: "'Special Elite', cursive" }}>Order in progress</h2>
+            <Eyebrow>Pattern sheet</Eyebrow>
+            <h2 className="text-lg mt-1 text-[#0F1F3D]" style={{ fontFamily: "'Big Shoulders Display', sans-serif", fontWeight: 700 }}>Order in progress</h2>
           </div>
           {orders.length > 1 && (
             <div className="flex items-center gap-2">
@@ -176,10 +221,10 @@ function DashboardView({ customer, orders, measurements, notifications, payments
                   onClick={() => setSelectedOrder(o.id)}
                   className={`px-3 py-1.5 text-[10px] tracking-[0.14em] uppercase border transition-colors ${
                     o.id === selectedOrder
-                      ? 'bg-[#241F16] text-[#F8F4E6] border-[#241F16]'
-                      : 'border-[#D9CFAE] text-[#8A7F63] hover:border-[#B7A97F]'
+                      ? 'bg-[#0F1F3D] text-[#FFFFFF] border-[#0F1F3D]'
+                      : 'border-[#4C6E93] text-[#4C6E93] hover:border-[#1F3B6B]'
                   }`}
-                  style={{ fontFamily: "'Courier Prime', monospace" }}
+                  style={{ fontFamily: "'IBM Plex Mono', monospace" }}
                 >
                   {o.id}
                 </button>
@@ -189,108 +234,139 @@ function DashboardView({ customer, orders, measurements, notifications, payments
         </div>
 
         {order ? (
-          <div className="flex flex-col sm:flex-row">
-            {/* main stub */}
-            <div className="flex-1 px-6 sm:px-8 pt-6 pb-8">
-              <span className="text-[11px] text-[#B7A97F]" style={{ fontFamily: "'Courier Prime', monospace" }}>№ {order.id}</span>
-              <h3 className="text-3xl mt-1 text-[#241F16]" style={{ fontFamily: "'Special Elite', cursive" }}>{order.garment}</h3>
-              <p className="text-[13px] text-[#8A7F63] mt-1">{order.fabric}</p>
+          <div className="px-6 sm:px-8 pt-6 pb-8">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-3xl text-[#0F1F3D]" style={{ fontFamily: "'Big Shoulders Display', sans-serif", fontWeight: 900 }}>{order.garment}</h3>
+                <p className="text-[13px] text-[#4C6E93] mt-1" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>{order.fabric}</p>
+              </div>
+              <GrainlineArrow />
+            </div>
 
-              {/* checklist — line items instead of a horizontal rail */}
-              <div className="mt-7 space-y-3">
-                {STAGES.map((s, i) => {
-                  const done = i < order.stageIndex;
-                  const current = i === order.stageIndex;
-                  return (
-                    <div key={s} className="flex items-center gap-3">
-                      <span
-                        className={`relative w-4 h-4 flex-shrink-0 rounded-full border flex items-center justify-center ${
-                          done ? 'bg-[#241F16] border-[#241F16]' : current ? 'bg-[#F8F4E6] border-[#C1443B]' : 'bg-[#F8F4E6] border-[#D9CFAE]'
-                        }`}
-                        style={current ? { animation: 'pulseRivet 1.8s ease-in-out infinite' } : undefined}
-                      >
-                        {done && <Check className="w-2.5 h-2.5 text-[#F8F4E6]" strokeWidth={3} />}
-                        {current && <span className="w-1.5 h-1.5 rounded-full bg-[#C1443B]" />}
-                      </span>
-                      <span className="flex-1 border-b border-dotted border-[#D9CFAE]" />
-                      <span className={`text-[12.5px] ${current ? 'text-[#241F16] font-bold' : done ? 'text-[#8A7F63]' : 'text-[#B7A97F]'}`} style={{ fontFamily: "'Courier Prime', monospace" }}>
-                        {s}
-                      </span>
-                    </div>
-                  );
-                })}
+            {/* tape-measure progress — ticks like a dressmaker's tape */}
+            <div className="mt-9">
+              <div className="flex justify-between mb-2">
+                <Eyebrow>Stage progress</Eyebrow>
+                <Eyebrow className="text-[#1F3B6B]">{STAGES[order.stageIndex]}</Eyebrow>
+              </div>
+              <div className="relative pt-1">
+                <div className="h-px bg-[#D7DEE9]" />
+                <div className="flex justify-between -mt-px">
+                  {STAGES.map((s, i) => {
+                    const done = i < order.stageIndex;
+                    const current = i === order.stageIndex;
+                    return (
+                      <div key={s} className="flex flex-col items-center" style={{ width: `${100 / STAGES.length}%` }}>
+                        <div
+                          className={`w-px ${done || current ? 'h-4' : 'h-2.5'}`}
+                          style={{ backgroundColor: done ? '#1F3B6B' : current ? '#0F1F3D' : '#D7DEE9' }}
+                        />
+                        <span
+                          className="w-2.5 h-2.5 rounded-full -mt-0.5 flex-shrink-0"
+                          style={{
+                            backgroundColor: done ? '#1F3B6B' : current ? '#0F1F3D' : '#FFFFFF',
+                            border: done || current ? 'none' : '1px solid #4C6E93',
+                            animation: current ? 'pinGlow 1.8s ease-in-out infinite' : undefined,
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-between mt-2.5">
+                  {STAGES.map((s, i) => (
+                    <span
+                      key={s}
+                      className="text-center px-0.5"
+                      style={{
+                        width: `${100 / STAGES.length}%`,
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: '9.5px',
+                        letterSpacing: '0.02em',
+                        color: i === order.stageIndex ? '#0F1F3D' : i < order.stageIndex ? '#4C6E93' : '#A9B6CC',
+                        fontWeight: i === order.stageIndex ? 600 : 400,
+                      }}
+                    >
+                      {s}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* tear-off stub */}
-            <div className="sm:w-56 flex-shrink-0 px-6 sm:px-6 pb-8 sm:pt-7 border-t sm:border-t-0 sm:border-l border-dashed border-[#D9CFAE] flex sm:flex-col justify-between sm:justify-start gap-4">
+            <div className="mt-8 pt-6 border-t border-dashed border-[#4C6E93] flex flex-wrap gap-8">
               <div>
-                <MonoLabel>Est. ready</MonoLabel>
-                <div className="text-lg mt-1 text-[#241F16]" style={{ fontFamily: "'Special Elite', cursive" }}>{order.due}</div>
+                <Eyebrow>Est. ready</Eyebrow>
+                <div className="text-lg mt-1 text-[#0F1F3D]" style={{ fontFamily: "'Big Shoulders Display', sans-serif", fontWeight: 700 }}>{order.due}</div>
               </div>
-              <div className="sm:mt-6">
-                <MonoLabel>Balance</MonoLabel>
-                <div className="text-[12px] mt-1 text-[#C1443B]" style={{ fontFamily: "'Courier Prime', monospace" }}>{order.balance}</div>
+              <div>
+                <Eyebrow>Balance</Eyebrow>
+                <div className="text-[12.5px] mt-1.5 text-[#0F1F3D]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{order.balance}</div>
               </div>
             </div>
           </div>
         ) : (
-          <div className="px-6 sm:px-8 py-12 text-center text-sm text-[#8A7F63]">You have no active orders yet.</div>
+          <div className="px-6 sm:px-8 py-12 text-center text-sm text-[#4C6E93]">You have no active orders yet.</div>
         )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-8">
-        {/* ---------------- MEASUREMENT PROFILE — swatch tags ---------------- */}
-        <div className="dash-in docket relative border rounded-sm p-6 sm:p-8" style={{ animationDelay: '0.1s', transform: 'rotate(0.3deg)' }}>
-          <Rivet className="-top-1.5 left-8" />
-          <div className="flex items-center justify-between mb-6">
+        {/* ---------------- MEASUREMENT PROFILE ---------------- */}
+        <div className="dash-in pattern-sheet rounded-sm p-6 sm:p-8" style={{ animationDelay: '0.1s' }}>
+          <PatternTag code="MEAS-01" cut={measurements.length || 1} />
+          <div className="flex items-center justify-between mb-6 pr-24">
             <div>
-              <MonoLabel>On file</MonoLabel>
-              <h2 className="text-lg mt-1 text-[#241F16]" style={{ fontFamily: "'Special Elite', cursive" }}>Measurement profile</h2>
+              <Eyebrow>On file</Eyebrow>
+              <h2 className="text-lg mt-1 text-[#0F1F3D]" style={{ fontFamily: "'Big Shoulders Display', sans-serif", fontWeight: 700 }}>Measurement profile</h2>
             </div>
-            <Ruler className="w-4 h-4 text-[#B7A97F]" strokeWidth={1.6} />
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {measurements.map((m, i) => (
-              <div
-                key={m.label}
-                className="relative bg-[#EFE8D4] border border-[#D9CFAE] px-3 py-3 text-center"
-                style={{ transform: `rotate(${i % 2 === 0 ? '-0.6deg' : '0.6deg'})` }}
-              >
-                <span className="absolute top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#241F16]/10" aria-hidden="true" />
-                <MonoLabel>{m.label}</MonoLabel>
-                <div className="text-lg mt-1 text-[#241F16]" style={{ fontFamily: "'Courier Prime', monospace", fontWeight: 700 }}>{m.value}</div>
-              </div>
-            ))}
+          <div className="space-y-0">
+            {measurements.map((m, i) => {
+              const [value, unit] = m.value.split(' ');
+              return (
+                <div
+                  key={m.label}
+                  className={`flex items-center gap-3 py-2.5 ${i !== measurements.length - 1 ? 'border-b border-dashed border-[#D7DEE9]' : ''}`}
+                >
+                  <Notch tone="#1F3B6B" />
+                  <span className="text-[12.5px] text-[#4C6E93] flex-1" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>{m.label}</span>
+                  <span className="text-[15px] text-[#0F1F3D]" style={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600 }}>
+                    {value}<span className="text-[10px] text-[#4C6E93] ml-0.5">{unit}</span>
+                  </span>
+                </div>
+              );
+            })}
           </div>
-          <p className="text-[11px] text-[#B7A97F] mt-6">{measurements.length ? `Last updated ${MEASUREMENTS_UPDATED}. Ask your tailor at your next fitting to update these.` : 'No measurements are on file yet.'}</p>
+          <p className="text-[11px] text-[#4C6E93] mt-5" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+            {measurements.length ? `LAST TAKEN ${MEASUREMENTS_UPDATED.toUpperCase()} — CONFIRM AT NEXT FITTING` : 'NO MEASUREMENTS ON FILE YET'}
+          </p>
         </div>
 
-        {/* ---------------- NOTIFICATIONS — index cards ---------------- */}
-        <div className="dash-in docket relative border rounded-sm p-6 sm:p-8" style={{ animationDelay: '0.18s', transform: 'rotate(-0.25deg)' }}>
-          <Rivet className="-top-1.5 left-8" />
-          <div className="flex items-center justify-between mb-6">
+        {/* ---------------- NOTIFICATIONS ---------------- */}
+        <div className="dash-in pattern-sheet rounded-sm p-6 sm:p-8" style={{ animationDelay: '0.18s' }}>
+          <PatternTag code="NOTE-01" cut={notifications.length || 1} />
+          <div className="flex items-center justify-between mb-6 pr-24">
             <div>
-              <MonoLabel>Stay ahead</MonoLabel>
-              <h2 className="text-lg mt-1 text-[#241F16]" style={{ fontFamily: "'Special Elite', cursive" }}>Notifications</h2>
+              <Eyebrow>Stay ahead</Eyebrow>
+              <h2 className="text-lg mt-1 text-[#0F1F3D]" style={{ fontFamily: "'Big Shoulders Display', sans-serif", fontWeight: 700 }}>Notifications</h2>
             </div>
-            <Bell className="w-4 h-4 text-[#B7A97F]" strokeWidth={1.6} />
           </div>
           <div className="space-y-4">
             {notifications.map((n, i) => {
               const meta = NOTIF_META[n.kind];
               const Icon = meta.icon;
               return (
-                <div key={i} className="flex items-start gap-3 border-l-2 pl-3" style={{ borderColor: meta.tone }}>
-                  <div className="w-7 h-7 flex items-center justify-center flex-shrink-0 mt-0.5" style={{ backgroundColor: `${meta.tone}1A`, color: meta.tone }}>
+                <div key={i} className="flex items-start gap-3">
+                  <Notch tone={meta.tone} className="mt-2" />
+                  <div className="w-7 h-7 flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${meta.tone}14`, color: meta.tone }}>
                     <Icon className="w-3.5 h-3.5" strokeWidth={1.8} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-[13px] text-[#241F16] font-bold">{n.label}</span>
-                      <span className="text-[11px] text-[#B7A97F] flex-shrink-0" style={{ fontFamily: "'Courier Prime', monospace" }}>{n.time}</span>
+                      <span className="text-[13px] text-[#0F1F3D] font-medium">{n.label}</span>
+                      <span className="text-[10.5px] text-[#4C6E93] flex-shrink-0" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{n.time}</span>
                     </div>
-                    <p className="text-[12.5px] text-[#8A7F63] mt-0.5">{n.detail}</p>
+                    <p className="text-[12.5px] text-[#4C6E93] mt-0.5" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>{n.detail}</p>
                   </div>
                 </div>
               );
@@ -299,35 +375,37 @@ function DashboardView({ customer, orders, measurements, notifications, payments
         </div>
       </div>
 
-      {/* ---------------- PAYMENT HISTORY / RECEIPTS — carbon-copy ledger ---------------- */}
-      <div className="dash-in docket relative border rounded-sm overflow-hidden" style={{ animationDelay: '0.26s', transform: 'rotate(0.15deg)' }}>
-        <Rivet className="-top-1.5 left-8" />
-        <div className="flex items-center justify-between px-6 sm:px-8 py-6">
+      {/* ---------------- PAYMENT HISTORY / RECEIPTS — ledger ---------------- */}
+      <div className="dash-in pattern-sheet rounded-sm overflow-hidden" style={{ animationDelay: '0.26s' }}>
+        <PatternTag code="LEDG-01" cut={payments.length || 1} />
+        <div className="flex items-center justify-between px-6 sm:px-8 py-6 pr-28 sm:pr-32">
           <div>
-            <MonoLabel>Cash record</MonoLabel>
-            <h2 className="text-lg mt-1 text-[#241F16]" style={{ fontFamily: "'Special Elite', cursive" }}>Payment history</h2>
+            <Eyebrow>Cash record</Eyebrow>
+            <h2 className="text-lg mt-1 text-[#0F1F3D]" style={{ fontFamily: "'Big Shoulders Display', sans-serif", fontWeight: 700 }}>Payment history</h2>
           </div>
-          <button className="flex items-center gap-1 text-[11px] tracking-[0.14em] uppercase text-[#C1443B]">
+          <button className="flex items-center gap-1 text-[11px] tracking-[0.14em] uppercase text-[#1F3B6B]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
             View all <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
-        <div className="hidden md:grid grid-cols-[1fr_1fr_1.4fr_0.9fr_0.9fr_0.7fr] gap-4 px-8 py-2.5 border-t border-b border-dashed border-[#D9CFAE] bg-[#EFE8D4]">
+        <div className="hidden md:grid grid-cols-[1fr_1fr_1.4fr_0.9fr_0.9fr_0.7fr] gap-4 px-8 py-2.5 border-t border-b border-dashed border-[#D7DEE9]">
           {['Receipt', 'Job card', 'Description', 'Amount', 'Date', ''].map((h) => (
-            <MonoLabel key={h}>{h}</MonoLabel>
+            <Eyebrow key={h}>{h}</Eyebrow>
           ))}
         </div>
         {payments.map((p, i) => (
           <div
             key={p.id}
-            className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1.4fr_0.9fr_0.9fr_0.7fr] gap-2 md:gap-4 px-6 sm:px-8 py-4 border-t border-dashed border-[#E1D9BC] first:border-t-0 items-center"
-            style={{ backgroundColor: i % 2 === 1 ? 'rgba(36,31,22,0.03)' : 'transparent' }}
+            className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1.4fr_0.9fr_0.9fr_0.7fr] gap-2 md:gap-4 px-6 sm:px-8 py-4 border-t border-dashed border-[#D7DEE9] first:border-t-0 items-center"
+            style={{ backgroundColor: i % 2 === 1 ? 'rgba(15,31,61,0.02)' : 'transparent' }}
           >
-            <span className="text-[12px] text-[#B7A97F]" style={{ fontFamily: "'Courier Prime', monospace" }}>{p.id}</span>
-            <span className="text-[13px] text-[#241F16] font-bold">{p.job}</span>
-            <span className="text-[13px] text-[#5F5740]">{p.label}</span>
-            <span className="text-[13px] text-[#241F16]" style={{ fontFamily: "'Courier Prime', monospace", fontWeight: 700 }}>{p.amount}</span>
-            <span className="text-[12px] text-[#8A7F63]">{p.date}</span>
-            <button className="inline-flex items-center gap-1.5 text-[11px] tracking-[0.1em] uppercase text-[#8A7F63] hover:text-[#241F16] transition-colors">
+            <span className="flex items-center gap-2 text-[12px] text-[#4C6E93]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+              <Notch tone="#4C6E93" />{p.id}
+            </span>
+            <span className="text-[13px] text-[#0F1F3D] font-medium">{p.job}</span>
+            <span className="text-[13px] text-[#4C6E93]" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>{p.label}</span>
+            <span className="text-[13px] text-[#0F1F3D]" style={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 600 }}>{p.amount}</span>
+            <span className="text-[12px] text-[#4C6E93]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{p.date}</span>
+            <button className="inline-flex items-center gap-1.5 text-[11px] tracking-[0.1em] uppercase text-[#4C6E93] hover:text-[#0F1F3D] transition-colors">
               <Download className="w-3.5 h-3.5" strokeWidth={1.6} />
               Receipt
             </button>
@@ -341,13 +419,12 @@ function DashboardView({ customer, orders, measurements, notifications, payments
 /* placeholder for pages not built yet, so nav links never dead-end silently */
 function ComingSoonView({ label }: { label: string }) {
   return (
-    <div className="dash-in docket relative border rounded-sm p-16 text-center">
-      <Rivet className="-top-1.5 left-1/2 -translate-x-1/2" />
-      <MonoLabel>{label}</MonoLabel>
-      <h2 className="text-2xl mt-2 text-[#241F16]" style={{ fontFamily: "'Special Elite', cursive" }}>
-        This page isn't built yet
+    <div className="dash-in pattern-sheet rounded-sm p-16 text-center">
+      <Eyebrow>{label}</Eyebrow>
+      <h2 className="text-2xl mt-2 text-[#0F1F3D]" style={{ fontFamily: "'Big Shoulders Display', sans-serif", fontWeight: 700 }}>
+        This piece hasn't been cut yet
       </h2>
-      <p className="text-[13px] text-[#8A7F63] mt-2">Ask to have the {label} page created next.</p>
+      <p className="text-[13px] text-[#4C6E93] mt-2" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>Ask to have the {label} page created next.</p>
     </div>
   );
 }
@@ -400,34 +477,34 @@ export default function CustomerDashboard({ initialView = 'dashboard' }: { initi
   }
 
   return (
-    <div className="customer-theme min-h-screen bg-[#EDE6D3] text-[#241F16] antialiased flex" style={{ fontFamily: "'Courier Prime', monospace" }}>
+    <div className="customer-theme min-h-screen bg-[#FFFFFF] text-[#0F1F3D] antialiased flex" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>
       <style>{FONT_IMPORT + CUSTOMER_THEME}</style>
 
-      {/* faint paper grain */}
+      {/* faint blueprint grid */}
       <div
-        className="fixed inset-0 pointer-events-none opacity-[0.06]"
+        className="fixed inset-0 pointer-events-none opacity-[0.035]"
         style={{
-          backgroundImage: 'radial-gradient(#241F16 0.6px, transparent 0.6px)',
-          backgroundSize: '14px 14px',
+          backgroundImage: 'linear-gradient(#1F3B6B 0.5px, transparent 0.5px), linear-gradient(90deg, #1F3B6B 0.5px, transparent 0.5px)',
+          backgroundSize: '28px 28px',
         }}
       />
 
       {/* ---------------- SIDEBAR ---------------- */}
       <aside
-        className={`${navOpen ? 'fixed inset-y-0 left-0 translate-x-0' : 'fixed inset-y-0 left-0 -translate-x-full'} z-40 lg:relative lg:inset-auto lg:translate-x-0 lg:z-0 w-72 flex-shrink-0 h-screen lg:h-auto lg:min-h-screen bg-[#201B17] text-[#F3EEDA] flex flex-col justify-between transition-transform duration-300`}
+        className={`${navOpen ? 'fixed inset-y-0 left-0 translate-x-0' : 'fixed inset-y-0 left-0 -translate-x-full'} z-40 lg:relative lg:inset-auto lg:translate-x-0 lg:z-0 w-72 flex-shrink-0 h-screen lg:h-auto lg:min-h-screen text-[#FFFFFF] flex flex-col justify-between transition-transform duration-300 border-r border-[#1B2E52]`}
       >
         <div>
-          <div className="flex items-center justify-between px-8 py-8 border-b border-[#3A332C]">
+          <div className="flex items-center justify-between px-8 py-8 border-b border-[#1B2E52]">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 border border-[#C89B4A]/60 bg-[#C89B4A]/5 flex items-center justify-center rotate-3">
-                <span className="text-[#C89B4A] text-[10px]" style={{ fontFamily: "'Courier Prime', monospace" }}>A&T</span>
+              <div className="w-9 h-9 border border-[#FFFFFF]/40 flex items-center justify-center">
+                <span className="text-[#FFFFFF] text-[10px]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>A&T</span>
               </div>
               <div className="leading-tight">
-                <div className="text-sm tracking-[0.06em] text-[#F3EEDA]" style={{ fontFamily: "'Special Elite', cursive" }}>Ashlie's Tailor</div>
-                <MonoLabel className="text-[#8A7F63]">My account</MonoLabel>
+                <div className="text-sm tracking-[0.04em] text-[#FFFFFF]" style={{ fontFamily: "'Big Shoulders Display', sans-serif", fontWeight: 700 }}>Ashlie's Tailor</div>
+                <Eyebrow className="text-[#7C8FB8]">My account</Eyebrow>
               </div>
             </div>
-            <button className="lg:hidden text-[#B7A97F]" onClick={() => setNavOpen(false)} aria-label="Close menu">
+            <button className="lg:hidden text-[#B7C2DB]" onClick={() => setNavOpen(false)} aria-label="Close menu">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -439,13 +516,11 @@ export default function CustomerDashboard({ initialView = 'dashboard' }: { initi
                 <button
                   key={item.label}
                   onClick={() => { setView(item.view); setNavOpen(false); }}
-                  className={`relative w-full flex items-center gap-3.5 px-4 py-3 text-[14px] transition-all border-l-2 ${
-                    active
-                      ? 'bg-[#28221D] border-[#C89B4A] text-[#F3EEDA]'
-                      : 'border-transparent text-[#B7A97F] hover:text-[#F3EEDA] hover:bg-[#28221D]/70'
+                  className={`relative w-full flex items-center gap-3.5 px-4 py-3 text-[14px] transition-all ${
+                    active ? 'bg-[#12224A] text-[#FFFFFF]' : 'text-[#8FA0C7] hover:text-[#FFFFFF] hover:bg-[#12224A]/60'
                   }`}
                 >
-                  {active && <Rivet className="w-1.5 h-1.5 top-1/2 -translate-y-1/2 -left-[3px]" />}
+                  {active ? <Notch tone="#FFFFFF" /> : <span className="w-[7px] flex-shrink-0" />}
                   <item.icon className="w-4 h-4" strokeWidth={1.6} />
                   {item.label}
                 </button>
@@ -454,60 +529,60 @@ export default function CustomerDashboard({ initialView = 'dashboard' }: { initi
           </nav>
         </div>
 
-        <div className="px-8 py-6 border-t border-[#3A332C] space-y-4">
+        <div className="px-8 py-6 border-t border-[#1B2E52] space-y-4">
           <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-[#C89B4A]/20 border border-[#C89B4A]/50 flex items-center justify-center">
-            <span className="text-[#C89B4A] text-xs font-bold">
+          <div className="w-9 h-9 rounded-full bg-[#FFFFFF]/10 border border-[#FFFFFF]/40 flex items-center justify-center">
+            <span className="text-[#FFFFFF] text-xs font-bold">
               {customer.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
             </span>
           </div>
           <div className="leading-tight">
-            <div className="text-[13px] text-[#F3EEDA]">{customer.name}</div>
-            <MonoLabel className="text-[#8A7F63]">Customer since {customer.memberSince}</MonoLabel>
+            <div className="text-[13px] text-[#FFFFFF]">{customer.name}</div>
+            <Eyebrow className="text-[#7C8FB8]">Customer since {customer.memberSince}</Eyebrow>
           </div>
           </div>
-          <button onClick={signOut} className="group flex w-full items-center justify-between border border-[#3A332C] px-3 py-2.5 text-[10px] tracking-[0.16em] uppercase text-[#B7A97F] transition-colors hover:border-[#C89B4A] hover:bg-[#C89B4A]/10 hover:text-[#F3EEDA]">
-            Sign out <LogOut className="h-3.5 w-3.5 text-[#C89B4A] transition-transform group-hover:translate-x-0.5" />
+          <button onClick={signOut} className="group flex w-full items-center justify-between border border-[#1B2E52] px-3 py-2.5 text-[10px] tracking-[0.16em] uppercase text-[#8FA0C7] transition-colors hover:border-[#FFFFFF]/60 hover:text-[#FFFFFF]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+            Sign out <LogOut className="h-3.5 w-3.5 text-[#FFFFFF] transition-transform group-hover:translate-x-0.5" />
           </button>
         </div>
       </aside>
 
-      {navOpen && <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={() => setNavOpen(false)} />}
+      {navOpen && <div className="fixed inset-0 bg-black/50 z-30 lg:hidden" onClick={() => setNavOpen(false)} />}
 
       {/* ---------------- MAIN ---------------- */}
       <div className="flex-1 min-w-0">
-        <header className="sticky top-0 z-20 bg-[#EDE6D3]/95 backdrop-blur-md border-b border-[#D9CFAE] px-6 sm:px-10 py-5 flex items-center justify-between gap-4">
+        <header className="sticky top-0 z-20 backdrop-blur-md border-b px-6 sm:px-10 py-5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <button className="lg:hidden text-[#241F16] flex-shrink-0" onClick={() => setNavOpen(true)} aria-label="Open menu">
+            <button className="lg:hidden text-[#0F1F3D] flex-shrink-0" onClick={() => setNavOpen(true)} aria-label="Open menu">
               <Menu className="w-5 h-5" />
             </button>
             <div className="min-w-0">
-              <MonoLabel className="block">My account / {currentNavLabel}</MonoLabel>
-              <div className="text-[15px] text-[#241F16] truncate" style={{ fontFamily: "'Special Elite', cursive" }}>
+              <Eyebrow className="block">My account / {currentNavLabel}</Eyebrow>
+              <div className="text-[15px] text-[#0F1F3D] truncate" style={{ fontFamily: "'Big Shoulders Display', sans-serif", fontWeight: 700 }}>
                 {currentNavLabel}
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3 sm:gap-5 flex-shrink-0">
-            <div className="relative hidden md:flex items-center bg-[#F8F4E6] border border-[#D9CFAE] px-3 py-2 focus-within:border-[#B7A97F] transition-colors">
-              <Search className="w-3.5 h-3.5 text-[#B7A97F]" strokeWidth={1.5} />
+            <div className="relative hidden md:flex items-center bg-[#F4F6FA] border border-[#D7DEE9] px-3 py-2 focus-within:border-[#1F3B6B] transition-colors">
+              <Search className="w-3.5 h-3.5 text-[#4C6E93]" strokeWidth={1.5} />
               <input
                 type="text"
                 placeholder="Search my orders"
-                className="w-44 bg-transparent placeholder-[#B7A97F] text-[12px] pl-2 focus:outline-none"
+                className="w-44 bg-transparent placeholder-[#4C6E93] text-[12px] pl-2 focus:outline-none text-[#0F1F3D]"
               />
             </div>
-            <button className="relative text-[#5F5740] hover:text-[#241F16] transition-colors" aria-label="Notifications">
+            <button className="relative text-[#4C6E93] hover:text-[#0F1F3D] transition-colors" aria-label="Notifications">
               <Bell className="w-5 h-5" strokeWidth={1.5} />
-              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#C1443B] ring-2 ring-[#EDE6D3]" />
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#0F1F3D] ring-2 ring-[#FFFFFF]" />
             </button>
-            <div className="h-6 w-px bg-[#D9CFAE] hidden sm:block" />
+            <div className="h-6 w-px bg-[#D7DEE9] hidden sm:block" />
             <LiveDateTime />
           </div>
         </header>
 
         <main className="w-full px-6 sm:px-10 xl:px-12 py-10">
-          {loading ? <div className="py-16 text-center text-sm text-[#8A7F63]">Loading your dashboard…</div> : error ? <div className="border border-[#C1443B]/30 bg-[#C1443B]/10 px-4 py-3 text-sm text-[#8B3235]">{error}</div> : renderView()}
+          {loading ? <div className="py-16 text-center text-sm text-[#4C6E93]">Loading your dashboard…</div> : error ? <div className="border border-[#0F1F3D]/20 bg-[#0F1F3D]/5 px-4 py-3 text-sm text-[#0F1F3D]">{error}</div> : renderView()}
         </main>
       </div>
     </div>
