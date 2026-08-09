@@ -8,6 +8,7 @@ import Frontdeskdashboard from './dashboard/Frontdeskdashboard';
 import Customerdashboard from './dashboard/Customerdashboard';
 import Mastertailordashboard from './dashboard/Mastertailordashboard';
 import CompleteProfile from './pages/CompleteProfile';
+import Customersdesk from './Pages_Frontdesk/Customersdesk';
 
 function currentUser() {
   const stored = localStorage.getItem('currentUser') || sessionStorage.getItem('currentUser');
@@ -38,6 +39,7 @@ const App: React.FC = () => {
       <Route path="/frontdesk" element={<RequireCompleteStaffProfile role="front_desk"><Frontdeskdashboard /></RequireCompleteStaffProfile>} />
       <Route path="/complete-profile" element={<CompleteProfile />} />
       <Route path="/customer" element={<Customerdashboard />} />
+      <Route path="/customerdesk" element={<Customersdesk />} />
       <Route path="/master" element={<RequireCompleteStaffProfile role="tailor"><Mastertailordashboard /></RequireCompleteStaffProfile>} />
       <Route path="/usermanagement" element={<AdminDashboard initialView="users" />} />
       <Route path="*" element={<Navigate to="/" replace />} />

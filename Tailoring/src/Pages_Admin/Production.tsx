@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, CalendarDays, ChevronRight, Search, Shirt, UserRound, X } from 'lucide-react';
+import { AlertTriangle, CalendarDays, ChevronRight, Shirt, UserRound } from 'lucide-react';
+import {
+  COLORS, FONT_IMPORT, PageHeader, StatCard, SearchField, Card, TableHeadRow, EmptyState,
+  ModalShell, EyebrowLabel, Badge,
+} from './Theme';
 
 type Stage = 'Measuring' | 'Pattern Cutting' | 'Initial Assembly' | 'First Fitting' | 'Final Alterations' | 'Completed' | 'Ready for Pickup';
 type Job = { id: string; customer: string; garment: string; tailor: string; stage: Stage; due: string; priority: 'Normal' | 'Due soon' | 'Overdue'; fabric: string; };
@@ -15,26 +19,9 @@ const JOBS: Job[] = [
   { id: 'JC-3018', customer: 'Tomas Villareal', garment: 'School Uniform Set', tailor: 'Alicia Ramos', stage: 'Ready for Pickup', due: 'Aug 02', priority: 'Due soon', fabric: 'Polyester — Navy' },
 ];
 
-// Thread colors — kept identical to the orders and customers views so a stage reads the same everywhere.
-const stageTone: Record<Stage, string> = {
-  Measuring: 'border-[#D8CBA9] bg-[#F3EDDC] text-[#7A6F58]',
-  'Pattern Cutting': 'border-[#C2C9E0] bg-[#E7EAF2] text-[#3A4372]',
-  'Initial Assembly': 'border-[#E3CFA0] bg-[#F5ECD8] text-[#8A6A1F]',
-  'First Fitting': 'border-[#E8C3AE] bg-[#F7E6DE] text-[#9C4A2B]',
-  'Final Alterations': 'border-[#E8BEB8] bg-[#F7E1DE] text-[#9B3A31]',
-  Completed: 'border-[#BFD8BC] bg-[#E4EEE2] text-[#3F6B3F]',
-  'Ready for Pickup': 'border-[#B7D9D3] bg-[#E1EEEC] text-[#2C6E68]',
-};
-
-const INK = '#2A2620';
-const PAPER = '#FBF7EA';
-const LINE = '#D8CBA9';
-const MUTED = '#7A6F58';
-const THREAD = '#B33F35';
-
-const dotPaper: React.CSSProperties = {
-  backgroundImage: 'radial-gradient(#D8CBA9 0.7px, transparent 0.7px)',
-  backgroundSize: '14px 14px',
+const STAGE_TONE: Record<Stage, 'neutral' | 'info' | 'warning' | 'danger' | 'success'> = {
+  Measuring: 'neutral', 'Pattern Cutting': 'info', 'Initial Assembly': 'warning', 'First Fitting': 'warning',
+  'Final Alterations': 'danger', Completed: 'success', 'Ready for Pickup': 'neutral',
 };
 
 export function AdminProductionView() {
@@ -43,112 +30,72 @@ export function AdminProductionView() {
   const jobs = useMemo(() => JOBS.filter((job) => `${job.id} ${job.customer} ${job.garment} ${job.tailor}`.toLowerCase().includes(query.toLowerCase())), [query]);
 
   return (
-    <div className="space-y-7 p-1" style={{ ...dotPaper, color: INK }}>
-      <div className="dash-in border-b border-dashed pb-6" style={{ borderColor: LINE }}>
-        <span className="text-[10px] uppercase tracking-[0.28em]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: MUTED }}>Workshop floor</span>
-        <h1 className="mt-1 text-3xl sm:text-4xl italic" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, color: INK }}>Production Bench</h1>
-        <p className="mt-2 text-sm" style={{ color: MUTED }}>Follow every ticket from first measurement to the pickup rack.</p>
-      </div>
+    <div className="space-y-7" style={{ color: COLORS.ink }}>
+      <style>{FONT_IMPORT}</style>
 
-      <section className="dash-in relative border p-6 sm:p-8" style={{ animationDelay: '0.06s', borderColor: LINE, background: PAPER }}>
-        <span className="absolute left-0 top-0 h-3 w-3 border-l-2 border-t-2" style={{ borderColor: THREAD }} />
-        <span className="absolute right-0 top-0 h-3 w-3 border-r-2 border-t-2" style={{ borderColor: THREAD }} />
-        <span className="absolute bottom-0 left-0 h-3 w-3 border-b-2 border-l-2" style={{ borderColor: THREAD }} />
-        <span className="absolute bottom-0 right-0 h-3 w-3 border-b-2 border-r-2" style={{ borderColor: THREAD }} />
-        <span className="text-[10px] uppercase tracking-[0.28em]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: MUTED }}>Cutting line — the pipeline, station by station</span>
+      <PageHeader eyebrow="Workshop floor" title="Production Bench" description="Follow every ticket from first measurement to the pickup rack." />
+
+      <Card delay={0.05} className="p-6 sm:p-8" style={{ borderRadius: 10 }}>
+        <EyebrowLabel color={COLORS.brassDeep}>Cutting line — the pipeline, station by station</EyebrowLabel>
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-          {STAGES.map((stage, index) => {
+          {STAGES.map((stage) => {
             const count = JOBS.filter((job) => job.stage === stage).length;
             return (
               <button
                 key={stage}
                 onClick={() => setSelected(JOBS.find((job) => job.stage === stage) || null)}
-                className="border bg-white p-4 text-left transition-colors hover:border-[#B33F35]"
-                style={{ borderColor: LINE }}
+                className="border bg-white p-4 text-left transition-colors"
+                style={{ borderColor: COLORS.border, borderRadius: 8 }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.navy; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; }}
               >
-                <div className="text-[10px]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: MUTED }}>{String(index + 1).padStart(2, '0')}″</div>
-                <div className="mt-3 text-3xl" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, color: INK }}>{count}</div>
-                <div className="mt-2 text-[10px] uppercase leading-relaxed tracking-[0.1em]" style={{ color: MUTED }}>{stage}</div>
+                <div className="text-2xl font-semibold" style={{ color: COLORS.ink }}>{count}</div>
+                <div className="mt-2 text-[10px] font-medium uppercase leading-relaxed tracking-[0.06em]" style={{ color: COLORS.muted }}>{stage}</div>
               </button>
             );
           })}
         </div>
-      </section>
+      </Card>
 
-      <div className="dash-in grid gap-4 sm:grid-cols-3" style={{ animationDelay: '0.1s' }}>
-        <Metric icon={<Shirt />} label="Jobs in progress" value={5} />
-        <Metric icon={<CalendarDays />} label="Due within 3 days" value={3} />
-        <Metric icon={<AlertTriangle />} label="Past due" value={1} tone="danger" />
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard delay={0.1} icon={<Shirt />} label="Jobs in progress" value={5} tone="neutral" />
+        <StatCard delay={0.14} icon={<CalendarDays />} label="Due within 3 days" value={3} tone="warning" />
+        <StatCard delay={0.18} icon={<AlertTriangle />} label="Past due" value={1} tone="danger" />
       </div>
 
-      <section className="dash-in border shadow-[0_1px_3px_rgba(42,38,32,0.08)]" style={{ animationDelay: '0.14s', borderColor: LINE, background: PAPER }}>
-        <div className="flex flex-col gap-3 border-b border-dashed p-5 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: LINE }}>
+      <Card delay={0.22}>
+        <div className="flex flex-col gap-3 border-b p-5 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: COLORS.border }}>
           <div>
-            <span className="text-[10px] uppercase tracking-[0.24em]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: MUTED }}>Job cards</span>
-            <h2 className="mt-1 text-lg italic" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, color: INK }}>Production board</h2>
+            <EyebrowLabel>Job cards</EyebrowLabel>
+            <h2 className="mt-1 text-[15px] font-semibold" style={{ color: COLORS.ink }}>Production board</h2>
           </div>
-          <div className="relative w-full sm:w-80">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: MUTED }} />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search ticket or customer"
-              className="w-full border bg-white py-2.5 pl-10 pr-3 text-sm outline-none focus:border-[#B33F35]"
-              style={{ borderColor: LINE, fontFamily: "'IBM Plex Mono', monospace" }}
-            />
-          </div>
+          <div className="w-full sm:w-80"><SearchField value={query} onChange={setQuery} placeholder="Search ticket or customer" /></div>
         </div>
 
-        <div className="hidden grid-cols-[0.8fr_1.2fr_1.2fr_1.15fr_1fr_0.7fr_24px] gap-4 border-b border-dashed px-6 py-3 md:grid" style={{ borderColor: LINE }}>
-          {['Ticket #', 'Customer', 'Garment', 'Stage', 'Assigned tailor', 'Due', ''].map((label) => (
-            <span key={label} className="text-[10px] uppercase tracking-[0.18em]" style={{ color: MUTED }}>{label}</span>
-          ))}
-        </div>
+        <TableHeadRow gridCols="grid-cols-[0.8fr_1.2fr_1.2fr_1.15fr_1fr_0.7fr_24px]" columns={['Ticket #', 'Customer', 'Garment', 'Stage', 'Assigned tailor', 'Due', '']} />
 
         {jobs.map((job) => (
           <button
             key={job.id}
             onClick={() => setSelected(job)}
-            className="grid w-full grid-cols-1 items-center gap-2 border-b border-dashed px-6 py-4 text-left transition-colors hover:bg-[#F3EDDC] md:grid-cols-[0.8fr_1.2fr_1.2fr_1.15fr_1fr_0.7fr_24px] md:gap-4"
-            style={{ borderColor: LINE }}
+            className="grid w-full grid-cols-1 items-center gap-2 border-b px-6 py-4 text-left transition-colors md:grid-cols-[0.8fr_1.2fr_1.2fr_1.15fr_1fr_0.7fr_24px] md:gap-4"
+            style={{ borderColor: COLORS.border }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.surfaceAlt; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
           >
-            <span className="flex items-center gap-2 text-[12px]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: '#3A4372' }}>
-              <span className="h-1.5 w-1.5 rounded-full border" style={{ borderColor: MUTED }} />
-              {job.id}
-            </span>
-            <span className="font-medium" style={{ color: INK }}>{job.customer}</span>
-            <span className="text-sm" style={{ color: '#3D4F55' }}>{job.garment}</span>
-            <span><span className={`inline-block border px-2 py-1 text-[10px] uppercase tracking-[0.08em] ${stageTone[job.stage]}`}>{job.stage}</span></span>
-            <span className="text-sm" style={{ color: '#3D4F55' }}>{job.tailor}</span>
-            <span
-              className="text-sm"
-              style={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: job.priority === 'Overdue' ? 600 : 400, color: job.priority === 'Overdue' ? THREAD : job.priority === 'Due soon' ? '#8A6A1F' : '#3D4F55' }}
-            >
-              {job.due}
-            </span>
-            <ChevronRight className="hidden h-4 w-4 md:block" style={{ color: THREAD }} />
+            <span className="mono text-[12px]" style={{ color: COLORS.navy }}>{job.id}</span>
+            <span className="font-medium" style={{ color: COLORS.ink }}>{job.customer}</span>
+            <span className="text-sm" style={{ color: COLORS.inkSoft }}>{job.garment}</span>
+            <span><Badge tone={STAGE_TONE[job.stage]}>{job.stage}</Badge></span>
+            <span className="text-sm" style={{ color: COLORS.inkSoft }}>{job.tailor}</span>
+            <span className="mono text-sm" style={{ fontWeight: job.priority === 'Overdue' ? 600 : 400, color: job.priority === 'Overdue' ? COLORS.danger : job.priority === 'Due soon' ? COLORS.warning : COLORS.inkSoft }}>{job.due}</span>
+            <ChevronRight className="hidden h-4 w-4 md:block" style={{ color: COLORS.faint }} />
           </button>
         ))}
-      </section>
+        {!jobs.length && <EmptyState message="No job matches your search." />}
+      </Card>
 
       {selected && <JobDetails job={selected} onClose={() => setSelected(null)} />}
-    </div>
-  );
-}
-
-function Metric({ icon, label, value, tone = 'default' }: { icon: React.ReactNode; label: string; value: number; tone?: 'default' | 'danger' }) {
-  return (
-    <div className="border p-5" style={{ borderColor: LINE, background: PAPER }}>
-      <div className="flex items-center justify-between">
-        <div
-          className="flex h-8 w-8 items-center justify-center border [&>svg]:h-4 [&>svg]:w-4"
-          style={tone === 'danger' ? { borderColor: '#E8BEB8', background: '#F7E1DE', color: THREAD } : { borderColor: LINE, background: '#F3EDDC', color: '#3A4372' }}
-        >
-          {icon}
-        </div>
-        <span className="text-2xl" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, color: INK }}>{value}</span>
-      </div>
-      <div className="mt-4 text-[10px] uppercase tracking-[0.18em]" style={{ color: MUTED }}>{label}</div>
     </div>
   );
 }
@@ -158,58 +105,48 @@ function JobDetails({ job, onClose }: { job: Job; onClose: () => void }) {
   const progressPct = (active / (STAGES.length - 1)) * 100;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button aria-label="Close job card" onClick={onClose} className="absolute inset-0 bg-[#2A2620]/55 backdrop-blur-sm" />
-      <section className="relative max-h-[92vh] w-full max-w-3xl overflow-y-auto border shadow-2xl" style={{ borderColor: LINE, background: PAPER }}>
+    <ModalShell onClose={onClose} maxWidth="max-w-3xl">
+      <header className="flex items-start justify-between border-b px-7 py-6 sm:px-8" style={{ borderColor: COLORS.border }}>
+        <div>
+          <EyebrowLabel>Production job card</EyebrowLabel>
+          <h2 className="mt-1.5 text-2xl font-semibold" style={{ color: COLORS.ink }}>{job.id}</h2>
+          <p className="mt-1 text-sm" style={{ color: COLORS.muted }}>{job.customer} · {job.garment}</p>
+        </div>
+        <button onClick={onClose} className="p-2" style={{ color: COLORS.muted, borderRadius: 8 }}><svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg></button>
+      </header>
 
-        <div className="absolute left-6 top-6 h-4 w-4 rounded-full border-2" style={{ borderColor: MUTED, background: '#F3EDDC' }} />
-
-        <header className="flex items-start justify-between border-b border-dashed px-6 py-6 pl-14 sm:px-8 sm:pl-16" style={{ borderColor: LINE }}>
-          <div>
-            <span className="text-[10px] uppercase tracking-[0.28em]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: MUTED }}>Production job card</span>
-            <h2 className="mt-1 text-3xl italic" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, color: INK }}>{job.id}</h2>
-            <p className="mt-1 text-sm" style={{ color: MUTED }}>{job.customer} · {job.garment}</p>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-[#F3EDDC]" style={{ color: MUTED }}>
-            <X className="h-5 w-5" />
-          </button>
-        </header>
-
-        <div className="space-y-9 p-6 sm:p-8">
-          <div className="grid gap-4 sm:grid-cols-2">
-            {[['Assigned tailor', job.tailor], ['Fabric', job.fabric], ['Due date', job.due], ['Priority', job.priority]].map(([label, value]) => (
-              <div key={label} className="border border-dashed bg-white p-4" style={{ borderColor: LINE }}>
-                <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: MUTED }}>{label}</div>
-                <div className="mt-1 text-sm" style={{ color: value === 'Overdue' ? THREAD : INK }}>{value}</div>
-              </div>
-            ))}
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2">
-              <UserRound className="h-4 w-4" style={{ color: THREAD }} />
-              <h3 className="text-lg italic" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, color: INK }}>Current progress</h3>
+      <div className="space-y-9 p-7 sm:p-8">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {[['Assigned tailor', job.tailor], ['Fabric', job.fabric], ['Due date', job.due], ['Priority', job.priority]].map(([label, value]) => (
+            <div key={label} className="border p-4" style={{ borderColor: COLORS.border, background: COLORS.surfaceAlt, borderRadius: 8 }}>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: COLORS.muted }}>{label}</div>
+              <div className="mt-1 text-sm" style={{ color: value === 'Overdue' ? COLORS.danger : COLORS.ink }}>{value}</div>
             </div>
+          ))}
+        </div>
 
-            {/* tape-measure timeline, matching the orders view — a pin marks where the garment stands now */}
-            <div className="relative mt-9 px-1 pb-8">
-              <div className="absolute -top-4 h-3 w-3 -translate-x-1/2 rotate-45 border" style={{ left: `${progressPct}%`, borderColor: THREAD, background: THREAD }} />
-              <div className="absolute left-0 right-0 top-3 h-[2px]" style={{ background: LINE }} />
-              <div className="absolute left-0 top-3 h-[2px] transition-all" style={{ width: `${progressPct}%`, background: THREAD }} />
-              <div className="relative flex justify-between">
-                {STAGES.map((stage, index) => (
-                  <div key={stage} className="flex flex-col items-center text-center" style={{ width: `${100 / STAGES.length}%` }}>
-                    <div className="h-3 w-[2px]" style={{ background: index <= active ? THREAD : LINE }} />
-                    <span className="mt-2 text-[9px]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: MUTED }}>{String(index + 1).padStart(2, '0')}″</span>
-                    <span className="mt-1 text-[10px] leading-tight" style={{ color: index <= active ? INK : MUTED }}>{stage}</span>
-                  </div>
-                ))}
-              </div>
+        <div>
+          <div className="flex items-center gap-2">
+            <UserRound className="h-4 w-4" style={{ color: COLORS.brassDeep }} />
+            <h3 className="text-[15px] font-semibold" style={{ color: COLORS.ink }}>Current progress</h3>
+          </div>
+
+          <div className="relative mt-9 px-1 pb-6">
+            <div className="absolute -top-4 h-3 w-3 -translate-x-1/2 rotate-45" style={{ left: `${progressPct}%`, background: COLORS.brass }} />
+            <div className="absolute left-0 right-0 top-3 h-[3px]" style={{ background: COLORS.border, borderRadius: 4 }} />
+            <div className="absolute left-0 top-3 h-[3px] transition-all" style={{ width: `${progressPct}%`, background: COLORS.navy, borderRadius: 4 }} />
+            <div className="relative flex justify-between">
+              {STAGES.map((stage, index) => (
+                <div key={stage} className="flex flex-col items-center text-center" style={{ width: `${100 / STAGES.length}%` }}>
+                  <div className="h-3 w-[2px]" style={{ background: index <= active ? COLORS.navy : COLORS.border }} />
+                  <span className="mt-2 text-[10px]" style={{ color: index <= active ? COLORS.ink : COLORS.faint }}>{stage}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
-      </section>
-    </div>
+      </div>
+    </ModalShell>
   );
 }
 

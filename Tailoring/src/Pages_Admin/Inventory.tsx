@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Boxes, ChevronRight, PackagePlus, Search, X } from 'lucide-react';
+import { AlertTriangle, Boxes, PackagePlus } from 'lucide-react';
+import {
+  COLORS, FONT_IMPORT, PageHeader, StatCard, SearchField, FilterPill, Card, TableHeadRow, EmptyState,
+  ModalShell, EyebrowLabel, PrimaryButton, 
+} from './Theme';
 
 type Fabric = { id: string; name: string; color: string; category: string; supplier: string; stock: number; reorderAt: number; unitCost: string; lastUpdated: string; usage: { job: string; meters: string; date: string }[]; };
 const FABRICS: Fabric[] = [
@@ -12,14 +16,128 @@ const FABRICS: Fabric[] = [
 ];
 
 export function AdminInventoryView() {
-  const [query, setQuery] = useState(''); const [lowOnly, setLowOnly] = useState(false); const [selected, setSelected] = useState<Fabric | null>(null);
+  const [query, setQuery] = useState('');
+  const [lowOnly, setLowOnly] = useState(false);
+  const [selected, setSelected] = useState<Fabric | null>(null);
   const fabrics = useMemo(() => FABRICS.filter((fabric) => `${fabric.name} ${fabric.color} ${fabric.category} ${fabric.supplier}`.toLowerCase().includes(query.toLowerCase()) && (!lowOnly || fabric.stock <= fabric.reorderAt)), [query, lowOnly]);
   const lowStock = FABRICS.filter((fabric) => fabric.stock <= fabric.reorderAt);
-  return <div className="space-y-7"><div className="dash-in flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><span className="text-[10px] uppercase tracking-[0.22em] text-[#5D7480]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Fabric stock control</span><h1 className="mt-1 text-2xl sm:text-3xl text-[#122029]" style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>Inventory</h1><p className="mt-2 text-sm text-[#5D7480]">Track fabric stock, usage, suppliers, and reorder alerts.</p></div><button className="inline-flex items-center justify-center gap-2 border border-[#2C4A57] bg-[#2C4A57] px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.15em] text-white"><PackagePlus className="h-4 w-4" /> Add fabric</button></div><div className="dash-in grid gap-4 sm:grid-cols-3" style={{ animationDelay: '0.06s' }}><Metric icon={<Boxes />} label="Fabric types" value={FABRICS.length} /><Metric icon={<AlertTriangle />} label="Low-stock alerts" value={lowStock.length} tone="warn" /><Metric icon={<Boxes />} label="Total stock on hand" value={`${FABRICS.reduce((sum, fabric) => sum + fabric.stock, 0)} m`} /></div>{lowStock.length > 0 && <section className="dash-in border border-[#ECD8A7] bg-[#FFF7E3] p-5" style={{ animationDelay: '0.1s' }}><div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[#8A6618]" /><div><h2 className="font-medium text-[#5E4711]">{lowStock.length} fabric item{lowStock.length > 1 ? 's' : ''} needs reordering</h2><p className="mt-1 text-sm text-[#806421]">{lowStock.map((fabric) => `${fabric.name} — ${fabric.color}`).join(', ')}</p></div></div></section>}<section className="dash-in border border-[#C7D2CE] bg-[#F7FAF9] shadow-[0_1px_3px_rgba(18,32,41,0.06)]" style={{ animationDelay: '0.14s' }}><div className="flex flex-col gap-4 border-b border-[#C7D2CE] p-5 sm:flex-row sm:items-center sm:justify-between"><div className="relative max-w-md flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8FA2A8]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search fabric, color, category, or supplier" className="w-full border border-[#C7D2CE] bg-white py-2.5 pl-10 pr-3 text-sm outline-none focus:border-[#4FB6C4]" /></div><button onClick={() => setLowOnly((value) => !value)} className={`border px-3 py-2.5 text-[10px] font-medium uppercase tracking-[0.12em] ${lowOnly ? 'border-[#C1544B] bg-[#FCEAE7] text-[#9B4D45]' : 'border-[#C7D2CE] text-[#5D7480]'}`}>Low stock only</button></div><div className="hidden grid-cols-[1.3fr_1fr_1.1fr_0.9fr_0.85fr_24px] gap-4 border-b border-[#C7D2CE] bg-[#EDF1F0] px-6 py-3 md:grid">{['Fabric', 'Category', 'Supplier', 'Stock level', 'Unit cost', ''].map((label) => <span key={label} className="text-[10px] uppercase tracking-[0.16em] text-[#5D7480]">{label}</span>)}</div>{fabrics.map((fabric) => { const percent = Math.min(100, (fabric.stock / fabric.reorderAt) * 100); const low = fabric.stock <= fabric.reorderAt; return <button key={fabric.id} onClick={() => setSelected(fabric)} className="grid w-full grid-cols-1 gap-2 border-b border-[#DEE5DF] px-6 py-4 text-left transition-colors hover:bg-[#EDF5F3] md:grid-cols-[1.3fr_1fr_1.1fr_0.9fr_0.85fr_24px] md:items-center md:gap-4"><div><div className="font-medium text-[#122029]">{fabric.name}</div><div className="mt-1 text-[11px] text-[#5D7480]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{fabric.id} · {fabric.color}</div></div><span className="text-sm text-[#3D4F55]">{fabric.category}</span><span className="text-sm text-[#3D4F55]">{fabric.supplier}</span><div><div className={`text-sm ${low ? 'font-medium text-[#C1544B]' : 'text-[#122029]'}`}>{fabric.stock} m <span className="text-xs text-[#5D7480]">/ reorder at {fabric.reorderAt} m</span></div><div className="mt-2 h-1.5 bg-[#E1E8E3]"><div className={low ? 'h-full bg-[#C1544B]' : 'h-full bg-[#4FB6C4]'} style={{ width: `${percent}%` }} /></div></div><span className="text-sm text-[#122029]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{fabric.unitCost}</span><ChevronRight className="hidden h-4 w-4 text-[#4FB6C4] md:block" /></button> })}{!fabrics.length && <div className="p-12 text-center text-sm text-[#5D7480]">No fabric matches your search.</div>}</section>{selected && <FabricDetails fabric={selected} onClose={() => setSelected(null)} />}</div>;
+
+  return (
+    <div className="space-y-7" style={{ color: COLORS.ink }}>
+      <style>{FONT_IMPORT}</style>
+
+      <PageHeader
+        eyebrow="Fabric stock control"
+        title="Inventory"
+        description="Track fabric stock, usage, suppliers, and reorder alerts."
+        action={<PrimaryButton icon={<PackagePlus />}>Add fabric</PrimaryButton>}
+      />
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard delay={0.05} icon={<Boxes />} label="Fabric types" value={FABRICS.length} tone="neutral" />
+        <StatCard delay={0.09} icon={<AlertTriangle />} label="Low-stock alerts" value={lowStock.length} tone="danger" />
+        <StatCard delay={0.13} icon={<Boxes />} label="Total stock on hand" value={`${FABRICS.reduce((sum, fabric) => sum + fabric.stock, 0)} m`} tone="brass" />
+      </div>
+
+      {lowStock.length > 0 && (
+        <div className="rise-in border p-5" style={{ animationDelay: '0.16s', borderColor: COLORS.warningBorder, background: COLORS.warningBg, borderRadius: 10 }}>
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" style={{ color: COLORS.warning }} />
+            <div>
+              <h2 className="font-semibold" style={{ color: COLORS.warning }}>{lowStock.length} fabric item{lowStock.length > 1 ? 's' : ''} needs reordering</h2>
+              <p className="mt-1 text-sm" style={{ color: '#8A5A17' }}>{lowStock.map((fabric) => `${fabric.name} — ${fabric.color}`).join(', ')}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Card delay={0.2}>
+        <div className="flex flex-col gap-4 border-b p-5 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: COLORS.border }}>
+          <SearchField value={query} onChange={setQuery} placeholder="Search fabric, color, category, or supplier" />
+          <FilterPill active={lowOnly} onClick={() => setLowOnly((v) => !v)}>Low stock only</FilterPill>
+        </div>
+        <TableHeadRow gridCols="grid-cols-[1.3fr_1fr_1.1fr_0.9fr_0.85fr_24px]" columns={['Fabric', 'Category', 'Supplier', 'Stock level', 'Unit cost', '']} />
+        {fabrics.map((fabric) => {
+          const percent = Math.min(100, (fabric.stock / fabric.reorderAt) * 100);
+          const low = fabric.stock <= fabric.reorderAt;
+          return (
+            <button
+              key={fabric.id}
+              onClick={() => setSelected(fabric)}
+              className="grid w-full grid-cols-1 gap-2 border-b px-6 py-4 text-left transition-colors md:grid-cols-[1.3fr_1fr_1.1fr_0.9fr_0.85fr_24px] md:items-center md:gap-4"
+              style={{ borderColor: COLORS.border }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.surfaceAlt; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              <div>
+                <div className="font-medium" style={{ color: COLORS.ink }}>{fabric.name}</div>
+                <div className="mono mt-1 text-[11px]" style={{ color: COLORS.faint }}>{fabric.id} · {fabric.color}</div>
+              </div>
+              <span className="text-sm" style={{ color: COLORS.inkSoft }}>{fabric.category}</span>
+              <span className="text-sm" style={{ color: COLORS.inkSoft }}>{fabric.supplier}</span>
+              <div>
+                <div className="mono text-sm" style={{ fontWeight: low ? 600 : 400, color: low ? COLORS.danger : COLORS.ink }}>
+                  {fabric.stock} m <span className="text-xs font-normal" style={{ color: COLORS.muted }}>/ reorder at {fabric.reorderAt} m</span>
+                </div>
+                <div className="mt-2 h-1.5" style={{ background: COLORS.border, borderRadius: 4 }}>
+                  <div style={{ width: `${percent}%`, height: '100%', background: low ? COLORS.danger : COLORS.navy, borderRadius: 4 }} />
+                </div>
+              </div>
+              <span className="mono text-sm" style={{ color: COLORS.ink }}>{fabric.unitCost}</span>
+            </button>
+          );
+        })}
+        {!fabrics.length && <EmptyState message="No fabric matches your search." />}
+      </Card>
+
+      {selected && <FabricDetails fabric={selected} onClose={() => setSelected(null)} />}
+    </div>
+  );
 }
 
-function Metric({ icon, label, value, tone = 'default' }: { icon: React.ReactNode; label: string; value: number | string; tone?: 'default' | 'warn' }) { return <div className="border border-[#C7D2CE] bg-[#F7FAF9] p-5"><div className="flex items-center justify-between"><div className={`flex h-8 w-8 items-center justify-center ${tone === 'warn' ? 'bg-[#C1544B]/10 text-[#C1544B]' : 'bg-[#4FB6C4]/15 text-[#2C4A57]'} [&>svg]:h-4 [&>svg]:w-4`}>{icon}</div><span className="text-2xl text-[#122029]" style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>{value}</span></div><div className="mt-4 text-[10px] uppercase tracking-[0.16em] text-[#5D7480]">{label}</div></div>; }
-
-function FabricDetails({ fabric, onClose }: { fabric: Fabric; onClose: () => void }) { const low = fabric.stock <= fabric.reorderAt; return <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><button aria-label="Close fabric details" onClick={onClose} className="absolute inset-0 bg-[#0E1E2A]/50 backdrop-blur-sm" /><section className="relative max-h-[92vh] w-full max-w-3xl overflow-y-auto border border-[#C7D2CE] bg-[#F7FAF9] shadow-2xl"><header className="flex items-start justify-between border-b border-[#C7D2CE] px-6 py-6 sm:px-8"><div><span className="text-[10px] uppercase tracking-[0.22em] text-[#5D7480]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Fabric inventory record</span><h2 className="mt-1 text-3xl text-[#122029]" style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>{fabric.name}</h2><p className="mt-1 text-sm text-[#5D7480]">{fabric.color} · {fabric.id}</p></div><button onClick={onClose} className="p-2 text-[#5D7480] hover:bg-[#E4EEEE]"><X className="h-5 w-5" /></button></header><div className="space-y-8 p-6 sm:p-8"><div className="grid gap-4 sm:grid-cols-2">{[['Category', fabric.category], ['Supplier', fabric.supplier], ['Unit cost', fabric.unitCost], ['Last stock update', fabric.lastUpdated]].map(([label, value]) => <div key={label} className="border border-[#C7D2CE] bg-white p-4"><div className="text-[10px] uppercase tracking-[0.14em] text-[#5D7480]">{label}</div><div className="mt-1 text-sm text-[#122029]">{value}</div></div>)}</div><div className={`border p-5 ${low ? 'border-[#ECD8A7] bg-[#FFF7E3]' : 'border-[#B9DDD0] bg-[#E7F4EE]'}`}><div className="text-[10px] uppercase tracking-[0.16em] text-[#5D7480]">Current stock</div><div className={`mt-2 text-3xl ${low ? 'text-[#9B4D45]' : 'text-[#277257]'}`} style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>{fabric.stock} m</div><p className="mt-1 text-sm text-[#5D7480]">Reorder point: {fabric.reorderAt} m {low && '— reorder recommended.'}</p></div><div><h3 className="text-lg text-[#122029]" style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 }}>Recent fabric usage</h3><div className="mt-3 space-y-3">{fabric.usage.map((entry) => <div key={`${entry.job}-${entry.date}`} className="flex items-center justify-between border border-[#C7D2CE] bg-white p-4"><div><div className="font-medium text-[#122029]">{entry.job}</div><div className="mt-1 text-xs text-[#5D7480]">Recorded {entry.date}</div></div><span className="text-sm text-[#2C4A57]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{entry.meters}</span></div>)}</div></div></div></section></div>; }
+function FabricDetails({ fabric, onClose }: { fabric: Fabric; onClose: () => void }) {
+  const low = fabric.stock <= fabric.reorderAt;
+  return (
+    <ModalShell onClose={onClose} maxWidth="max-w-3xl">
+      <header className="flex items-start justify-between border-b px-7 py-6 sm:px-8" style={{ borderColor: COLORS.border }}>
+        <div>
+          <EyebrowLabel>Fabric inventory record</EyebrowLabel>
+          <h2 className="mt-1.5 text-2xl font-semibold" style={{ color: COLORS.ink }}>{fabric.name}</h2>
+          <p className="mt-1 text-sm" style={{ color: COLORS.muted }}>{fabric.color} · {fabric.id}</p>
+        </div>
+        <button onClick={onClose} className="p-2" style={{ color: COLORS.muted, borderRadius: 8 }}><svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg></button>
+      </header>
+      <div className="space-y-8 p-7 sm:p-8">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {[['Category', fabric.category], ['Supplier', fabric.supplier], ['Unit cost', fabric.unitCost], ['Last stock update', fabric.lastUpdated]].map(([label, value]) => (
+            <div key={label} className="border p-4" style={{ borderColor: COLORS.border, background: COLORS.surfaceAlt, borderRadius: 8 }}>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: COLORS.muted }}>{label}</div>
+              <div className="mt-1 text-sm" style={{ color: COLORS.ink }}>{value}</div>
+            </div>
+          ))}
+        </div>
+        <div className="border p-5" style={{ borderColor: low ? COLORS.warningBorder : COLORS.successBorder, background: low ? COLORS.warningBg : COLORS.successBg, borderRadius: 10 }}>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: COLORS.muted }}>Current stock</div>
+          <div className="mono mt-2 text-3xl font-semibold" style={{ color: low ? COLORS.warning : COLORS.success }}>{fabric.stock} m</div>
+          <p className="mt-1 text-sm" style={{ color: COLORS.muted }}>Reorder point: {fabric.reorderAt} m {low && '— reorder recommended.'}</p>
+        </div>
+        <div>
+          <h3 className="text-[15px] font-semibold" style={{ color: COLORS.ink }}>Recent fabric usage</h3>
+          <div className="mt-3 space-y-3">
+            {fabric.usage.map((entry) => (
+              <div key={`${entry.job}-${entry.date}`} className="flex items-center justify-between border p-4" style={{ borderColor: COLORS.border, borderRadius: 8 }}>
+                <div>
+                  <div className="font-medium" style={{ color: COLORS.ink }}>{entry.job}</div>
+                  <div className="mt-1 text-xs" style={{ color: COLORS.muted }}>Recorded {entry.date}</div>
+                </div>
+                <span className="mono text-sm" style={{ color: COLORS.navy }}>{entry.meters}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
 
 export default AdminInventoryView;

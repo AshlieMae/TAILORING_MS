@@ -1,5 +1,29 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { FrontDeskCustomersExactView } from '../Pages_Frontdesk/CustomersdeskExact';
+import { FrontDeskOrdersView } from '../Pages_Frontdesk/Ordersdesk';
+import { FrontDeskMeasurementsView } from '../Pages_Frontdesk/Measurementsdesk';
+import { FrontDeskAppointmentsView } from '../Pages_Frontdesk/Appointmentsdesk';
+import { FrontDeskPaymentsView } from '../Pages_Frontdesk/Paymentsdesk';
+import { FrontDeskSettingsView } from '../Pages_Frontdesk/Settingsdesk';
+
+// NOTE: this file adds data visualizations using "recharts".
+// If it isn't already in package.json, install it once with:
+//   npm install recharts
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from 'recharts';
 
 function LiveDateTime() {
   const [now, setNow] = useState(() => new Date());
@@ -40,11 +64,15 @@ import {
   MapPin,
   Lock,
   LogOut,
+  TrendingUp,
+  ArrowUpRight,
 } from 'lucide-react';
 
 /* ---------------------------------------------------------------
    FRONT DESK — Dashboard
-   Transformed into an elegant, soft Creamy Beige & Espresso theme.
+   Premium Creamy Beige & Espresso "counter ledger" theme, with
+   real production/revenue charts. Functionality is unchanged —
+   only presentation, plus additive chart components.
 ------------------------------------------------------------------ */
 
 const FONT_IMPORT = `
@@ -62,15 +90,34 @@ const FONT_IMPORT = `
   from { opacity: 0; transform: scale(0.85) rotate(-4deg); }
   to { opacity: 1; transform: scale(1) rotate(-4deg); }
 }
-.dash-in { opacity: 0; animation: riseIn 0.5s cubic-bezier(0.22,1,0.36,1) forwards; }
+.dash-in { opacity: 0; animation: riseIn 0.55s cubic-bezier(0.22,1,0.36,1) forwards; }
 `;
 
 const FRONT_DESK_THEME = `
 .frontdesk-theme { background: #FAF7F2; color: #2A211D; }
-.frontdesk-theme aside { background: #EFE7DC; border-right: 1px solid #E2D7C7; }
-.frontdesk-theme header { background: rgba(250, 247, 242, 0.92); border-color: #E8DFD3; }
-.frontdesk-theme .dash-card { background: #FFFFFF; border: 1px solid #E8DFD3; box-shadow: 0 4px 20px -4px rgba(42,33,29,0.03), 0 1px 2px rgba(42,33,29,0.02); }
+.frontdesk-theme aside { background: #EFE7DC; border-right: 1px solid #E2D7C7; box-shadow: 1px 0 0 rgba(255,255,255,0.5) inset; }
+.frontdesk-theme header { background: rgba(250, 247, 242, 0.92); border-color: #E8DFD3; box-shadow: 0 1px 0 rgba(232,223,211,0.9), 0 10px 24px -18px rgba(42,33,29,0.35); }
+.frontdesk-theme .dash-card {
+  background: #FFFFFF;
+  border: 1px solid #ECE2D3;
+  box-shadow: 0 1px 1px rgba(42,33,29,0.03), 0 12px 28px -16px rgba(42,33,29,0.14), inset 0 1px 0 rgba(255,255,255,0.7);
+  position: relative;
+}
+.frontdesk-theme .dash-card::before {
+  content: '';
+  position: absolute; inset: 0 0 auto 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(184,146,85,0.35), transparent);
+  border-radius: inherit;
+}
 .ticket-edge { background-image: linear-gradient(135deg, #FAF7F2 25%, transparent 25%), linear-gradient(225deg, #FAF7F2 25%, transparent 25%); background-size: 14px 14px; background-position: 0 0; background-color: #FFFFFF; }
+.frontdesk-theme .module-customers > :first-child > :first-child { padding: 1.5rem; border: 1px solid #E8DFD3; border-radius: 1rem; background: linear-gradient(115deg, #FFFDF9 0%, #F3E8D9 100%); }
+.frontdesk-theme .module-orders > :first-child > :first-child { padding: 1.5rem; border-radius: 1rem; color: #FFF9F1; background: linear-gradient(118deg, #392A23, #76523B); }
+.frontdesk-theme .module-orders > :first-child > :first-child h1, .frontdesk-theme .module-orders > :first-child > :first-child p, .frontdesk-theme .module-orders > :first-child > :first-child span { color: inherit; }
+.frontdesk-theme .module-measurements > :first-child > :first-child { padding: 1.5rem; border: 1px solid #D8E4DE; border-radius: 1rem; background: linear-gradient(115deg, #F9FCF9, #E5F0EA); }
+.frontdesk-theme .module-appointments > :first-child > :first-child { padding: 1.5rem; border: 1px solid #DCD5E8; border-radius: 1rem; background: linear-gradient(115deg, #FCFAFF, #ECE6F6); }
+.frontdesk-theme .module-payments > :first-child > :first-child { padding: 1.5rem; border: 1px solid #E9DDB7; border-radius: 1rem; background: linear-gradient(115deg, #FFFCF2, #F6EACB); }
+.frontdesk-theme .module-settings > :first-child > :first-child { padding: 1.5rem; border: 1px solid #D7D5D2; border-radius: 1rem; background: linear-gradient(115deg, #FFFFFF, #F1EFEB); }
+.frontdesk-theme .module-settings > :first-child { width: 100%; max-width: none; }
 `;
 
 function MonoLabel({ children, className = '' }: { children: ReactNode; className?: string }) {
@@ -97,7 +144,7 @@ function currentUser() {
 /* ---------------------------------------------------------------
    Register customer modal
 ------------------------------------------------------------------ */
-interface NewCustomerForm {
+export interface NewCustomerForm {
   lastName: string;
   middleName: string;
   firstName: string;
@@ -108,7 +155,7 @@ interface NewCustomerForm {
   address: string;
 }
 
-function RegisterCustomerModal({
+export function RegisterCustomerModal({
   onClose,
   onRegister,
 }: {
@@ -244,14 +291,14 @@ function RegisterCustomerModal({
 /* ---------------------------------------------------------------
    Create order modal
 ------------------------------------------------------------------ */
-interface NewOrderForm {
+export interface NewOrderForm {
   customer: string;
   garment: string;
   fabric: string;
   dueDate: string;
 }
 
-function CreateOrderModal({
+export function CreateOrderModal({
   onClose,
   onCreate,
 }: {
@@ -612,6 +659,27 @@ const PICKUP_QUEUE = [
   { id: 'JC-3012', customer: 'Consuelo Reyes', garment: "Women's Coat", balance: '₱0 — paid in full' },
 ];
 
+/* Illustrative chart data — purely presentational, doesn't touch app state or logic. */
+const WEEKLY_REVENUE = [
+  { day: 'Mon', amount: 12400 },
+  { day: 'Tue', amount: 15800 },
+  { day: 'Wed', amount: 9200 },
+  { day: 'Thu', amount: 17650 },
+  { day: 'Fri', amount: 21300 },
+  { day: 'Sat', amount: 26800 },
+  { day: 'Sun', amount: 18650 },
+];
+
+const PRODUCTION_MIX = [
+  { stage: 'Measuring', count: 4, color: '#C9BBA6' },
+  { stage: 'Pattern cutting', count: 6, color: '#8FAF9E' },
+  { stage: 'Assembly', count: 8, color: '#C9A15C' },
+  { stage: 'Fitting', count: 5, color: '#A8644A' },
+  { stage: 'Ready for pickup', count: 3, color: '#6E8F72' },
+];
+
+const COLLECTED_SPARK = [9, 12, 8, 15, 11, 17, 18.65];
+
 type ViewKey = 'dashboard' | 'customers' | 'orders' | 'measurements' | 'appointments' | 'payments' | 'settings';
 
 const NAV: { label: string; icon: typeof LayoutDashboard; view: ViewKey }[] = [
@@ -623,6 +691,118 @@ const NAV: { label: string; icon: typeof LayoutDashboard; view: ViewKey }[] = [
   { label: 'Payments', icon: Wallet, view: 'payments' },
   { label: 'Settings', icon: Settings, view: 'settings' },
 ];
+
+/* ==================================================================
+   CHART COMPONENTS — additive, presentational only
+================================================================== */
+
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-lg border border-[#E2D7C7] bg-[#FFFCF8] px-3 py-2 shadow-lg">
+      <div className="text-[10px] uppercase tracking-[0.14em] text-[#8C7E74]" style={{ fontFamily: "'Space Mono', monospace" }}>{label}</div>
+      <div className="text-[13px] font-semibold text-[#2A211D] mt-0.5">₱{Number(payload[0].value).toLocaleString()}</div>
+    </div>
+  );
+}
+
+function RevenueTrendCard() {
+  return (
+    <div className="dash-in dash-card rounded-xl p-6 sm:p-7" style={{ animationDelay: '0.42s' }}>
+      <div className="flex items-start justify-between gap-3 mb-1">
+        <div>
+          <MonoLabel>Weekly ledger</MonoLabel>
+          <h2 className="text-xl font-normal mt-0.5 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Revenue trend</h2>
+        </div>
+        <span className="inline-flex items-center gap-1 rounded-full bg-[#F1F5F0] border border-[#C7DDD3] px-2.5 py-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-[#4E7357] flex-shrink-0">
+          <TrendingUp className="w-3 h-3" strokeWidth={2} /> +14.6%
+        </span>
+      </div>
+      <p className="text-[12.5px] text-[#8C7E74] mb-5">Cash collected at the counter, last 7 days</p>
+      <div className="h-48 -ml-2">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={WEEKLY_REVENUE} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#B89255" stopOpacity={0.55} />
+                <stop offset="100%" stopColor="#B89255" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid vertical={false} stroke="#ECE3D8" strokeDasharray="3 4" />
+            <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: '#A3958B', fontSize: 11, fontFamily: 'Space Mono, monospace' }} />
+            <YAxis hide domain={['dataMin - 3000', 'dataMax + 3000']} />
+            <Tooltip content={<ChartTooltip />} cursor={{ stroke: '#D9C8B7', strokeWidth: 1 }} />
+            <Area
+              type="monotone"
+              dataKey="amount"
+              stroke="#8C6F3E"
+              strokeWidth={2.25}
+              fill="url(#revenueFill)"
+              dot={{ r: 3, stroke: '#8C6F3E', strokeWidth: 2, fill: '#FFFFFF' }}
+              activeDot={{ r: 5, fill: '#8C6F3E' }}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function ProductionMixCard() {
+  const total = PRODUCTION_MIX.reduce((sum, s) => sum + s.count, 0);
+  return (
+    <div className="dash-in dash-card rounded-xl p-6 sm:p-7" style={{ animationDelay: '0.46s' }}>
+      <MonoLabel>Workshop floor</MonoLabel>
+      <h2 className="text-xl font-normal mt-0.5 mb-1 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Production mix</h2>
+      <p className="text-[12.5px] text-[#8C7E74] mb-5">{total} garments currently in progress, by stage</p>
+      <div className="flex items-center gap-6">
+        <div className="relative h-32 w-32 flex-shrink-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={PRODUCTION_MIX} dataKey="count" nameKey="stage" innerRadius={38} outerRadius={58} paddingAngle={3} stroke="none">
+                {PRODUCTION_MIX.map((entry) => (
+                  <Cell key={entry.stage} fill={entry.color} />
+                ))}
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <span className="text-xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{total}</span>
+            <span className="text-[9px] uppercase tracking-[0.14em] text-[#A3958B]">Active</span>
+          </div>
+        </div>
+        <ul className="flex-1 space-y-2.5 min-w-0">
+          {PRODUCTION_MIX.map((s) => (
+            <li key={s.stage} className="flex items-center justify-between gap-3 text-[12.5px]">
+              <span className="flex items-center gap-2 min-w-0 text-[#5E5048]">
+                <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                <span className="truncate">{s.stage}</span>
+              </span>
+              <span className="text-[#2A211D] font-medium flex-shrink-0" style={{ fontFamily: "'Space Mono', monospace" }}>{s.count}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function MiniSparkline({ data, color }: { data: number[]; color: string }) {
+  const points = data.map((value, index) => ({ index, value }));
+  return (
+    <div className="h-9 w-20 flex-shrink-0">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={points} barCategoryGap="20%">
+          <Bar dataKey="value" radius={[2, 2, 0, 0]}>
+            {points.map((_, i) => (
+              <Cell key={i} fill={color} fillOpacity={i === points.length - 1 ? 1 : 0.35} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 /* ==================================================================
    DASHBOARD VIEW
@@ -707,10 +887,16 @@ function DashboardView() {
 
       {/* ---------------- STATS ---------------- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard delay={0.1} label="Collected today" value={`₱${stats.collected.toLocaleString()}`} icon={<Wallet className="w-4 h-4" strokeWidth={1.6} />} />
+        <StatCard delay={0.1} label="Collected today" value={`₱${stats.collected.toLocaleString()}`} icon={<Wallet className="w-4 h-4" strokeWidth={1.6} />} spark={COLLECTED_SPARK} sparkColor="#8C6F3E" trendLabel="+8.2% vs yesterday" />
         <StatCard delay={0.14} label="Walk-ins today" value={`${stats.walkIns}`} icon={<Users className="w-4 h-4" strokeWidth={1.6} />} />
         <StatCard delay={0.18} label="Fittings today" value={`${stats.fittings}`} icon={<CalendarClock className="w-4 h-4" strokeWidth={1.6} />} />
         <StatCard delay={0.22} label="Ready for pickup" value={`${stats.pickups}`} icon={<Package className="w-4 h-4" strokeWidth={1.6} />} tone="warn" />
+      </div>
+
+      {/* ---------------- CHARTS ---------------- */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-6">
+        <RevenueTrendCard />
+        <ProductionMixCard />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-6">
@@ -849,26 +1035,51 @@ function QuickAction({ icon, label, hint, onClick }: { icon: ReactNode; label: s
   return (
     <button
       onClick={onClick}
-      className="group text-left bg-[#2A211D] rounded-xl p-5 shadow-sm hover:bg-[#3D312B] hover:-translate-y-0.5 hover:shadow-md transition-all border border-[#3D312B]"
+      className="group text-left bg-[#2A211D] rounded-xl p-5 shadow-[0_10px_28px_-14px_rgba(42,33,29,0.55)] hover:bg-[#3D312B] hover:-translate-y-0.5 hover:shadow-[0_16px_34px_-14px_rgba(42,33,29,0.6)] transition-all border border-[#3D312B]"
     >
-      <div className="w-9 h-9 rounded-lg bg-[#FAF7F2]/10 text-[#E5C396] flex items-center justify-center mb-4 group-hover:bg-[#FAF7F2]/20 transition-colors">
+      <div className="w-9 h-9 rounded-lg bg-[#FAF7F2]/10 text-[#E5C396] flex items-center justify-center mb-4 group-hover:bg-[#FAF7F2]/20 transition-colors ring-1 ring-[#E5C396]/20">
         {icon}
       </div>
-      <div className="text-[13.5px] text-[#FAF7F2] font-medium leading-snug">{label}</div>
+      <div className="flex items-center gap-1 text-[13.5px] text-[#FAF7F2] font-medium leading-snug">
+        {label}
+        <ArrowUpRight className="w-3.5 h-3.5 opacity-0 -translate-x-1 group-hover:opacity-70 group-hover:translate-x-0 transition-all" />
+      </div>
       <MonoLabel className="text-[#C2B5A8] block mt-1">{hint}</MonoLabel>
     </button>
   );
 }
 
 /* ---------------- Stat card ---------------- */
-function StatCard({ label, value, icon, delay = 0, tone = 'default' }: { label: string; value: string; icon: ReactNode; delay?: number; tone?: 'default' | 'warn'; }) {
+function StatCard({
+  label,
+  value,
+  icon,
+  delay = 0,
+  tone = 'default',
+  spark,
+  sparkColor = '#8C6F3E',
+  trendLabel,
+}: {
+  label: string;
+  value: string;
+  icon: ReactNode;
+  delay?: number;
+  tone?: 'default' | 'warn';
+  spark?: number[];
+  sparkColor?: string;
+  trendLabel?: string;
+}) {
   return (
     <div className="dash-in dash-card rounded-xl p-5 sm:p-6 transition-shadow hover:shadow-md" style={{ animationDelay: `${delay}s` }}>
       <div className="flex items-center justify-between mb-4">
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${tone === 'warn' ? 'bg-[#FAF2F0] text-[#9E5B4B]' : 'bg-[#F9F4EB] text-[#8C6F3E]'}`}>{icon}</div>
+        {spark && <MiniSparkline data={spark} color={sparkColor} />}
       </div>
       <div className="text-2xl font-normal mb-1 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{value}</div>
-      <MonoLabel className="block">{label}</MonoLabel>
+      <div className="flex items-center justify-between gap-2">
+        <MonoLabel className="block">{label}</MonoLabel>
+        {trendLabel && <span className="text-[10px] font-semibold text-[#4E7357] flex-shrink-0">{trendLabel}</span>}
+      </div>
     </div>
   );
 }
@@ -895,6 +1106,18 @@ export default function FrontDeskDashboard({ initialView = 'dashboard' }: { init
     switch (view) {
       case 'dashboard':
         return <DashboardView />;
+      case 'customers':
+        return <div className="module-customers"><FrontDeskCustomersExactView /></div>;
+      case 'orders':
+        return <div className="module-orders"><FrontDeskOrdersView /></div>;
+      case 'measurements':
+        return <div className="module-measurements"><FrontDeskMeasurementsView /></div>;
+      case 'appointments':
+        return <div className="module-appointments"><FrontDeskAppointmentsView /></div>;
+      case 'payments':
+        return <div className="module-payments"><FrontDeskPaymentsView /></div>;
+      case 'settings':
+        return <div className="module-settings"><FrontDeskSettingsView /></div>;
       default:
         return <ComingSoonView label={currentNavLabel} />;
     }

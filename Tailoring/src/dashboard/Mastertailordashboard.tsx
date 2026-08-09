@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { TailorJobCardsView } from '../Pages_Tailor/TailorJobCards';
+import { TailorMeasurementsView } from '../Pages_Tailor/TailorMeasurements';
+import { TailorInventoryView } from '../Pages_Tailor/TailorInventory';
+import { TailorSettingsView } from '../Pages_Tailor/TailorSettings';
 import type { ReactNode } from 'react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer } from 'recharts';
 import {
   LayoutDashboard,
   Shirt,
@@ -23,33 +28,78 @@ import {
 
 /* ---------------------------------------------------------------
    MASTER TAILOR / CUTTER STAFF — Dashboard
-   "The Pattern Table"
-   Where the Admin view is a drafting-table schematic and the
-   Front Desk view is a receipt roll, the Tailor view is built
-   around the workbench as a literal cutting table: job cards are
-   drawn as pattern pieces — dashed cut-line borders, corner notch
-   marks — laid out on dot-grid pattern paper, in a graphite +
-   tailor's-chalk-yellow + pin-red palette.
+   "The Pattern Table" — premium pass
+
+   Signature: job cards are drawn as pattern pieces on dot-grid
+   paper with corner notches, the sidebar's active state reads as
+   a hand-basted thread stitch, and the production-flow chart is
+   rendered as stacked fabric bolts on a cutting table, with the
+   bottleneck stage called out in pin-red. Palette moves from flat
+   chalk-yellow to a warmer brass/gold for accents, with layered
+   "fabric lifted off the table" shadows for a tactile, premium,
+   materially-real feel rather than flat cards.
 ------------------------------------------------------------------ */
 
 const FONT_IMPORT = `
-@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Archivo:wght@500;600;700&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --ink: #241F19;
+  --ink-soft: #55503F;
+  --graphite: #1E1C18;
+  --graphite-2: #29261F;
+  --paper: #FBF9F2;
+  --paper-dim: #F3EFE2;
+  --line: #DBD6C2;
+  --line-soft: #E8E3D2;
+  --muted: #8A846F;
+  --muted-2: #A39D8A;
+  --brass: #C29A1E;
+  --brass-light: #E4C25E;
+  --brass-deep: #8A6A18;
+  --chalk: #E8C547;
+  --pin: #A32E22;
+  --pin-soft: #C0392B;
+  --emerald: #4C7A44;
+
+  /* flat, small-element depth */
+  --shadow-1: 0 1px 2px rgba(33,31,28,0.05), 0 10px 28px -14px rgba(33,31,28,0.22);
+  /* elevated modal depth */
+  --shadow-2: 0 2px 6px rgba(33,31,28,0.07), 0 22px 50px -18px rgba(33,31,28,0.28);
+  /* "cloth lifted off the table" — layered, materially real */
+  --shadow-fabric: 0 1px 1px rgba(36,31,25,0.05), 0 1px 0 rgba(255,255,255,0.6) inset, 0 10px 20px -12px rgba(36,31,25,0.16), 0 34px 64px -28px rgba(36,31,25,0.32);
+  --shadow-fabric-hover: 0 1px 1px rgba(36,31,25,0.06), 0 1px 0 rgba(255,255,255,0.6) inset, 0 14px 26px -12px rgba(36,31,25,0.2), 0 40px 76px -26px rgba(36,31,25,0.38);
+  --shadow-pressed: inset 0 1px 3px rgba(36,31,25,0.14), inset 0 0 0 1px rgba(36,31,25,0.04);
+}
 
 @keyframes riseIn {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes drawRail {
   from { opacity: 0; transform: scaleX(0); }
   to { opacity: 1; transform: scaleX(1); }
 }
-.dash-in { opacity: 0; animation: riseIn 0.5s cubic-bezier(0.22,1,0.36,1) forwards; }
+@keyframes shimmerOnce {
+  0% { background-position: -120% 0; }
+  60%, 100% { background-position: 220% 0; }
+}
+.dash-in { opacity: 0; animation: riseIn 0.55s cubic-bezier(0.22,1,0.36,1) forwards; }
+.brass-shimmer {
+  background-image: linear-gradient(110deg, transparent 40%, rgba(255,255,255,0.55) 50%, transparent 60%);
+  background-size: 250% 100%;
+  animation: shimmerOnce 1.8s ease-out 0.4s 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dash-in { opacity: 1; animation: none; }
+  .brass-shimmer { animation: none; }
+}
 `;
 
 function MonoLabel({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <span
-      className={`text-[10px] tracking-[0.22em] uppercase text-[#7A7568] ${className}`}
+      className={`text-[10px] tracking-[0.22em] uppercase text-[#8A846F] ${className}`}
       style={{ fontFamily: "'JetBrains Mono', monospace" }}
     >
       {children}
@@ -58,14 +108,68 @@ function MonoLabel({ children, className = '' }: { children: ReactNode; classNam
 }
 
 /* corner notch — the little triangular nick tailors cut into a
-   pattern piece to mark alignment points */
+   pattern piece to mark alignment points; premium version gets a
+   whisper of a gold hairline along the cut edge */
 function Notch({ className = '' }: { className?: string }) {
   return (
     <span
-      className={`absolute w-2 h-2 bg-[#F3F1E7] border-[#D6D2C0] ${className}`}
-      style={{ clipPath: 'polygon(0 0, 100% 0, 0 100%)' }}
+      className={`absolute w-2.5 h-2.5 ${className}`}
       aria-hidden="true"
+      style={{
+        background:
+          'linear-gradient(135deg, #FBF9F2 0%, #FBF9F2 46%, rgba(194,154,30,0.4) 48%, transparent 50%)',
+        clipPath: 'polygon(0 0, 100% 0, 0 100%)',
+      }}
     />
+  );
+}
+
+/* baste-stitch divider — a running-stitch rule used as the active
+   nav indicator and section separators, standing in for a plain bar */
+function StitchLine({ className = '', color = 'var(--brass)' }: { className?: string; color?: string }) {
+  return (
+    <svg className={className} width="100%" height="2" preserveAspectRatio="none" aria-hidden="true">
+      <line x1="0" y1="1" x2="100%" y2="1" stroke={color} strokeWidth="1.5" strokeDasharray="3 3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/* subtle woven-cloth texture — two hairline crosshatches layered
+   under the pattern-dot grid so panels read as fabric on a table,
+   not flat vector shapes; kept faint so it never fights content */
+function fabricTexture(dotColor = '#241F19', opacity = 0.045) {
+  return {
+    backgroundImage: `radial-gradient(${dotColor}${Math.round(opacity * 255).toString(16).padStart(2, '0')} 0.6px, transparent 0.6px)`,
+    backgroundSize: '18px 18px',
+    backgroundColor: 'var(--paper)',
+  } as const;
+}
+
+/* segmented stage tracker — reads a job card's production stage as
+   a run of cut/uncut segments along the seam, not just a text pill */
+function StageTracker({ stageIndex, compact = false }: { stageIndex: number; compact?: boolean }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex items-center gap-[3px]">
+        {STAGES.map((s, i) => (
+          <span
+            key={s}
+            title={s}
+            className="h-1.5 rounded-full transition-colors"
+            style={{
+              width: compact ? 10 : 14,
+              background:
+                i < stageIndex ? 'var(--brass)' : i === stageIndex ? 'var(--pin-soft)' : 'var(--line)',
+            }}
+          />
+        ))}
+      </div>
+      {!compact && (
+        <span className="text-[10px] font-medium tracking-[0.08em] uppercase text-[var(--ink-soft)] whitespace-nowrap">
+          {STAGES[stageIndex]}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -84,7 +188,11 @@ function LiveDateTime() {
     return () => window.clearInterval(timer);
   }, []);
 
-  return <MonoLabel className="hidden sm:inline">{now.toLocaleString(undefined, { weekday: 'short', month: 'short', day: '2-digit', hour: 'numeric', minute: '2-digit' })}</MonoLabel>;
+  return (
+    <MonoLabel className="hidden sm:inline">
+      {now.toLocaleString(undefined, { weekday: 'short', month: 'short', day: '2-digit', hour: 'numeric', minute: '2-digit' })}
+    </MonoLabel>
+  );
 }
 
 function currentUser() {
@@ -93,6 +201,7 @@ function currentUser() {
 }
 
 const STAGES = ['Measuring', 'Pattern Cutting', 'Initial Assembly', 'First Fitting', 'Final Alterations', 'Completed', 'Ready for Pickup'];
+const STAGE_SHORT = ['Measure', 'Cut', 'Assembly', '1st Fit', 'Alter', 'Done', 'Pickup'];
 
 interface JobCard {
   id: string;
@@ -111,6 +220,113 @@ const FITTINGS_TODAY = [
 ];
 
 /* ---------------------------------------------------------------
+   Production flow chart — job cards grouped by stage, drawn as
+   bolts of fabric stacked on the cutting table. The tallest bolt
+   (the bottleneck stage) is called out in pin-red so the tailor
+   can see where work is piling up at a glance.
+------------------------------------------------------------------ */
+function ProductionFlowChart({ cards }: { cards: JobCard[] }) {
+  const data = useMemo(
+    () =>
+      STAGES.map((label, i) => ({
+        stage: STAGE_SHORT[i],
+        fullStage: label,
+        count: cards.filter((c) => c.stageIndex === i).length,
+      })),
+    [cards]
+  );
+
+  const maxCount = Math.max(0, ...data.map((d) => d.count));
+  const hasData = maxCount > 0;
+
+  function CustomTooltip({ active, payload }: any) {
+    if (!active || !payload?.length) return null;
+    const d = payload[0].payload;
+    return (
+      <div
+        className="rounded-[3px] border border-[var(--line)] bg-[var(--paper)] px-3 py-2"
+        style={{ boxShadow: 'var(--shadow-2)' }}
+      >
+        <div className="text-[11px] font-medium text-[var(--ink)]">{d.fullStage}</div>
+        <div className="text-[11px] text-[var(--ink-soft)]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+          {d.count} {d.count === 1 ? 'job card' : 'job cards'}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="dash-in relative bg-[var(--paper)] border border-[var(--line)] rounded-[3px] p-6 sm:p-8 overflow-hidden"
+      style={{ animationDelay: '0.18s', boxShadow: 'var(--shadow-fabric)', ...fabricTexture() }}
+    >
+      <Notch className="-top-px -left-px" />
+      <Notch className="-top-px -right-px rotate-90" />
+      <Notch className="-bottom-px -left-px -rotate-90" />
+      <Notch className="-bottom-px -right-px rotate-180" />
+
+      <div className="flex items-end justify-between gap-4 mb-6 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2.5 mb-2">
+            <StitchLine className="w-8" />
+            <MonoLabel>Cutting table overview</MonoLabel>
+          </div>
+          <h2 className="text-xl text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>
+            Production flow
+          </h2>
+        </div>
+        {hasData && (
+          <div className="flex items-center gap-4 text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-[1px]" style={{ background: 'var(--pin-soft)' }} />
+              Bottleneck
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-[1px]" style={{ background: 'var(--brass)' }} />
+              On the table
+            </span>
+          </div>
+        )}
+      </div>
+
+      {hasData ? (
+        <div style={{ width: '100%', height: 220 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} margin={{ top: 4, right: 8, left: -18, bottom: 0 }} barCategoryGap="28%">
+              <XAxis
+                dataKey="stage"
+                tick={{ fill: '#8A846F', fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+                tickLine={false}
+                axisLine={{ stroke: '#DBD6C2' }}
+                interval={0}
+              />
+              <YAxis
+                allowDecimals={false}
+                tick={{ fill: '#8A846F', fontSize: 10, fontFamily: 'JetBrains Mono, monospace' }}
+                tickLine={false}
+                axisLine={false}
+                width={28}
+              />
+              <Tooltip cursor={{ fill: 'rgba(194,154,30,0.06)' }} content={<CustomTooltip />} />
+              <Bar dataKey="count" radius={[3, 3, 1, 1]} maxBarSize={38}>
+                {data.map((d, i) => (
+                  <Cell key={i} fill={d.count === maxCount && maxCount > 0 ? 'var(--pin-soft)' : 'var(--brass)'} fillOpacity={d.count === 0 ? 0.18 : 1} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <div className="py-10 text-center">
+          <p className="text-sm text-[var(--ink-soft)]">Nothing on the table yet.</p>
+          <p className="text-[12px] text-[var(--muted-2)] mt-1">The chart fills in as job cards are assigned to you.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------
    Update stage modal — advances a job card's production stage.
 ------------------------------------------------------------------ */
 function UpdateStageModal({
@@ -126,19 +342,23 @@ function UpdateStageModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#262420]/50 backdrop-blur-[2px]" onClick={onClose} />
-      <div className="relative w-full max-w-xl bg-[#FAF8F0] border border-[#D6D2C0] rounded-sm shadow-[0_25px_70px_-25px_rgba(38,36,32,0.45)]">
+      <div className="absolute inset-0 bg-[#211F1C]/55 backdrop-blur-[3px]" onClick={onClose} />
+      <div
+        className="relative w-full max-w-xl bg-[var(--paper)] border border-[var(--line)] rounded-[3px] overflow-hidden"
+        style={{ boxShadow: 'var(--shadow-2)' }}
+      >
+        <div className="h-[3px] w-full bg-gradient-to-r from-[var(--brass)] via-[var(--brass-light)] to-[var(--brass)]" />
         <div className="flex items-center justify-between px-7 sm:px-10 pt-8">
           <MonoLabel>{card.id}</MonoLabel>
-          <button onClick={onClose} aria-label="Close" className="text-[#9C9686] hover:text-[#262420] transition-colors">
+          <button onClick={onClose} aria-label="Close" className="text-[var(--muted-2)] hover:text-[var(--ink)] transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
         <div className="px-7 sm:px-10 pb-9 pt-3">
-          <h2 className="text-3xl leading-tight mb-2 text-[#262420]" style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 700 }}>
+          <h2 className="text-3xl leading-tight mb-2 text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>
             Update production stage
           </h2>
-          <p className="text-[14px] text-[#6E6A5C] font-light mb-8 leading-relaxed">
+          <p className="text-[14px] text-[var(--ink-soft)] font-light mb-8 leading-relaxed">
             {card.garment} for {card.customer}
           </p>
 
@@ -148,15 +368,15 @@ function UpdateStageModal({
                 key={s}
                 type="button"
                 onClick={() => setStageIndex(i)}
-                className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-sm border text-left transition-colors ${
+                className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-[3px] border text-left transition-all duration-150 ${
                   i === stageIndex
-                    ? 'bg-[#2A2A28] border-[#2A2A28] text-[#EDEAE2]'
-                    : 'border-[#D6D2C0] text-[#55503F] hover:border-[#9C9686]'
+                    ? 'bg-[var(--graphite)] border-[var(--graphite)] text-[#EDEAE2] shadow-[0_6px_16px_-8px_rgba(33,31,28,0.5)]'
+                    : 'border-[var(--line)] text-[var(--ink-soft)] hover:border-[var(--muted-2)] hover:bg-[var(--paper-dim)]'
                 }`}
               >
                 <span
-                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                    i === stageIndex ? 'border-[#E8C547] bg-[#E8C547]/20' : 'border-[#D6D2C0]'
+                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                    i === stageIndex ? 'border-[var(--brass-light)] bg-[var(--brass)]/25' : 'border-[var(--line)]'
                   }`}
                 >
                   {i === stageIndex && <Check className="w-3 h-3 text-[#EDEAE2]" strokeWidth={2.5} />}
@@ -167,13 +387,17 @@ function UpdateStageModal({
           </div>
 
           <div className="flex items-center gap-3 pt-8">
-            <button type="button" onClick={onClose} className="flex-1 px-4 py-3 rounded-sm border border-[#D6D2C0] text-[#6E6A5C] text-[11px] tracking-[0.14em] uppercase hover:border-[#9C9686] transition-colors">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-3 rounded-[3px] border border-[var(--line)] text-[var(--ink-soft)] text-[11px] font-medium tracking-[0.14em] uppercase hover:border-[var(--muted-2)] hover:bg-[var(--paper-dim)] transition-colors"
+            >
               Cancel
             </button>
             <button
               type="button"
               onClick={() => onUpdate(card.id, stageIndex)}
-              className="flex-1 px-4 py-3 rounded-sm bg-[#2A2A28] text-[#EDEAE2] text-[11px] tracking-[0.14em] uppercase hover:bg-[#3A3936] transition-colors"
+              className="flex-1 px-4 py-3 rounded-[3px] bg-[var(--graphite)] text-[#EDEAE2] text-[11px] font-medium tracking-[0.14em] uppercase hover:bg-[var(--graphite-2)] transition-colors shadow-[0_10px_24px_-12px_rgba(33,31,28,0.55)]"
             >
               Save stage
             </button>
@@ -211,31 +435,35 @@ function RecordFabricModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#262420]/50 backdrop-blur-[2px]" onClick={onClose} />
-      <div className="relative w-full max-w-lg bg-[#FAF8F0] border border-[#D6D2C0] rounded-sm shadow-[0_25px_70px_-25px_rgba(38,36,32,0.45)]">
+      <div className="absolute inset-0 bg-[#211F1C]/55 backdrop-blur-[3px]" onClick={onClose} />
+      <div
+        className="relative w-full max-w-lg bg-[var(--paper)] border border-[var(--line)] rounded-[3px] overflow-hidden"
+        style={{ boxShadow: 'var(--shadow-2)' }}
+      >
+        <div className="h-[3px] w-full bg-gradient-to-r from-[var(--pin-soft)] via-[#D3695B] to-[var(--pin-soft)]" />
         <div className="flex items-center justify-between px-7 sm:px-10 pt-8">
           <MonoLabel>{card.id}</MonoLabel>
-          <button onClick={onClose} aria-label="Close" className="text-[#9C9686] hover:text-[#262420] transition-colors">
+          <button onClick={onClose} aria-label="Close" className="text-[var(--muted-2)] hover:text-[var(--ink)] transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
         <div className="px-7 sm:px-10 pb-9 pt-3">
-          <h2 className="text-3xl leading-tight mb-2 text-[#262420]" style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 700 }}>
+          <h2 className="text-3xl leading-tight mb-2 text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>
             Record fabric usage
           </h2>
-          <p className="text-[14px] text-[#6E6A5C] font-light mb-8 leading-relaxed">
+          <p className="text-[14px] text-[var(--ink-soft)] font-light mb-8 leading-relaxed">
             {card.garment} — {card.fabric}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div role="alert" className="border border-[#C0392B]/30 bg-[#C0392B]/10 px-3 py-2 text-sm text-[#96291E]">
+              <div role="alert" className="border border-[var(--pin-soft)]/30 bg-[var(--pin-soft)]/10 px-3 py-2 text-sm text-[#96291E] rounded-[2px]">
                 {error}
               </div>
             )}
             <div>
               <label htmlFor="fabricMeters" className="block mb-2"><MonoLabel>Fabric used (meters)</MonoLabel></label>
-              <div className="border-b border-[#D6D2C0] focus-within:border-[#C0392B] transition-colors">
+              <div className="border-b border-[var(--line)] focus-within:border-[var(--pin-soft)] transition-colors">
                 <input
                   id="fabricMeters"
                   type="number"
@@ -244,16 +472,23 @@ function RecordFabricModal({
                   value={meters}
                   onChange={(e) => setMeters(e.target.value)}
                   placeholder="2.1"
-                  className="w-full bg-transparent placeholder-[#B4AF9E] text-[14px] py-2.5 focus:outline-none"
+                  className="w-full bg-transparent placeholder-[var(--muted-2)] text-[14px] py-2.5 focus:outline-none"
                 />
               </div>
-              <p className="text-[11px] text-[#9C9686] mt-2">Currently: {card.fabricUsed}</p>
+              <p className="text-[11px] text-[var(--muted-2)] mt-2">Currently: {card.fabricUsed}</p>
             </div>
             <div className="flex items-center gap-3 pt-2">
-              <button type="button" onClick={onClose} className="flex-1 px-4 py-3 rounded-sm border border-[#D6D2C0] text-[#6E6A5C] text-[11px] tracking-[0.14em] uppercase hover:border-[#9C9686] transition-colors">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-4 py-3 rounded-[3px] border border-[var(--line)] text-[var(--ink-soft)] text-[11px] font-medium tracking-[0.14em] uppercase hover:border-[var(--muted-2)] hover:bg-[var(--paper-dim)] transition-colors"
+              >
                 Cancel
               </button>
-              <button type="submit" className="flex-1 px-4 py-3 rounded-sm bg-[#2A2A28] text-[#EDEAE2] text-[11px] tracking-[0.14em] uppercase hover:bg-[#3A3936] transition-colors">
+              <button
+                type="submit"
+                className="flex-1 px-4 py-3 rounded-[3px] bg-[var(--graphite)] text-[#EDEAE2] text-[11px] font-medium tracking-[0.14em] uppercase hover:bg-[var(--graphite-2)] transition-colors shadow-[0_10px_24px_-12px_rgba(33,31,28,0.55)]"
+              >
                 Record usage
               </button>
             </div>
@@ -350,22 +585,27 @@ function DashboardView() {
 
   return (
     <div className="space-y-8">
-      <div className="dash-in">
-        <MonoLabel>The pattern table</MonoLabel>
-        <h1 className="text-2xl sm:text-3xl leading-tight mt-1 text-[#262420]" style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 700 }}>
-          Good afternoon, {TAILOR.name.split(' ')[0]} — here's what's on the table.
-        </h1>
+      <div className="dash-in flex items-end justify-between gap-6 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2.5 mb-2">
+            <StitchLine className="w-8" />
+            <MonoLabel>The pattern table</MonoLabel>
+          </div>
+          <h1 className="text-2xl sm:text-[32px] leading-tight text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>
+            Good afternoon, {TAILOR.name.split(' ')[0]} — here's what's on the table.
+          </h1>
+        </div>
       </div>
 
       {banner && (
-        <div className="dash-in flex items-center gap-2 border border-[#8FAE85] bg-[#E4E9DB] px-3 py-2.5 text-sm text-[#3F6633] rounded-sm">
-          <Check className="w-4 h-4" />
+        <div className="dash-in flex items-center gap-2 border border-[#8FAE85] bg-[#E4E9DB] px-4 py-3 text-sm text-[#3F6633] rounded-[3px]" style={{ boxShadow: 'var(--shadow-1)' }}>
+          <Check className="w-4 h-4 flex-shrink-0" />
           <span>{banner}</span>
         </div>
       )}
 
       {loadError && (
-        <div role="alert" className="border border-[#C0392B]/30 bg-[#C0392B]/10 px-3 py-2.5 text-sm text-[#A12F24] rounded-sm">
+        <div role="alert" className="border border-[var(--pin-soft)]/30 bg-[var(--pin-soft)]/10 px-4 py-3 text-sm text-[#A12F24] rounded-[3px]">
           {loadError}
         </div>
       )}
@@ -378,79 +618,117 @@ function DashboardView() {
         <StatCard delay={0.16} label="Due within 2 days" value={`${dueSoon}`} icon={<PackageCheck className="w-4 h-4" strokeWidth={1.6} />} tone="warn" />
       </div>
 
+      {/* ---------------- PRODUCTION FLOW CHART ---------------- */}
+      <ProductionFlowChart cards={cards} />
+
       <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-6">
         {/* ---------------- JOB CARD STACK (signature element) ---------------- */}
         <div
-          className="dash-in bg-[#FAF8F0] border border-[#D6D2C0] rounded-sm p-6 sm:p-8 shadow-[0_1px_3px_rgba(38,36,32,0.06)]"
+          className="dash-in bg-[var(--paper)] border border-[var(--line)] rounded-[3px] p-6 sm:p-8"
           style={{
             animationDelay: '0.22s',
-            backgroundImage: 'radial-gradient(#D6D2C0 0.6px, transparent 0.6px)',
-            backgroundSize: '18px 18px',
-            backgroundColor: '#FAF8F0',
+            boxShadow: 'var(--shadow-fabric)',
+            ...fabricTexture(),
           }}
         >
           <div className="flex items-center justify-between mb-6">
             <div>
               <MonoLabel>Assigned to you</MonoLabel>
-              <h2 className="text-lg mt-1 text-[#262420]" style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 700 }}>Job cards</h2>
+              <h2 className="text-xl mt-1 text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>Job cards</h2>
             </div>
-            <button className="hidden sm:flex items-center gap-1 text-[11px] tracking-[0.14em] uppercase text-[#C0392B]">
+            <button className="hidden sm:flex items-center gap-1 text-[11px] font-medium tracking-[0.14em] uppercase text-[var(--pin-soft)] hover:text-[var(--pin)] transition-colors">
               View all <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
           <div className="space-y-3">
-            {isLoading && <p className="py-8 text-center text-sm text-[#6E6A5C]">Loading job cards…</p>}
-            {!isLoading && !cards.length && !loadError && <p className="py-8 text-center text-sm text-[#6E6A5C]">No job cards are available yet.</p>}
+            {isLoading && (
+              <div className="space-y-3" aria-hidden="true">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="h-[60px] rounded-[3px] border border-dashed border-[var(--line)] overflow-hidden relative">
+                    <div
+                      className="absolute inset-0"
+                      style={{
+                        background: 'linear-gradient(90deg, transparent, rgba(220,216,199,0.5), transparent)',
+                        backgroundSize: '200% 100%',
+                        animation: 'shimmerOnce 1.4s ease-in-out infinite',
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+            {!isLoading && !cards.length && !loadError && (
+              <div className="py-14 text-center">
+                <div className="mx-auto mb-3 w-10 h-10 rounded-full border border-dashed border-[var(--muted-2)] flex items-center justify-center text-[var(--muted-2)]">
+                  <Shirt className="w-4 h-4" strokeWidth={1.5} />
+                </div>
+                <p className="text-sm text-[var(--ink-soft)]">No job cards are available yet.</p>
+                <p className="text-[12px] text-[var(--muted-2)] mt-1">New assignments will appear here as soon as they're on the table.</p>
+              </div>
+            )}
             {cards.map((card, i) => {
               const isOpen = expanded === card.id;
               return (
-                <div key={card.id} className="dash-in relative bg-[#FAF8F0] border border-dashed border-[#B4AF9E] rounded-sm overflow-hidden" style={{ animationDelay: `${0.26 + i * 0.05}s` }}>
+                <div
+                  key={card.id}
+                  className="dash-in relative bg-[var(--paper)] border border-dashed border-[var(--muted-2)] rounded-[3px] overflow-hidden transition-shadow"
+                  style={{ animationDelay: `${0.26 + i * 0.05}s`, boxShadow: isOpen ? 'var(--shadow-fabric)' : 'none' }}
+                >
                   <Notch className="-top-px -left-px" />
                   <Notch className="-top-px -right-px rotate-90" />
                   <button
                     onClick={() => setExpanded(isOpen ? null : card.id)}
-                    className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left hover:bg-[#F3F1E7]/70 transition-colors"
+                    className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left hover:bg-[var(--paper-dim)]/80 transition-colors"
                   >
                     <div className="flex items-center gap-4 min-w-0">
-                      <div className="w-9 h-9 rounded-sm bg-[#E8C547]/20 text-[#8A6A18] flex items-center justify-center flex-shrink-0">
+                      <div
+                        className="w-9 h-9 rounded-[3px] bg-gradient-to-br from-[var(--brass-light)]/35 to-[var(--brass)]/15 text-[var(--brass-deep)] flex items-center justify-center flex-shrink-0 border border-[var(--brass)]/25"
+                        style={{ boxShadow: '0 1px 0 rgba(255,255,255,0.6) inset, 0 2px 6px -2px rgba(138,106,24,0.35)' }}
+                      >
                         <Scissors className="w-4 h-4" strokeWidth={1.6} />
                       </div>
                       <div className="min-w-0">
-                        <div className="text-[13.5px] text-[#262420] font-medium truncate">{card.garment} — {card.customer}</div>
-                        <div className="text-[11px] text-[#9C9686]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{card.id} · Due {card.due}</div>
+                        <div className="text-[13.5px] text-[var(--ink)] font-medium truncate">{card.garment} — {card.customer}</div>
+                        <div className="text-[11px] text-[var(--muted-2)]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{card.id} · Due {card.due}</div>
                       </div>
                     </div>
-                    <span className="flex-shrink-0 inline-block px-2 py-0.5 rounded-sm text-[10px] tracking-[0.1em] uppercase bg-[#ECE8DA] text-[#55503F] border border-[#D6D2C0]">
+                    <div className="flex-shrink-0 hidden sm:block">
+                      <StageTracker stageIndex={card.stageIndex} compact />
+                    </div>
+                    <span className="flex-shrink-0 sm:hidden inline-block px-2.5 py-1 rounded-[2px] text-[10px] font-medium tracking-[0.1em] uppercase bg-[var(--paper-dim)] text-[var(--ink-soft)] border border-[var(--line)]">
                       {STAGES[card.stageIndex]}
                     </span>
                   </button>
 
                   {isOpen && (
-                    <div className="px-5 pb-5 pt-1 border-t border-dashed border-[#D6D2C0]">
+                    <div className="px-5 pb-5 pt-1 border-t border-dashed border-[var(--line)]">
+                      <div className="pt-4 pb-1 sm:hidden">
+                        <StageTracker stageIndex={card.stageIndex} />
+                      </div>
                       <div className="flex flex-wrap gap-x-6 gap-y-3 py-4">
                         {card.measurements.map((m) => (
                           <div key={m.label}>
                             <MonoLabel>{m.label}</MonoLabel>
-                            <div className="text-[14px] text-[#262420]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{m.value}</div>
+                            <div className="text-[14px] text-[var(--ink)]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{m.value}</div>
                           </div>
                         ))}
                       </div>
-                      <div className="flex items-center justify-between text-[12px] text-[#6E6A5C] mb-4">
+                      <div className="flex items-center justify-between text-[12px] text-[var(--ink-soft)] mb-4">
                         <span>{card.fabric}</span>
                         <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{card.fabricUsed}</span>
                       </div>
                       <div className="flex flex-wrap items-center gap-3">
                         <button
                           onClick={() => setStageModalCard(card)}
-                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-sm bg-[#2A2A28] text-[#EDEAE2] text-[10px] tracking-[0.1em] uppercase hover:bg-[#3A3936] transition-colors"
+                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-[2px] bg-[var(--graphite)] text-[#EDEAE2] text-[10px] font-medium tracking-[0.1em] uppercase hover:bg-[var(--graphite-2)] active:scale-[0.98] transition-all shadow-[0_8px_18px_-10px_rgba(33,31,28,0.5)]"
                         >
                           <ArrowRight className="w-3.5 h-3.5" />
                           Update stage
                         </button>
                         <button
                           onClick={() => setFabricModalCard(card)}
-                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-sm border border-[#D6D2C0] text-[#55503F] text-[10px] tracking-[0.1em] uppercase hover:border-[#9C9686] transition-colors"
+                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-[2px] border border-[var(--line)] text-[var(--ink-soft)] text-[10px] font-medium tracking-[0.1em] uppercase hover:border-[var(--muted-2)] hover:bg-[var(--paper-dim)] active:scale-[0.98] transition-all"
                         >
                           <Boxes className="w-3.5 h-3.5" />
                           Record fabric usage
@@ -465,32 +743,35 @@ function DashboardView() {
         </div>
 
         {/* ---------------- RIGHT COLUMN: FITTINGS TODAY ---------------- */}
-        <div className="dash-in bg-[#FAF8F0] border border-[#D6D2C0] rounded-sm p-6 sm:p-7 shadow-[0_1px_3px_rgba(38,36,32,0.06)]" style={{ animationDelay: '0.3s' }}>
+        <div
+          className="dash-in bg-[var(--paper)] border border-[var(--line)] rounded-[3px] p-6 sm:p-7"
+          style={{ animationDelay: '0.3s', boxShadow: 'var(--shadow-fabric)' }}
+        >
           <MonoLabel>Today's calendar</MonoLabel>
-          <h2 className="text-lg mt-1 mb-5 text-[#262420]" style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 700 }}>Fittings &amp; alterations</h2>
+          <h2 className="text-xl mt-1 mb-5 text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>Fittings &amp; alterations</h2>
           <div className="space-y-4">
             {FITTINGS_TODAY.map((f) => (
               <div key={`${f.time}-${f.customer}`} className="flex items-center gap-3">
                 <div className="flex flex-col items-center flex-shrink-0 w-14">
-                  <Clock className="w-3 h-3 text-[#E8C547] mb-0.5" strokeWidth={1.8} />
-                  <span className="text-[11px] text-[#55503F]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{f.time}</span>
+                  <Clock className="w-3 h-3 text-[var(--brass)] mb-0.5" strokeWidth={1.8} />
+                  <span className="text-[11px] text-[var(--ink-soft)]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{f.time}</span>
                 </div>
-                <div className="min-w-0 flex-1 border-l border-[#E2DECB] pl-3">
-                  <div className="text-[13px] text-[#262420] font-medium truncate">{f.customer}</div>
-                  <div className="text-[12px] text-[#6E6A5C] truncate">{f.garment} · {f.jobCardId}</div>
+                <div className="min-w-0 flex-1 border-l border-[var(--line-soft)] pl-3">
+                  <div className="text-[13px] text-[var(--ink)] font-medium truncate">{f.customer}</div>
+                  <div className="text-[12px] text-[var(--ink-soft)] truncate">{f.garment} · {f.jobCardId}</div>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="mt-8 pt-6 border-t border-[#E2DECB]">
+          <div className="mt-8 pt-6 border-t border-[var(--line-soft)]">
             <MonoLabel>Quick lookup</MonoLabel>
-            <div className="relative flex items-center border-b border-[#D6D2C0] focus-within:border-[#C0392B] transition-colors mt-3">
-              <User className="w-4 h-4 text-[#9C9686]" strokeWidth={1.5} />
+            <div className="relative flex items-center border-b border-[var(--line)] focus-within:border-[var(--pin-soft)] transition-colors mt-3">
+              <User className="w-4 h-4 text-[var(--muted-2)]" strokeWidth={1.5} />
               <input
                 type="text"
                 placeholder="Search customer or job card"
-                className="w-full bg-transparent placeholder-[#B4AF9E] text-[13px] pl-3 py-2.5 focus:outline-none"
+                className="w-full bg-transparent placeholder-[var(--muted-2)] text-[13px] pl-3 py-2.5 focus:outline-none"
               />
             </div>
           </div>
@@ -510,12 +791,12 @@ function DashboardView() {
 /* placeholder for pages not built yet, so nav links never dead-end silently */
 function ComingSoonView({ label }: { label: string }) {
   return (
-    <div className="dash-in bg-[#FAF8F0] border border-[#D6D2C0] rounded-sm p-16 text-center">
+    <div className="dash-in bg-[var(--paper)] border border-[var(--line)] rounded-[3px] p-16 text-center" style={{ boxShadow: 'var(--shadow-fabric)' }}>
       <MonoLabel>{label}</MonoLabel>
-      <h2 className="text-2xl mt-2 text-[#262420]" style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 700 }}>
+      <h2 className="text-2xl mt-2 text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>
         This page isn't built yet
       </h2>
-      <p className="text-[13px] text-[#6E6A5C] mt-2">Ask to have the {label} page created next.</p>
+      <p className="text-[13px] text-[var(--ink-soft)] mt-2">Ask to have the {label} page created next.</p>
     </div>
   );
 }
@@ -523,11 +804,25 @@ function ComingSoonView({ label }: { label: string }) {
 /* ---------------- Stat card ---------------- */
 function StatCard({ label, value, icon, delay = 0, tone = 'default' }: { label: string; value: string; icon: ReactNode; delay?: number; tone?: 'default' | 'warn'; }) {
   return (
-    <div className="dash-in bg-[#FAF8F0] border border-[#D6D2C0] rounded-sm p-5 sm:p-6 shadow-[0_1px_3px_rgba(38,36,32,0.06)] hover:shadow-[0_4px_16px_-4px_rgba(38,36,32,0.1)] transition-shadow" style={{ animationDelay: `${delay}s` }}>
+    <div
+      className="dash-in bg-[var(--paper)] border border-[var(--line)] rounded-[3px] p-5 sm:p-6 transition-all hover:-translate-y-[2px]"
+      style={{ animationDelay: `${delay}s`, boxShadow: 'var(--shadow-fabric)' }}
+      onMouseEnter={(e) => (e.currentTarget.style.boxShadow = 'var(--shadow-fabric-hover)')}
+      onMouseLeave={(e) => (e.currentTarget.style.boxShadow = 'var(--shadow-fabric)')}
+    >
       <div className="flex items-center justify-between mb-4">
-        <div className={`w-8 h-8 rounded-sm flex items-center justify-center ${tone === 'warn' ? 'bg-[#C0392B]/10 text-[#C0392B]' : 'bg-[#E8C547]/20 text-[#8A6A18]'}`}>{icon}</div>
+        <div
+          className={`w-8 h-8 rounded-[3px] flex items-center justify-center border ${
+            tone === 'warn'
+              ? 'bg-[var(--pin-soft)]/10 text-[var(--pin-soft)] border-[var(--pin-soft)]/20'
+              : 'bg-gradient-to-br from-[var(--brass-light)]/30 to-[var(--brass)]/10 text-[var(--brass-deep)] border-[var(--brass)]/25'
+          }`}
+          style={{ boxShadow: '0 1px 0 rgba(255,255,255,0.6) inset' }}
+        >
+          {icon}
+        </div>
       </div>
-      <div className="text-2xl mb-1 text-[#262420]" style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 700 }}>{value}</div>
+      <div className="text-[28px] mb-1 text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>{value}</div>
       <MonoLabel className="block">{label}</MonoLabel>
     </div>
   );
@@ -556,35 +851,53 @@ export default function MasterTailorDashboard({ initialView = 'dashboard' }: { i
     switch (view) {
       case 'dashboard':
         return <DashboardView />;
+      case 'jobcards':
+        return <TailorJobCardsView />;
+      case 'measurements':
+        return <TailorMeasurementsView />;
+      case 'inventory':
+        return <TailorInventoryView />;
+      case 'settings':
+        return <TailorSettingsView />;
       default:
         return <ComingSoonView label={currentNavLabel} />;
     }
   }
 
   return (
-    <div className="min-h-screen bg-[#F3F1E7] text-[#262420] antialiased flex" style={{ fontFamily: "'Work Sans', sans-serif" }}>
+    <div className="min-h-screen bg-[var(--paper-dim)] text-[var(--ink)] antialiased flex" style={{ fontFamily: "'Work Sans', sans-serif" }}>
       <style>{FONT_IMPORT}</style>
 
       <div
         className="fixed inset-0 pointer-events-none opacity-[0.05]"
         style={{
-          backgroundImage: 'radial-gradient(#262420 0.7px, transparent 0.7px)',
+          backgroundImage: 'radial-gradient(#241F19 0.7px, transparent 0.7px)',
           backgroundSize: '20px 20px',
         }}
       />
 
       {/* ---------------- SIDEBAR ---------------- */}
       <aside
-        className={`${navOpen ? 'fixed inset-y-0 left-0 translate-x-0' : 'fixed inset-y-0 left-0 -translate-x-full'} z-40 lg:relative lg:inset-auto lg:translate-x-0 lg:z-0 w-72 flex-shrink-0 h-screen lg:h-auto lg:min-h-screen bg-[#2A2A28] text-[#EDEAE2] flex flex-col justify-between transition-transform duration-300`}
+        className={`${navOpen ? 'fixed inset-y-0 left-0 translate-x-0' : 'fixed inset-y-0 left-0 -translate-x-full'} z-40 lg:relative lg:inset-auto lg:translate-x-0 lg:z-0 w-72 flex-shrink-0 h-screen lg:h-auto lg:min-h-screen text-[#EDEAE2] flex flex-col justify-between transition-transform duration-300`}
+        style={{
+          background: 'linear-gradient(180deg, #241F19 0%, #1E1C18 55%, #19170F 100%)',
+          boxShadow: '1px 0 0 rgba(194,154,30,0.09), 8px 0 36px -14px rgba(0,0,0,0.55)',
+        }}
       >
         <div>
-          <div className="flex items-center justify-between px-8 py-8 border-b border-[#45443E]">
+          <div className="flex items-center justify-between px-8 py-8 border-b border-white/[0.06]">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-sm border border-[#E8C547]/60 bg-[#E8C547]/5 flex items-center justify-center rotate-3 shadow-[0_0_0_1px_rgba(232,197,71,0.08)]">
-                <span className="text-[#E8C547] text-[10px]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>P&T</span>
+              <div
+                className="brass-shimmer w-10 h-10 rounded-[3px] border border-[var(--brass-light)]/50 flex items-center justify-center rotate-3"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(228,194,94,0.16), rgba(194,154,30,0.05))',
+                  boxShadow: '0 0 0 1px rgba(228,194,94,0.1), 0 4px 16px -6px rgba(228,194,94,0.3)',
+                }}
+              >
+                <span className="text-[var(--brass-light)] text-[10px]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>P&amp;T</span>
               </div>
-              <div className="leading-tight" style={{ fontFamily: "'Archivo', sans-serif" }}>
-                <div className="text-sm tracking-[0.08em] text-[#EDEAE2]" style={{ fontWeight: 600 }}>Press &amp; Tailor</div>
+              <div className="leading-tight">
+                <div className="text-sm tracking-[0.05em] text-[#EDEAE2]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>Press &amp; Tailor</div>
                 <MonoLabel className="text-[#9C9686]">Workbench</MonoLabel>
               </div>
             </div>
@@ -600,12 +913,17 @@ export default function MasterTailorDashboard({ initialView = 'dashboard' }: { i
                 <button
                   key={item.label}
                   onClick={() => { setView(item.view); setNavOpen(false); }}
-                  className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-r-sm text-[14px] transition-all border-l-2 ${
+                  className={`relative w-full flex items-center gap-3.5 pl-4 pr-4 py-3 rounded-r-[3px] text-[14px] transition-all ${
                     active
-                      ? 'bg-gradient-to-r from-[#3A3936] to-[#333230] border-[#E8C547] text-[#EDEAE2] shadow-[inset_0_0_0_1px_rgba(232,197,71,0.08)]'
-                      : 'border-transparent text-[#ABA495] hover:text-[#EDEAE2] hover:bg-[#333230]/70'
+                      ? 'bg-gradient-to-r from-white/[0.07] to-transparent text-[#EDEAE2]'
+                      : 'text-[#ABA495] hover:text-[#EDEAE2] hover:bg-white/[0.03]'
                   }`}
                 >
+                  {active && (
+                    <svg className="absolute left-0 top-0 h-full w-[2px]" width="2" height="100%" aria-hidden="true">
+                      <line x1="1" y1="0" x2="1" y2="100%" stroke="var(--brass-light)" strokeWidth="2" strokeDasharray="4 3" strokeLinecap="round" />
+                    </svg>
+                  )}
                   <item.icon className="w-4 h-4" strokeWidth={1.6} />
                   {item.label}
                 </button>
@@ -614,18 +932,18 @@ export default function MasterTailorDashboard({ initialView = 'dashboard' }: { i
           </nav>
         </div>
 
-        <div className="px-8 py-7 border-t border-[#45443E] space-y-4">
-          <button type="button" onClick={() => setShowProfile(true)} className="flex w-full items-center gap-3 rounded-sm p-1 text-left transition-colors hover:bg-[#333230]">
-            <div className="w-9 h-9 overflow-hidden rounded-full bg-[#E8C547]/20 border border-[#E8C547]/50 flex items-center justify-center">
-              {profile?.profile_picture ? <img src={profile.profile_picture} alt="Profile" className="h-full w-full object-cover" /> : <span className="text-[#E8C547] text-xs font-medium">{profile?.full_name?.split(' ').map((name: string) => name[0]).join('').slice(0, 2) || 'MT'}</span>}
+        <div className="px-8 py-7 border-t border-white/[0.06] space-y-4">
+          <button type="button" onClick={() => setShowProfile(true)} className="flex w-full items-center gap-3 rounded-[3px] p-1.5 text-left transition-colors hover:bg-white/[0.04]">
+            <div className="w-9 h-9 overflow-hidden rounded-full bg-gradient-to-br from-[var(--brass-light)]/30 to-[var(--brass)]/10 border border-[var(--brass-light)]/40 flex items-center justify-center">
+              {profile?.profile_picture ? <img src={profile.profile_picture} alt="Profile" className="h-full w-full object-cover" /> : <span className="text-[var(--brass-light)] text-xs font-medium">{profile?.full_name?.split(' ').map((name: string) => name[0]).join('').slice(0, 2) || 'MT'}</span>}
             </div>
             <div className="min-w-0 leading-tight">
               <div className="truncate text-[13px] text-[#EDEAE2]">{profile?.full_name || TAILOR.name}</div>
               <MonoLabel className="text-[#9C9686]">{profile?.position || TAILOR.role}</MonoLabel>
             </div>
           </button>
-          <button onClick={signOut} className="group flex w-full items-center justify-between border border-[#45443E] bg-[#333230] px-3.5 py-2.5 rounded-sm text-[10px] font-semibold tracking-[0.16em] uppercase text-[#B4AF9E] transition-all hover:border-[#E8C547]/60 hover:text-[#EDEAE2]">
-            Sign out <LogOut className="h-3.5 w-3.5 text-[#E8C547] transition-transform group-hover:translate-x-0.5" />
+          <button onClick={signOut} className="group flex w-full items-center justify-between border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 rounded-[3px] text-[10px] font-semibold tracking-[0.16em] uppercase text-[#B4AF9E] transition-all hover:border-[var(--brass-light)]/50 hover:text-[#EDEAE2]">
+            Sign out <LogOut className="h-3.5 w-3.5 text-[var(--brass-light)] transition-transform group-hover:translate-x-0.5" />
           </button>
         </div>
       </aside>
@@ -636,32 +954,35 @@ export default function MasterTailorDashboard({ initialView = 'dashboard' }: { i
 
       {/* ---------------- MAIN ---------------- */}
       <div className="flex-1 min-w-0">
-        <header className="sticky top-0 z-20 bg-[#F3F1E7]/95 backdrop-blur-md border-b border-[#D6D2C0] px-6 sm:px-10 py-5 flex items-center justify-between gap-4 shadow-[0_1px_0_rgba(214,210,192,0.6)]">
+        <header className="sticky top-0 z-20 bg-[var(--paper-dim)]/95 backdrop-blur-md border-b border-[var(--line)] px-6 sm:px-10 py-5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <button className="lg:hidden text-[#262420] flex-shrink-0" onClick={() => setNavOpen(true)} aria-label="Open menu">
+            <button className="lg:hidden text-[var(--ink)] flex-shrink-0" onClick={() => setNavOpen(true)} aria-label="Open menu">
               <Menu className="w-5 h-5" />
             </button>
             <div className="min-w-0">
               <MonoLabel className="block">Workbench / {currentNavLabel}</MonoLabel>
-              <div className="text-[15px] text-[#262420] truncate" style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 700 }}>
+              <div className="text-[16px] text-[var(--ink)] truncate" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>
                 {currentNavLabel}
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3 sm:gap-5 flex-shrink-0">
-            <div className="relative hidden md:flex items-center bg-[#FAF8F0] border border-[#D6D2C0] rounded-full px-3 py-2 focus-within:border-[#9C9686] transition-colors">
-              <Search className="w-3.5 h-3.5 text-[#9C9686]" strokeWidth={1.5} />
+            <div className="relative hidden md:flex items-center bg-[var(--paper)] border border-[var(--line)] rounded-full pl-3 pr-2 py-2 focus-within:border-[var(--muted-2)] transition-colors" style={{ boxShadow: 'var(--shadow-pressed)' }}>
+              <Search className="w-3.5 h-3.5 text-[var(--muted-2)] flex-shrink-0" strokeWidth={1.5} />
               <input
                 type="text"
                 placeholder="Search job cards"
-                className="w-48 bg-transparent placeholder-[#B4AF9E] text-[12px] pl-2 focus:outline-none"
+                className="w-44 bg-transparent placeholder-[var(--muted-2)] text-[12px] pl-2 focus:outline-none"
               />
+              <kbd className="ml-1 flex-shrink-0 rounded-[3px] border border-[var(--line)] bg-[var(--paper-dim)] px-1.5 py-0.5 text-[9px] text-[var(--muted-2)]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                /
+              </kbd>
             </div>
-            <button className="relative text-[#55503F] hover:text-[#262420] transition-colors" aria-label="Notifications">
+            <button className="relative text-[var(--ink-soft)] hover:text-[var(--ink)] transition-colors" aria-label="Notifications">
               <Bell className="w-5 h-5" strokeWidth={1.5} />
-              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#C0392B] ring-2 ring-[#F3F1E7]" />
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[var(--pin-soft)] ring-2 ring-[var(--paper-dim)]" />
             </button>
-            <div className="h-6 w-px bg-[#D6D2C0] hidden sm:block" />
+            <div className="h-6 w-px bg-[var(--line)] hidden sm:block" />
             <LiveDateTime />
           </div>
         </header>
@@ -681,19 +1002,57 @@ function MasterTailorProfileModal({ profile, onClose, onEdit }: { profile: any; 
     ['Account Status', profile?.status || 'Approved'],
   ];
   const responsibilities = ['Review assigned job cards', 'Take and verify measurements', 'Create patterns and cut fabric', 'Update production stages', 'Record fabric usage', 'Complete fittings and alterations'];
-  const Section = ({ title, items }: { title: string; items: [string, string | undefined][] }) => <div><h3 className="text-lg text-[#262420]" style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 700 }}>{title}</h3><dl className="mt-3 grid gap-x-6 gap-y-4 sm:grid-cols-2">{items.map(([label, value]) => <div key={label}><dt className="text-[10px] uppercase tracking-[0.16em] text-[#7A7568]">{label}</dt><dd className="mt-1 text-sm text-[#262420]">{value || 'Not set'}</dd></div>)}</dl></div>;
-  return <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <button aria-label="Close profile" onClick={onClose} className="absolute inset-0 bg-black/45 backdrop-blur-sm" />
-    <section className="relative max-h-[92vh] w-full max-w-3xl overflow-y-auto border border-[#D6D2C0] bg-[#FAF8F0] shadow-2xl">
-      <header className="flex items-start justify-between border-b border-[#D6D2C0] px-6 py-6 sm:px-8"><div><MonoLabel>Master Tailor Profile</MonoLabel><h2 className="mt-1 text-3xl text-[#262420]" style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 700 }}>{profile?.full_name || TAILOR.name}</h2></div><button onClick={onClose} className="p-2 text-[#6E6A5C] hover:bg-[#EDEAE2]"><X className="h-5 w-5" /></button></header>
-      <div className="space-y-8 p-6 sm:p-8">
-        <div className="flex items-center gap-5 border border-[#D6D2C0] bg-[#F3F1E7] p-5"><div className="h-20 w-20 overflow-hidden rounded-full border border-[#E8C547]/60 bg-[#E8C547]/15">{profile?.profile_picture ? <img src={profile.profile_picture} alt="Profile" className="h-full w-full object-cover" /> : <User className="m-6 h-8 w-8 text-[#8A6A18]" />}</div><div><div className="text-lg font-medium">{profile?.full_name || TAILOR.name}</div><p className="text-sm text-[#6E6A5C]">{profile?.position || TAILOR.role}</p><p className="mt-1 text-xs text-[#7A7568]">{profile?.email || 'No email'}</p></div></div>
-        <Section title="Personal Information" items={[["Full Name", profile?.full_name], ['Email Address', profile?.email], ['Contact Number', profile?.contact_number], ['Address', profile?.address]]} />
-        <Section title="Employment Information" items={details} />
-        <Section title="Account Information" items={[["Username", profile?.email?.split('@')[0]], ['Role', 'Master Tailor'], ['Last Login', 'Current session'], ['Password', '••••••••••••']]} />
-        <div><h3 className="text-lg text-[#262420]" style={{ fontFamily: "'Archivo', sans-serif", fontWeight: 700 }}>Responsibilities</h3><ul className="mt-3 grid gap-2 sm:grid-cols-2">{responsibilities.map((item) => <li key={item} className="flex gap-2 text-sm text-[#6E6A5C]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#8A6A18]" />{item}</li>)}</ul></div>
-        <div className="flex flex-wrap gap-3 border-t border-[#D6D2C0] pt-6"><button onClick={onEdit} className="bg-[#2A2A28] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#EDEAE2]">Edit Profile</button><button onClick={onEdit} className="border border-[#B4AF9E] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#55503F]">Change Photo</button></div>
-      </div>
-    </section>
-  </div>;
+  const Section = ({ title, items }: { title: string; items: [string, string | undefined][] }) => (
+    <div>
+      <h3 className="text-lg text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>{title}</h3>
+      <dl className="mt-3 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+        {items.map(([label, value]) => (
+          <div key={label}>
+            <dt className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted)]">{label}</dt>
+            <dd className="mt-1 text-sm text-[var(--ink)]">{value || 'Not set'}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button aria-label="Close profile" onClick={onClose} className="absolute inset-0 bg-[#211F1C]/55 backdrop-blur-[3px]" />
+      <section className="relative max-h-[92vh] w-full max-w-3xl overflow-y-auto border border-[var(--line)] bg-[var(--paper)] rounded-[3px]" style={{ boxShadow: 'var(--shadow-2)' }}>
+        <div className="h-[3px] w-full bg-gradient-to-r from-[var(--brass)] via-[var(--brass-light)] to-[var(--brass)]" />
+        <header className="flex items-start justify-between border-b border-[var(--line)] px-6 py-6 sm:px-8">
+          <div>
+            <MonoLabel>Master Tailor Profile</MonoLabel>
+            <h2 className="mt-1 text-3xl text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>{profile?.full_name || TAILOR.name}</h2>
+          </div>
+          <button onClick={onClose} className="p-2 text-[var(--ink-soft)] hover:bg-[var(--paper-dim)] rounded-[2px]"><X className="h-5 w-5" /></button>
+        </header>
+        <div className="space-y-8 p-6 sm:p-8">
+          <div className="flex items-center gap-5 border border-[var(--line)] bg-[var(--paper-dim)] p-5 rounded-[3px]">
+            <div className="h-20 w-20 overflow-hidden rounded-full border border-[var(--brass-light)]/50 bg-gradient-to-br from-[var(--brass-light)]/25 to-[var(--brass)]/10">
+              {profile?.profile_picture ? <img src={profile.profile_picture} alt="Profile" className="h-full w-full object-cover" /> : <User className="m-6 h-8 w-8 text-[var(--brass-deep)]" />}
+            </div>
+            <div>
+              <div className="text-lg font-medium">{profile?.full_name || TAILOR.name}</div>
+              <p className="text-sm text-[var(--ink-soft)]">{profile?.position || TAILOR.role}</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">{profile?.email || 'No email'}</p>
+            </div>
+          </div>
+          <Section title="Personal Information" items={[["Full Name", profile?.full_name], ['Email Address', profile?.email], ['Contact Number', profile?.contact_number], ['Address', profile?.address]]} />
+          <Section title="Employment Information" items={details} />
+          <Section title="Account Information" items={[["Username", profile?.email?.split('@')[0]], ['Role', 'Master Tailor'], ['Last Login', 'Current session'], ['Password', '••••••••••••']]} />
+          <div>
+            <h3 className="text-lg text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>Responsibilities</h3>
+            <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+              {responsibilities.map((item) => <li key={item} className="flex gap-2 text-sm text-[var(--ink-soft)]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--brass-deep)]" />{item}</li>)}
+            </ul>
+          </div>
+          <div className="flex flex-wrap gap-3 border-t border-[var(--line)] pt-6">
+            <button onClick={onEdit} className="bg-[var(--graphite)] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#EDEAE2] rounded-[2px] hover:bg-[var(--graphite-2)] transition-colors">Edit Profile</button>
+            <button onClick={onEdit} className="border border-[var(--muted-2)] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--ink-soft)] rounded-[2px] hover:bg-[var(--paper-dim)] transition-colors">Change Photo</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
 }

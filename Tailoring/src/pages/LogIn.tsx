@@ -339,33 +339,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="ml-field flex items-center gap-4 my-8" style={{ animationDelay: '0.3s' }}>
-            <div className="h-px flex-1 bg-[#D8CFAE]" />
-            <span
-              className="text-[9px] tracking-[0.25em] uppercase text-[#A69A76]"
-              style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-            >
-              Or
-            </span>
-            <div className="h-px flex-1 bg-[#D8CFAE]" />
-          </div>
-
-          <button
-            type="button"
-            className="ml-field w-full inline-flex items-center justify-center gap-3 bg-transparent border border-[#D8CFAE] text-[#242017] text-[11px] tracking-[0.16em] uppercase px-6 py-3.5 rounded-sm hover:border-[#A69A76] transition-colors"
-            style={{ animationDelay: '0.36s' }}
-          >
-            <svg width="15" height="15" viewBox="0 0 48 48" aria-hidden="true">
-              <path
-                fill="#242017"
-                opacity="0.85"
-                d="M44.5 20H24v8.5h11.8C34.7 33.9 30 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.3 0 6.3 1.2 8.6 3.2l6-6C34.9 4.1 29.7 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.1-2.7-.5-4z"
-              />
-            </svg>
-            Continue with Google
-          </button>
-
-          <p className="ml-field text-center text-[12px] text-[#A69A76] mt-9" style={{ animationDelay: '0.42s' }}>
+          <p className="ml-field text-center text-[12px] text-[#A69A76] mt-9" style={{ animationDelay: '0.3s' }}>
             New to Ashlie's Tailor?{' '}
             <button type="button" onClick={() => navigate('/')} className="text-[#A63D40] hover:text-[#8B3235] transition-colors">
               Back to Home
