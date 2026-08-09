@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { BarChart3, CalendarDays, Download, PackageCheck, PhilippinePeso, Shirt, TrendingUp } from 'lucide-react';
+import ExcelJS from 'exceljs';
 import {
   COLORS, FONT_IMPORT, PageHeader, StatCard, Card, EyebrowLabel, PrimaryButton,
   BarChartPanel, AreaLineChart, DonutChart,
@@ -16,8 +17,124 @@ const donutSegments = [
   { value: 18, color: COLORS.border },
 ];
 
+const REPORT_PERIODS = {
+  'This month': { revenue: 121500, ordersReceived: 48, completedOrders: 39, outstandingBalance: 18725, revenueTrend: '+12.4% vs last month', ordersTrend: '+8 this month', completionTrend: '81% completion', balanceTrend: '6 open balances', revenueData: monthlyRevenue },
+  'Last month': { revenue: 108100, ordersReceived: 40, completedOrders: 35, outstandingBalance: 22150, revenueTrend: '+5.1% vs previous month', ordersTrend: '+4 received', completionTrend: '88% completion', balanceTrend: '8 open balances', revenueData: monthlyRevenue.map((item) => ({ ...item, value: Math.round(item.value * 0.89) })) },
+  'This year': { revenue: 1094500, ordersReceived: 386, completedOrders: 328, outstandingBalance: 92400, revenueTrend: '+18.7% vs last year', ordersTrend: '386 received', completionTrend: '85% completion', balanceTrend: '31 open balances', revenueData: monthlyRevenue.map((item) => ({ ...item, value: item.value * 8 })) },
+};
+
+const peso = (amount: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(amount);
+
 export function AdminReportsView() {
-  const [period, setPeriod] = useState('This month');
+  const [period, setPeriod] = useState<keyof typeof REPORT_PERIODS>('This month');
+  const report = REPORT_PERIODS[period];
+
+  const exportReport = async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Ashlie's Tailor";
+    workbook.created = new Date();
+    const worksheet = workbook.addWorksheet('Business Report', { views: [{ state: 'frozen', ySplit: 3 }] });
+    worksheet.columns = [{ width: 32 }, { width: 18 }, { width: 4 }, { width: 16 }, { width: 16 }, { width: 16 }];
+
+    const navy = '17324D';
+    const cream = 'FFF9EE';
+    const paleBlue = 'EAF2F8';
+    const section = (rowNumber: number, title: string, valueTitle: string) => {
+      const row = worksheet.getRow(rowNumber);
+      row.values = [title, valueTitle];
+      row.height = 22;
+      row.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: navy } };
+        cell.font = { bold: true, color: { argb: 'FFFFFF' }, size: 10 };
+        cell.alignment = { vertical: 'middle' };
+      });
+    };
+    const dataRow = (rowNumber: number, label: string, value: string | number, currency = false) => {
+      const row = worksheet.getRow(rowNumber);
+      row.values = [label, value];
+      row.height = 20;
+      row.eachCell((cell, columnNumber) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowNumber % 2 === 0 ? cream : 'FFFFFF' } };
+        cell.border = { bottom: { style: 'hair', color: { argb: 'D8CBA9' } } };
+        cell.alignment = { vertical: 'middle', horizontal: columnNumber === 2 ? 'right' : 'left' };
+      });
+      row.getCell(2).font = { bold: true, color: { argb: navy } };
+      if (currency) row.getCell(2).numFmt = '₱#,##0';
+    };
+
+    worksheet.mergeCells('A1:B1');
+    worksheet.getCell('A1').value = "ASHLIE'S TAILOR — BUSINESS REPORT";
+    worksheet.getCell('A1').font = { bold: true, size: 16, color: { argb: 'FFFFFF' } };
+    worksheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: navy } };
+    worksheet.getCell('A1').alignment = { vertical: 'middle' };
+    worksheet.getRow(1).height = 30;
+    worksheet.mergeCells('A2:B2');
+    worksheet.getCell('A2').value = `Reporting period: ${period}`;
+    worksheet.getCell('A2').font = { italic: true, color: { argb: '5B6770' } };
+    worksheet.getCell('A2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: paleBlue } };
+    worksheet.getRow(2).height = 22;
+
+    section(4, 'REPORT SUMMARY', 'VALUE');
+    dataRow(5, 'Revenue', report.revenue, true);
+    dataRow(6, 'Orders received', report.ordersReceived);
+    dataRow(7, 'Completed orders', report.completedOrders);
+    dataRow(8, 'Outstanding balance', report.outstandingBalance, true);
+    section(10, 'MONTHLY SALES', 'AMOUNT');
+    report.revenueData.forEach(({ label, value }, index) => dataRow(11 + index, label, value, true));
+    const garmentsRow = 12 + report.revenueData.length;
+    section(garmentsRow, 'MOST ORDERED GARMENTS', 'ORDERS');
+    garments.forEach(({ name, orders }, index) => dataRow(garmentsRow + 1 + index, name, orders));
+    const fabricRow = garmentsRow + garments.length + 2;
+    section(fabricRow, 'MOST USED FABRICS', 'USAGE');
+    fabricUsage.forEach(({ fabric, usage }, index) => dataRow(fabricRow + 1 + index, fabric, usage));
+    worksheet.autoFilter = { from: 'A4', to: 'B8' };
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 960;
+    canvas.height = 500;
+    const context = canvas.getContext('2d');
+    if (context) {
+      context.fillStyle = '#FFFFFF';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#17324D';
+      context.font = 'bold 28px Arial';
+      context.fillText('Monthly Sales', 52, 58);
+      context.fillStyle = '#667085';
+      context.font = '18px Arial';
+      context.fillText(period, 52, 88);
+      const chart = { left: 70, top: 125, width: 830, height: 285 };
+      const maximum = Math.max(...report.revenueData.map(({ value }) => value));
+      context.strokeStyle = '#D8E1E8';
+      context.lineWidth = 1;
+      for (let line = 0; line <= 4; line += 1) {
+        const y = chart.top + (chart.height / 4) * line;
+        context.beginPath(); context.moveTo(chart.left, y); context.lineTo(chart.left + chart.width, y); context.stroke();
+      }
+      const gap = 26;
+      const barWidth = (chart.width - gap * (report.revenueData.length + 1)) / report.revenueData.length;
+      report.revenueData.forEach(({ label, value }, index) => {
+        const height = (value / maximum) * chart.height;
+        const x = chart.left + gap + index * (barWidth + gap);
+        const y = chart.top + chart.height - height;
+        context.fillStyle = index === report.revenueData.length - 1 ? '#B58A3A' : '#2F5D7C';
+        context.fillRect(x, y, barWidth, height);
+        context.fillStyle = '#334155'; context.font = '16px Arial';
+        context.textAlign = 'center'; context.fillText(label, x + barWidth / 2, chart.top + chart.height + 28);
+        context.fillStyle = '#17324D'; context.font = 'bold 14px Arial';
+        context.fillText(`₱${Math.round(value / 1000)}k`, x + barWidth / 2, y - 10);
+      });
+      context.textAlign = 'left';
+      const image = workbook.addImage({ base64: canvas.toDataURL('image/png'), extension: 'png' });
+      worksheet.addImage(image, { tl: { col: 3, row: 1 }, ext: { width: 540, height: 281 } });
+    }
+
+    const file = await workbook.xlsx.writeBuffer();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([file], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    link.download = `ashlies-tailor-report-${period.toLowerCase().replaceAll(' ', '-')}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
 
   return (
     <div className="space-y-7" style={{ color: COLORS.ink }}>
@@ -29,21 +146,21 @@ export function AdminReportsView() {
         description="Track sales, production output, payments, and inventory consumption."
         action={
           <div className="flex gap-2">
-            <select value={period} onChange={(event) => setPeriod(event.target.value)} className="border bg-white px-3 py-2.5 text-sm outline-none" style={{ borderColor: COLORS.border, color: COLORS.ink, borderRadius: 8 }}>
+            <select value={period} onChange={(event) => setPeriod(event.target.value as keyof typeof REPORT_PERIODS)} aria-label="Report period" className="border bg-white px-3 py-2.5 text-sm outline-none" style={{ borderColor: COLORS.border, color: COLORS.ink, borderRadius: 8 }}>
               <option>This month</option>
               <option>Last month</option>
               <option>This year</option>
             </select>
-            <PrimaryButton icon={<Download />}>Export</PrimaryButton>
+            <PrimaryButton icon={<Download />} onClick={exportReport}>Export</PrimaryButton>
           </div>
         }
       />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard delay={0.05} icon={<PhilippinePeso />} label="Revenue" value="₱121,500" trend="+12.4% vs last month" sparkline={[92, 105, 98, 112, 121]} tone="brass" />
-        <StatCard delay={0.09} icon={<Shirt />} label="Orders received" value="48" trend="+8 this month" sparkline={[30, 34, 33, 40, 48]} tone="neutral" />
-        <StatCard delay={0.13} icon={<PackageCheck />} label="Completed orders" value="39" trend="81% completion" sparkline={[22, 26, 29, 34, 39]} tone="success" />
-        <StatCard delay={0.17} icon={<CalendarDays />} label="Outstanding balance" value="₱18,725" trend="6 open balances" trendTone="danger" tone="danger" />
+        <StatCard delay={0.05} icon={<PhilippinePeso />} label="Revenue" value={peso(report.revenue)} trend={report.revenueTrend} sparkline={[92, 105, 98, 112, 121]} tone="brass" />
+        <StatCard delay={0.09} icon={<Shirt />} label="Orders received" value={String(report.ordersReceived)} trend={report.ordersTrend} sparkline={[30, 34, 33, 40, 48]} tone="neutral" />
+        <StatCard delay={0.13} icon={<PackageCheck />} label="Completed orders" value={String(report.completedOrders)} trend={report.completionTrend} sparkline={[22, 26, 29, 34, 39]} tone="success" />
+        <StatCard delay={0.17} icon={<CalendarDays />} label="Outstanding balance" value={peso(report.outstandingBalance)} trend={report.balanceTrend} trendTone="danger" tone="danger" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.35fr_1fr]">
@@ -53,7 +170,7 @@ export function AdminReportsView() {
             <h2 className="text-[16px] font-semibold" style={{ color: COLORS.ink }}>Monthly sales</h2>
             <span className="text-sm" style={{ color: COLORS.muted }}>{period}</span>
           </div>
-          <div className="mt-6"><BarChartPanel data={monthlyRevenue} /></div>
+          <div className="mt-6"><BarChartPanel data={report.revenueData} /></div>
         </Card>
 
         <Card delay={0.24} className="p-6 sm:p-8">
