@@ -1137,7 +1137,7 @@ export default function CustomerDashboard() {
 
 function CustomerProfileModal({ profile, fallbackName, onClose, onSave, onUnauthorized }) {
   const initialName = profile?.full_name || profile?.name || fallbackName;
-  const initialForm = { name: initialName, email: profile?.email || '', contact: profile?.contact_number || profile?.contact || '', address: profile?.address || '', photo: profile?.profile_picture || '' };
+  const initialForm = { name: initialName, email: profile?.email || '', contact: profile?.contact_number || profile?.contact || '', address: profile?.address || '', photo: profile?.profile_picture || '', dateOfBirth: profile?.date_of_birth || '', gender: profile?.gender || '', civilStatus: profile?.civil_status || '', occupation: profile?.occupation || '' };
   const [form, setForm] = useState(initialForm);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1163,7 +1163,7 @@ function CustomerProfileModal({ profile, fallbackName, onClose, onSave, onUnauth
     if (!isEditing) return;
     setSaving(true); setNotice(''); setError('');
     try {
-      const response = await fetch(`${API_URL}/auth/profile`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ fullName: form.name, email: form.email, contactNumber: form.contact, address: form.address, profilePicture: form.photo }) });
+      const response = await fetch(`${API_URL}/auth/profile`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ fullName: form.name, email: form.email, contactNumber: form.contact, address: form.address, profilePicture: form.photo, dateOfBirth: form.dateOfBirth, gender: form.gender, civilStatus: form.civilStatus, occupation: form.occupation }) });
       const data = await response.json();
       if (!response.ok) { if (response.status === 401) onUnauthorized(); throw new Error(data.message || 'Unable to save profile.'); }
       onSave({ ...data.user, name: data.user.full_name }); setNotice('Profile saved to your account.'); setIsEditing(false);
@@ -1248,6 +1248,16 @@ function CustomerProfileModal({ profile, fallbackName, onClose, onSave, onUnauth
               <ProfileField icon={MapPin} label="Address" value={form.address} onChange={(value) => update('address', value)} disabled={!isEditing} />
             </div>
           </div>
+
+          <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--line)' }}>
+            <Eyebrow>Basic information</Eyebrow>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <ProfileField label="Birth date" type="date" value={form.dateOfBirth} onChange={(value) => update('dateOfBirth', value)} disabled={!isEditing} />
+              <ProfileSelect label="Gender" value={form.gender} onChange={(value) => update('gender', value)} disabled={!isEditing} options={['Female', 'Male', 'Non-binary', 'Prefer not to say']} />
+              <ProfileSelect label="Civil status" value={form.civilStatus} onChange={(value) => update('civilStatus', value)} disabled={!isEditing} options={['Single', 'Married', 'Widowed', 'Separated']} />
+              <ProfileField label="Occupation" value={form.occupation} onChange={(value) => update('occupation', value)} disabled={!isEditing} />
+            </div>
+          </div>
         </div>
 
         {/* Footer */}
@@ -1302,4 +1312,8 @@ function ProfileField({ icon: Icon, label, value, onChange, type = 'text', disab
       </div>
     </label>
   );
+}
+
+function ProfileSelect({ label, value, onChange, options, disabled = false }) {
+  return <label className="block text-[12px] font-medium" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>{label}<select value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} className="input-field mt-2" style={{ background: disabled ? 'var(--brass-wash)' : '#fff', color: disabled ? 'var(--muted)' : 'var(--ink)', cursor: disabled ? 'default' : 'pointer' }}><option value="">Not recorded</option>{options.map((option) => <option key={option}>{option}</option>)}</select></label>;
 }

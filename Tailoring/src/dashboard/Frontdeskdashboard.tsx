@@ -153,6 +153,10 @@ export interface NewCustomerForm {
   email: string;
   password: string;
   address: string;
+  dateOfBirth: string;
+  gender: string;
+  civilStatus: string;
+  occupation: string;
 }
 
 export function RegisterCustomerModal({
@@ -162,13 +166,13 @@ export function RegisterCustomerModal({
   onClose: () => void;
   onRegister: (form: NewCustomerForm) => Promise<void>;
 }) {
-  const [form, setForm] = useState<NewCustomerForm>({ lastName: '', middleName: '', firstName: '', suffix: '', contact: '', email: '', password: '', address: '' });
+  const [form, setForm] = useState<NewCustomerForm>({ lastName: '', middleName: '', firstName: '', suffix: '', contact: '', email: '', password: '', address: '', dateOfBirth: '', gender: '', civilStatus: '', occupation: '' });
   const [error, setError] = useState('');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.lastName.trim() || !form.firstName.trim() || !form.contact.trim() || !form.email.trim() || !form.password) {
-      setError('Last name, first name, contact number, email, and temporary password are required.');
+    if (!form.lastName.trim() || !form.firstName.trim() || !form.dateOfBirth || !form.gender || !form.contact.trim() || !form.email.trim() || !form.password) {
+      setError('Last name, first name, birth date, gender, contact number, email, and temporary password are required.');
       return;
     }
     if (form.password.length < 8) {
@@ -230,6 +234,31 @@ export function RegisterCustomerModal({
                 <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
                   <input id="custSuffix" value={form.suffix} onChange={(e) => setForm((f) => ({ ...f, suffix: e.target.value }))} placeholder="Jr., Sr., III" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none text-[#2A211D]" />
                 </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+              <div>
+                <label htmlFor="custBirthDate" className="block mb-1.5"><MonoLabel>Birth date</MonoLabel></label>
+                <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
+                  <input id="custBirthDate" type="date" value={form.dateOfBirth} onChange={(e) => setForm((f) => ({ ...f, dateOfBirth: e.target.value }))} required className="w-full bg-transparent text-[14px] py-2.5 focus:outline-none text-[#2A211D]" />
+                </div>
+              </div>
+              <div>
+                <label htmlFor="custGender" className="block mb-1.5"><MonoLabel>Gender</MonoLabel></label>
+                <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
+                  <select id="custGender" value={form.gender} onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))} required className="w-full bg-transparent text-[14px] py-2.5 focus:outline-none text-[#2A211D]">
+                    <option value="">Select gender</option><option>Female</option><option>Male</option><option>Non-binary</option><option>Prefer not to say</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label htmlFor="custCivilStatus" className="block mb-1.5"><MonoLabel>Civil status (optional)</MonoLabel></label>
+                <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors"><select id="custCivilStatus" value={form.civilStatus} onChange={(e) => setForm((f) => ({ ...f, civilStatus: e.target.value }))} className="w-full bg-transparent text-[14px] py-2.5 focus:outline-none text-[#2A211D]"><option value="">Select status</option><option>Single</option><option>Married</option><option>Widowed</option><option>Separated</option></select></div>
+              </div>
+              <div>
+                <label htmlFor="custOccupation" className="block mb-1.5"><MonoLabel>Occupation (optional)</MonoLabel></label>
+                <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors"><input id="custOccupation" value={form.occupation} onChange={(e) => setForm((f) => ({ ...f, occupation: e.target.value }))} placeholder="e.g. Teacher" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none text-[#2A211D]" /></div>
               </div>
             </div>
 

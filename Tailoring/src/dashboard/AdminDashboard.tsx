@@ -357,7 +357,7 @@ export default function AdminDashboard({ initialView = 'dashboard' }: { initialV
   const [view, setView] = useState<ViewKey>(initialView);
   const [quickSearch, setQuickSearch] = useState('');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [accountActivity, setAccountActivity] = useState<{ activity_type: 'profile_updated' | 'password_changed'; details: string | null; created_at: string; full_name: string | null; email: string; customer_id: string | null; employee_id: string | null; role: string }[]>([]);
+  const [accountActivity, setAccountActivity] = useState<{ activity_type: 'profile_updated' | 'password_changed' | 'settings_updated'; details: string | null; created_at: string; full_name: string | null; email: string; customer_id: string | null; employee_id: string | null; role: string }[]>([]);
   const [showProfile, setShowProfile] = useState(false);
   const signOut = () => {
     localStorage.removeItem('authToken'); localStorage.removeItem('currentUser');
@@ -510,7 +510,11 @@ export default function AdminDashboard({ initialView = 'dashboard' }: { initialV
                 <div className="space-y-3">
                   {accountActivity.map((item) => {
                     const identifier = item.role === 'customer' ? item.customer_id : item.employee_id;
-                    const message = item.activity_type === 'password_changed' ? 'changed password' : `updated profile${item.details ? `: ${item.details}` : ''}`;
+                    const message = item.activity_type === 'password_changed'
+                      ? 'changed password'
+                      : item.activity_type === 'settings_updated'
+                        ? `updated notification settings${item.details ? `: ${item.details}` : ''}`
+                        : `updated profile${item.details ? `: ${item.details}` : ''}`;
                     return <div key={`${item.email}-${item.created_at}`} className="border-b pb-3 last:border-0 last:pb-0" style={{ borderColor: LINE }}><p className="text-[12px]" style={{ color: '#3D4F55' }}><strong>{item.full_name || item.email}</strong>{identifier ? ` (${identifier})` : ''} {message}.</p><MonoLabel className="mt-1 block">{new Date(item.created_at).toLocaleString()}</MonoLabel></div>;
                   })}
                   {!accountActivity.length && <p className="text-[13px]" style={{ color: '#3D4F55' }}>No recent account updates.</p>}

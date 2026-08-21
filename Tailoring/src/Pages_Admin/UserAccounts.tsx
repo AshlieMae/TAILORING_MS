@@ -23,7 +23,7 @@ interface PendingUser {
   status: AccountStatus;
   requestedAt: string;
   updatedAt: string | null;
-  activityType?: 'profile_updated' | 'password_changed' | null;
+  activityType?: 'profile_updated' | 'password_changed' | 'settings_updated' | null;
   activityDetails?: string | null;
   activityAt?: string | null;
 }
@@ -57,6 +57,12 @@ interface NewAccountForm {
   email: string;
   role: AccountRole;
   tempPassword: string;
+  contactNumber: string;
+  address: string;
+  dateOfBirth: string;
+  gender: string;
+  civilStatus: string;
+  occupation: string;
 }
 
 function InputField({ id, label, icon, ...props }: { id: string; label: string; icon?: ReactNode } & React.InputHTMLAttributes<HTMLInputElement>) {
@@ -72,7 +78,7 @@ function InputField({ id, label, icon, ...props }: { id: string; label: string; 
 }
 
 function CreateAccountModal({ onClose, onCreate }: { onClose: () => void; onCreate: (form: NewAccountForm) => Promise<void> }) {
-  const [form, setForm] = useState<NewAccountForm>({ lastName: '', middleName: '', firstName: '', suffix: '', email: '', role: 'front_desk', tempPassword: '' });
+  const [form, setForm] = useState<NewAccountForm>({ lastName: '', middleName: '', firstName: '', suffix: '', email: '', role: 'front_desk', tempPassword: '', contactNumber: '', address: '', dateOfBirth: '', gender: '', civilStatus: '', occupation: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
@@ -84,6 +90,10 @@ function CreateAccountModal({ onClose, onCreate }: { onClose: () => void; onCrea
     }
     if (form.tempPassword.length < 8) {
       setError('Temporary password should be at least 8 characters.');
+      return;
+    }
+    if (form.role === 'customer' && (!form.contactNumber.trim() || !form.dateOfBirth || !form.gender)) {
+      setError('Contact number, birth date, and gender are required for customer accounts.');
       return;
     }
     try { await onCreate(form); } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Unable to create account.'); }
@@ -98,6 +108,7 @@ function CreateAccountModal({ onClose, onCreate }: { onClose: () => void; onCrea
             <h2 className="mt-1.5 text-2xl font-semibold" style={{ color: COLORS.ink }}>Create account</h2>
             <p className="mt-2 max-w-md text-[13px]" style={{ color: COLORS.muted }}>Admin-created accounts skip the approval queue and are marked Approved right away.</p>
           </div>
+
           <button type="button" onClick={onClose} aria-label="Close" className="p-2" style={{ color: COLORS.muted, borderRadius: 8 }}><X className="h-4 w-4" /></button>
         </header>
 
@@ -105,9 +116,9 @@ function CreateAccountModal({ onClose, onCreate }: { onClose: () => void; onCrea
           {error && <div role="alert" className="border px-3 py-2.5 text-sm" style={{ borderColor: COLORS.dangerBorder, background: COLORS.dangerBg, color: COLORS.danger, borderRadius: 8 }}>{error}</div>}
 
           <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
-            <InputField id="lastName" label="Last name" icon={<User className="h-4 w-4" />} value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} placeholder="Dela Cruz" />
-            <InputField id="middleName" label="Middle name" value={form.middleName} onChange={(e) => setForm((f) => ({ ...f, middleName: e.target.value }))} placeholder="Santos" />
             <InputField id="firstName" label="First name" value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} placeholder="Juana" />
+            <InputField id="middleName" label="Middle name" value={form.middleName} onChange={(e) => setForm((f) => ({ ...f, middleName: e.target.value }))} placeholder="Santos" />
+            <InputField id="lastName" label="Last name" icon={<User className="h-4 w-4" />} value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} placeholder="Dela Cruz" />
             <InputField id="suffix" label="Suffix (optional)" value={form.suffix} onChange={(e) => setForm((f) => ({ ...f, suffix: e.target.value }))} placeholder="Jr., Sr., III" />
           </div>
 
@@ -129,6 +140,20 @@ function CreateAccountModal({ onClose, onCreate }: { onClose: () => void; onCrea
               ))}
             </div>
           </div>
+
+          {form.role === 'customer' && (
+            <div className="space-y-4 border-t pt-5" style={{ borderColor: COLORS.border }}>
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: COLORS.muted }}>Customer basic information</span>
+              <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
+                <InputField id="customerBirthDate" label="Birth date" type="date" value={form.dateOfBirth} onChange={(e) => setForm((f) => ({ ...f, dateOfBirth: e.target.value }))} />
+                <SelectField id="customerGender" label="Gender" value={form.gender} onChange={(value) => setForm((f) => ({ ...f, gender: value }))} options={['Female', 'Male', 'Non-binary', 'Prefer not to say']} />
+                <InputField id="customerContact" label="Contact number" value={form.contactNumber} onChange={(e) => setForm((f) => ({ ...f, contactNumber: e.target.value }))} placeholder="0917 000 0000" />
+                <SelectField id="customerCivilStatus" label="Civil status (optional)" value={form.civilStatus} onChange={(value) => setForm((f) => ({ ...f, civilStatus: value }))} options={['Single', 'Married', 'Widowed', 'Separated']} />
+                <InputField id="customerOccupation" label="Occupation (optional)" value={form.occupation} onChange={(e) => setForm((f) => ({ ...f, occupation: e.target.value }))} placeholder="e.g. Teacher" />
+                <InputField id="customerAddress" label="Address (optional)" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="Street, Barangay, City" />
+              </div>
+            </div>
+          )}
 
           <div>
             <label htmlFor="tempPassword" className="mb-2 block"><span className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: COLORS.muted }}>Temporary password</span></label>
@@ -181,7 +206,7 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'Unable to load accounts.');
-        setUsers(data.users.map((user: { id: number; full_name: string | null; email: string; role: UserRole; status: AccountStatus; created_at: string; updated_at: string | null; activity_type?: 'profile_updated' | 'password_changed' | null; activity_details?: string | null; activity_at?: string | null }) => ({
+        setUsers(data.users.map((user: { id: number; full_name: string | null; email: string; role: UserRole; status: AccountStatus; created_at: string; updated_at: string | null; activity_type?: 'profile_updated' | 'password_changed' | 'settings_updated' | null; activity_details?: string | null; activity_at?: string | null }) => ({
           dbId: user.id, id: accountIdentifier(user), fullName: user.full_name || user.email, email: user.email, role: user.role, status: user.status, requestedAt: user.created_at.slice(0, 10), updatedAt: user.updated_at, activityType: user.activity_type, activityDetails: user.activity_details, activityAt: user.activity_at,
         })));
       })
@@ -228,7 +253,7 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
 
   async function handleCreateAccount(form: NewAccountForm) {
     const fullName = [form.firstName, form.middleName, form.lastName].map((name) => name.trim()).filter(Boolean).join(' ') + (form.suffix.trim() ? `, ${form.suffix.trim()}` : '');
-    const response = await fetch(`${API_URL}/auth/users`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ email: form.email, password: form.tempPassword, role: form.role, fullName }) });
+    const response = await fetch(`${API_URL}/auth/users`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ email: form.email, password: form.tempPassword, role: form.role, fullName, contactNumber: form.contactNumber, address: form.address, dateOfBirth: form.dateOfBirth, gender: form.gender, civilStatus: form.civilStatus, occupation: form.occupation }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Unable to create account.');
     const newUser: PendingUser = { dbId: data.user.id, id: accountIdentifier(data.user), fullName: data.user.full_name || fullName, email: data.user.email, role: data.user.role, status: data.user.status, requestedAt: data.user.created_at.slice(0, 10), updatedAt: data.user.updated_at };
@@ -327,6 +352,7 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
                   <div className="mono text-[11px]" style={{ color: COLORS.muted }}>{user.activityAt ? new Date(user.activityAt).toLocaleString() : user.updatedAt ? new Date(user.updatedAt).toLocaleString() : user.requestedAt}</div>
                   {user.activityType === 'password_changed' && <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: COLORS.success }}>Password changed</div>}
                   {user.activityType === 'profile_updated' && user.activityDetails && <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: COLORS.success }}>Profile updated: {user.activityDetails}</div>}
+                  {user.activityType === 'settings_updated' && user.activityDetails && <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: COLORS.success }}>Settings updated: {user.activityDetails}</div>}
                 </div>
                 <div><Badge tone={STATUS_TONE[user.status]}>{STATUS_LABEL[user.status]}</Badge></div>
 
@@ -384,4 +410,8 @@ function accountIdentifier(user: { id: number; role: UserRole; employee_id?: str
   if (user.role === 'customer') return user.customer_id || `CUS-${String(user.id).padStart(5, '0')}`;
   if (user.role === 'front_desk' || user.role === 'tailor') return user.employee_id || `EMP-${String(user.id).padStart(5, '0')}`;
   return `U-${user.id}`;
+}
+
+function SelectField({ id, label, value, onChange, options }: { id: string; label: string; value: string; onChange: (value: string) => void; options: string[] }) {
+  return <div><label htmlFor={id} className="mb-2 block"><span className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: COLORS.muted }}>{label}</span></label><select id={id} value={value} onChange={(e) => onChange(e.target.value)} className="w-full border-b bg-transparent py-2.5 text-[14px] outline-none" style={{ borderColor: COLORS.border, color: COLORS.ink }}><option value="">Select an option</option>{options.map((option) => <option key={option}>{option}</option>)}</select></div>;
 }
