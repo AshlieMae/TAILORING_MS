@@ -8,6 +8,10 @@ import {
   Play,
   Star,
   Quote,
+  MapPin,
+  Phone,
+  Mail,
+  Clock,
 } from 'lucide-react';
 
 /* ---------------------------------------------------------------
@@ -55,6 +59,14 @@ export default function LandingPage() {
   const [emailSub, setEmailSub] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [isCareGuideOpen, setIsCareGuideOpen] = useState(false);
+  const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
+  const [contactSent, setContactSent] = useState(false);
+
+  function handleContactSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setContactSent(true);
+    setContactForm({ name: '', email: '', message: '' });
+  }
 
   return (
     <div
@@ -104,9 +116,11 @@ export default function LandingPage() {
           </div>
 
         <nav className="hidden md:flex items-center gap-16 text-lg tracking-[0.25em] uppercase text-[#C7BDA8] font-medium">
+            <a href="#home" className="hover:text-[#EFE7D8] transition-colors">Home</a>
             <a href="#craft" className="hover:text-[#EFE7D8] transition-colors">Craft</a>
             <a href="#reviews" className="hover:text-[#EFE7D8] transition-colors">Reviews</a>
             <a href="#services" className="hover:text-[#EFE7D8] transition-colors">Services</a>
+            <a href="#contact-us" className="hover:text-[#EFE7D8] transition-colors">Contact</a>
           </nav>
 
           <div className="flex items-center gap-6">
@@ -122,15 +136,17 @@ export default function LandingPage() {
 
         {menuOpen && (
           <div className="md:hidden px-6 pb-5 flex flex-col gap-4 text-xs tracking-[0.2em] uppercase text-[#C7BDA8]">
+            <a href="#home">Home</a>
             <a href="#craft">Craft</a>
             <a href="#reviews">Reviews</a>
             <a href="#services">Services</a>
+            <a href="#contact-us">Contact</a>
           </div>
         )}
       </header>
 
       {/* ---------------- HERO ---------------- */}
-     <section className="relative max-w-[1600px] mx-auto px-8 lg:px-16 pt-24 pb-40 min-h-[90vh] grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+     <section id="home" className="relative max-w-[1600px] mx-auto px-8 lg:px-16 pt-24 pb-40 min-h-[90vh] grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
         <div className="lg:col-span-6 space-y-8">
           <Tag>No. 048 — Established Care</Tag>
 
@@ -344,6 +360,175 @@ export default function LandingPage() {
             image="https://images.unsplash.com/photo-1603252109303-2751441dd157?auto=format&fit=crop&w=1200&q=85"
             alt="Colorful fabric rolls in a tailoring shop"
           />
+        </div>
+      </section>
+
+      {/* ---------------- CONTACT — styled as an order ticket ---------------- */}
+      <section id="contact-us" className="max-w-7xl mx-auto px-6 sm:px-8 py-20 border-t border-[#3A3226]/70">
+        <div className="mb-14 max-w-2xl">
+          <Tag className="mb-4">Get In Touch</Tag>
+          <h2
+            className="text-3xl sm:text-5xl leading-tight"
+            style={{ fontFamily: "'Newsreader', serif", fontWeight: 500 }}
+          >
+            Bring us the piece, we'll take it from there
+          </h2>
+          <p className="mt-5 max-w-xl text-base sm:text-lg leading-relaxed font-light text-[#B8AC94]">
+            Questions about an order, a fitting, or a fabric you're not sure about? Send a note or stop by the atelier.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Info card, styled like a garment ticket */}
+          <div className="lg:col-span-5 relative rounded-sm border border-dashed border-[#C9A66B]/50 bg-[#1D1912] p-8 sm:p-10">
+            <span className="absolute -top-3 left-8 h-6 w-6 rounded-full border border-[#3A3226] bg-[#14120D]" />
+            <span className="absolute -bottom-3 left-8 h-6 w-6 rounded-full border border-[#3A3226] bg-[#14120D]" />
+
+            <Tag className="mb-8">Shop Details — No. 048</Tag>
+
+            <div className="space-y-7">
+              <div className="flex items-start gap-4">
+                <MapPin className="w-4 h-4 mt-1 text-[#C9A66B] shrink-0" />
+                <div>
+                  <div
+                    className="text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-1"
+                    style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+                  >
+                    Atelier
+                  </div>
+                  <div className="text-base text-[#EFE7D8] font-light">
+                    118 Thread Street, Suite 4<br />Cebu City, Central Visayas
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <Phone className="w-4 h-4 mt-1 text-[#C9A66B] shrink-0" />
+                <div>
+                  <div
+                    className="text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-1"
+                    style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+                  >
+                    Phone
+                  </div>
+                  <a href="tel:+639171234567" className="text-base text-[#EFE7D8] font-light hover:text-[#C9A66B] transition-colors">
+                    +63 917 123 4567
+                  </a>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <Mail className="w-4 h-4 mt-1 text-[#C9A66B] shrink-0" />
+                <div>
+                  <div
+                    className="text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-1"
+                    style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+                  >
+                    Email
+                  </div>
+                  <a href="mailto:hello@ashlietailor.com" className="text-base text-[#EFE7D8] font-light hover:text-[#C9A66B] transition-colors">
+                    hello@ashlietailor.com
+                  </a>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <Clock className="w-4 h-4 mt-1 text-[#C9A66B] shrink-0" />
+                <div>
+                  <div
+                    className="text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-1"
+                    style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+                  >
+                    Hours
+                  </div>
+                  <div className="text-base text-[#EFE7D8] font-light">
+                    Mon–Sat, 9:00 AM – 7:00 PM<br />Sunday by appointment
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Contact form */}
+          <div className="lg:col-span-7">
+            <form onSubmit={handleContactSubmit} className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                  <label
+                    htmlFor="contact-name"
+                    className="block text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-2"
+                    style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+                  >
+                    Name
+                  </label>
+                  <input
+                    id="contact-name"
+                    type="text"
+                    required
+                    value={contactForm.name}
+                    onChange={(e) => setContactForm((f) => ({ ...f, name: e.target.value }))}
+                    className="w-full bg-[#1D1912] border border-[#3A3226] rounded-sm px-4 py-3 text-sm text-[#EFE7D8] placeholder-[#6E6452] focus:outline-none focus:border-[#C9A66B] transition-colors"
+                    placeholder="Your name"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="contact-email"
+                    className="block text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-2"
+                    style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+                  >
+                    Email
+                  </label>
+                  <input
+                    id="contact-email"
+                    type="email"
+                    required
+                    value={contactForm.email}
+                    onChange={(e) => setContactForm((f) => ({ ...f, email: e.target.value }))}
+                    className="w-full bg-[#1D1912] border border-[#3A3226] rounded-sm px-4 py-3 text-sm text-[#EFE7D8] placeholder-[#6E6452] focus:outline-none focus:border-[#C9A66B] transition-colors"
+                    placeholder="you@email.com"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="contact-message"
+                  className="block text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-2"
+                  style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+                >
+                  Message
+                </label>
+                <textarea
+                  id="contact-message"
+                  required
+                  rows={5}
+                  value={contactForm.message}
+                  onChange={(e) => setContactForm((f) => ({ ...f, message: e.target.value }))}
+                  className="w-full bg-[#1D1912] border border-[#3A3226] rounded-sm px-4 py-3 text-sm text-[#EFE7D8] placeholder-[#6E6452] focus:outline-none focus:border-[#C9A66B] transition-colors resize-none"
+                  placeholder="Tell us about the piece, the fit, or the fix it needs..."
+                />
+              </div>
+
+              <div className="flex items-center gap-5 pt-1">
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-3 bg-[#C9A66B] text-[#14120D] text-[11px] tracking-[0.22em] uppercase font-semibold px-6 py-4 rounded-sm hover:bg-[#dcbb85] transition-colors"
+                >
+                  Send Request
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+                {contactSent && (
+                  <span
+                    className="text-[11px] tracking-[0.2em] uppercase text-[#9C8F76]"
+                    style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+                  >
+                    Received — we'll reply shortly
+                  </span>
+                )}
+              </div>
+            </form>
+          </div>
         </div>
       </section>
 

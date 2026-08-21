@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Shirt, Ruler, CalendarClock, Wallet, Settings, Bell, Search,
   ChevronRight, Menu, X, PackageCheck, Download, LogOut, Sparkles, TrendingUp,
-  Check, UserRound, Save, ArrowUpRight,
+  Check, UserRound, Save, ArrowUpRight, ShoppingBag, Mail, Phone, MapPin, ShieldCheck, Pencil, Camera,
+  Lock, Eye, EyeOff,
 } from 'lucide-react';
 import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
@@ -147,6 +148,7 @@ const APPOINTMENTS = [
 
 const NAV = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { key: 'catalog', label: 'Browse Garments', icon: ShoppingBag },
   { key: 'orders', label: 'My Orders', icon: Shirt },
   { key: 'measurements', label: 'Measurements', icon: Ruler },
   { key: 'appointments', label: 'Appointments', icon: CalendarClock },
@@ -240,7 +242,7 @@ function PageHeader({ eyebrow, title, sub, icon: Icon }) {
 /* ============================================================
    DASHBOARD VIEW
 ============================================================= */
-function DashboardView() {
+function DashboardView({ onBrowseGarments, catalog }) {
   const [selected, setSelected] = useState(ORDERS[0].id);
   const activeOrders = ORDERS.filter((o) => o.status === 'In progress');
   const order = ORDERS.find((o) => o.id === selected) ?? ORDERS[0];
@@ -254,6 +256,20 @@ function DashboardView() {
         <Kpi icon={TrendingUp} tone="var(--brass)" label="Lifetime investment" value={formatPeso(lifetime)} sub="Since 2024" delay="0.06s" />
         <Kpi icon={CalendarClock} tone="var(--success)" label="Next appointment" value="Aug 12" sub="First fitting · 3:30 PM" delay="0.12s" />
       </div>
+
+      <section className="rise atelier-card overflow-hidden" style={{ animationDelay: '0.15s' }}>
+        <div className="flex items-start justify-between gap-4 p-6 sm:p-7">
+          <div>
+            <Eyebrow>Atelier collection</Eyebrow>
+            <Display as="h2" className="mt-1 text-[24px]" style={{ color: 'var(--ink)', fontWeight: 600 }}>Available garments</Display>
+            <p className="mt-1 text-[13px]" style={{ color: 'var(--muted)' }}>Start a custom order with a style that fits your occasion.</p>
+          </div>
+          <button onClick={onBrowseGarments} className="inline-flex shrink-0 items-center gap-2 rounded-md px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white" style={{ background: 'var(--navy)' }}><ShoppingBag className="h-4 w-4" /> Browse all</button>
+        </div>
+        <div className="grid grid-cols-2 border-t sm:grid-cols-4" style={{ borderColor: 'var(--line)' }}>
+          {catalog.map((garment) => <button key={garment.name} onClick={onBrowseGarments} className="p-4 text-left transition-colors hover:bg-[#FCFAF6]" style={{ borderRight: '1px solid var(--line)' }}><img src={garment.image} alt={garment.name} className="h-28 w-full rounded-md object-cover" loading="lazy" /><div className="mt-3 text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>{garment.name}</div><div className="mt-1 text-[11px]" style={{ color: 'var(--brass)' }}>{garment.price}</div></button>)}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1.35fr_1fr] gap-6">
         <div className="rise atelier-card p-7" style={{ animationDelay: '0.18s' }}>
@@ -452,6 +468,57 @@ function PaymentLedger({ payments, title, showViewAll }) {
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ============================================================
+   GARMENT CATALOG VIEW
+============================================================= */
+const DEFAULT_CATALOG = [
+  { name: 'Barong Tagalog', price: 'From ₱6,500', description: 'Hand-finished formal wear for weddings, ceremonies, and special occasions.', fabrics: ['Piña Jusi — Ivory', 'Cocoon Silk — Natural'], colors: ['#F5EEDF', '#D8C9A7'], image: 'https://ibarrafilipino.com/cdn/shop/files/Barong_Tagalog_JV402_02.png?v=1769481827&width=1200' },
+  { name: 'Two-piece Suit', price: 'From ₱12,000', description: 'A tailored jacket and trousers, cut to your measurements.', fabrics: ['Italian Wool — Charcoal', 'Wool Blend — Navy'], colors: ['#393B42', '#1D2A44'], image: 'https://images.pexels.com/photos/1043474/pexels-photo-1043474.jpeg?auto=compress&cs=tinysrgb&w=1200' },
+  { name: 'Filipiniana Dress', price: 'From ₱9,500', description: 'Custom occasion dress with a silhouette made for you.', fabrics: ['Silk Habotai — Wine', 'Satin — Blush'], colors: ['#6A2737', '#D9A6A6'], image: 'https://www.kulturafilipino.com/cdn/shop/files/Copyof_IMG8614_1800x1800.jpg?v=1722242874' },
+  { name: 'School Uniform Set', price: 'From ₱2,800', description: 'Durable, comfortable uniforms tailored for everyday wear.', fabrics: ['Cotton Twill — Navy', 'Cotton Poplin — White'], colors: ['#233553', '#ECE9E0'], image: 'https://images.pexels.com/photos/5212345/pexels-photo-5212345.jpeg?auto=compress&cs=tinysrgb&w=1200' },
+];
+
+function getCatalog() {
+  try { const saved = localStorage.getItem('garmentCatalog'); return saved ? JSON.parse(saved) : DEFAULT_CATALOG; } catch { return DEFAULT_CATALOG; }
+}
+
+function CatalogView({ catalog }) {
+  const [selected, setSelected] = useState(null);
+  const [notice, setNotice] = useState('');
+  const item = catalog.find((garment) => garment.name === selected);
+
+  const submitRequest = (event) => {
+    event.preventDefault();
+    setSelected(null);
+    setNotice(`Your ${event.currentTarget.garment.value} request was sent for Front Desk review.`);
+    window.setTimeout(() => setNotice(''), 4500);
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader eyebrow="Atelier collection" title="Browse Garments" sub="Choose a style, share your preferences, and let our team prepare your custom order." icon={ShoppingBag} />
+      {notice && <div className="rise flex items-center gap-2 rounded-lg px-5 py-4 text-sm" style={{ color: 'var(--success)', background: '#EEF6EF', border: '1px solid #CDE2D1' }}><Check className="h-4 w-4" />{notice}</div>}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        {catalog.map((garment, index) => (
+          <article key={garment.name} className="rise atelier-card overflow-hidden" style={{ animationDelay: `${index * 0.07}s` }}>
+            <div className="relative h-52 overflow-hidden" style={{ background: `linear-gradient(135deg, ${garment.colors[0]}, ${garment.colors[1]})` }}>
+              <img src={garment.image} alt={garment.name} className="h-full w-full object-cover" loading="lazy" />
+              <span className="absolute left-5 top-5 inline-block rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'white', background: 'rgba(20,23,31,0.58)' }}>Custom made</span>
+            </div>
+            <div className="p-6">
+              <div className="flex items-start justify-between gap-3"><h2 className="text-xl font-semibold" style={{ fontFamily: "'Fraunces', serif" }}>{garment.name}</h2><span className="text-sm font-semibold whitespace-nowrap" style={{ color: 'var(--brass)' }}>{garment.price}</span></div>
+              <p className="mt-3 text-[13px] leading-relaxed" style={{ color: 'var(--muted)' }}>{garment.description}</p>
+              <div className="mt-4 flex flex-wrap gap-2">{garment.fabrics.map((fabric) => <span key={fabric} className="rounded-full px-2.5 py-1 text-[10px]" style={{ color: 'var(--muted)', background: 'var(--paper)', border: '1px solid var(--line)' }}>{fabric}</span>)}</div>
+              <button onClick={() => setSelected(garment.name)} className="mt-6 inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.13em] text-white" style={{ background: 'var(--navy)' }}><ShoppingBag className="h-4 w-4" /> Request custom order</button>
+            </div>
+          </article>
+        ))}
+      </div>
+      {item && <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><button onClick={() => setSelected(null)} aria-label="Close order request" className="absolute inset-0 bg-black/45 backdrop-blur-sm" /><form onSubmit={submitRequest} className="relative w-full max-w-lg rounded-xl p-7 shadow-2xl" style={{ background: 'var(--card)', border: '1px solid var(--line)' }}><button type="button" onClick={() => setSelected(null)} className="absolute right-5 top-5" style={{ color: 'var(--muted)' }}><X className="h-5 w-5" /></button><Eyebrow>Custom order request</Eyebrow><h2 className="mt-1 text-2xl font-semibold" style={{ fontFamily: "'Fraunces', serif" }}>{item.name}</h2><p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>Your request will be reviewed by Front Desk before a job card is created.</p><input type="hidden" name="garment" value={item.name} /><label className="mt-6 block text-xs font-semibold" style={{ color: 'var(--ink)' }}>Preferred fabric<select name="fabric" className="mt-2 w-full rounded-md bg-white px-3 py-2.5 text-sm outline-none" style={{ border: '1px solid var(--line)' }}>{item.fabrics.map((fabric) => <option key={fabric}>{fabric}</option>)}</select></label><label className="mt-4 block text-xs font-semibold" style={{ color: 'var(--ink)' }}>Preferred completion date<input required name="dueDate" type="date" className="mt-2 w-full rounded-md bg-white px-3 py-2.5 text-sm outline-none" style={{ border: '1px solid var(--line)' }} /></label><label className="mt-4 block text-xs font-semibold" style={{ color: 'var(--ink)' }}>Notes for the tailor<textarea name="notes" rows={3} placeholder="Fit, event date, preferred details..." className="mt-2 w-full resize-none rounded-md bg-white px-3 py-2.5 text-sm outline-none" style={{ border: '1px solid var(--line)' }} /></label><div className="mt-6 flex gap-3"><button className="inline-flex items-center gap-2 rounded-md px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.13em] text-white" style={{ background: 'var(--navy)' }}><Check className="h-4 w-4" /> Send request</button><button type="button" onClick={() => setSelected(null)} className="rounded-md px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.13em]" style={{ border: '1px solid var(--line)', color: 'var(--muted)' }}>Cancel</button></div></form></div>}
     </div>
   );
 }
@@ -694,48 +761,180 @@ function PaymentsView() {
    SETTINGS VIEW
 ============================================================= */
 function SettingsView() {
-  const [settings, setSettings] = useState({ name: CUSTOMER.name, email: CUSTOMER.email, phone: '+63 917 000 1234', reminders: true, updates: true });
-  const [saved, setSaved] = useState(false);
-  const save = () => { setSaved(true); window.setTimeout(() => setSaved(false), 2500); };
+  const [profileForm, setProfileForm] = useState({ name: CUSTOMER.name, email: CUSTOMER.email, phone: '+63 917 000 1234' });
+  const [profileDraft, setProfileDraft] = useState(profileForm);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileNotice, setProfileNotice] = useState('');
+
+  const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
+  const [isEditingPassword, setIsEditingPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordNotice, setPasswordNotice] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  const [prefs, setPrefs] = useState({ reminders: true, updates: true });
+
+  const startEditProfile = () => { setProfileDraft(profileForm); setProfileNotice(''); setIsEditingProfile(true); };
+  const cancelEditProfile = () => { setProfileDraft(profileForm); setIsEditingProfile(false); };
+  const saveProfile = (event) => {
+    event.preventDefault();
+    setProfileForm(profileDraft);
+    setIsEditingProfile(false);
+    setProfileNotice('Profile details saved.');
+    window.setTimeout(() => setProfileNotice(''), 2500);
+  };
+
+  const startEditPassword = () => { setPasswordForm({ current: '', next: '', confirm: '' }); setPasswordError(''); setPasswordNotice(''); setShowPassword(false); setIsEditingPassword(true); };
+  const cancelEditPassword = () => { setPasswordForm({ current: '', next: '', confirm: '' }); setPasswordError(''); setIsEditingPassword(false); };
+  const savePassword = (event) => {
+    event.preventDefault();
+    if (!passwordForm.current || !passwordForm.next || !passwordForm.confirm) { setPasswordError('Fill in all three fields.'); return; }
+    if (passwordForm.next.length < 8) { setPasswordError('New password must be at least 8 characters.'); return; }
+    if (passwordForm.next !== passwordForm.confirm) { setPasswordError('New password and confirmation do not match.'); return; }
+    setPasswordError('');
+    setPasswordForm({ current: '', next: '', confirm: '' });
+    setIsEditingPassword(false);
+    setPasswordNotice('Password updated.');
+    window.setTimeout(() => setPasswordNotice(''), 2500);
+  };
 
   return (
     <div className="w-full space-y-6">
       <PageHeader eyebrow="Account controls" title="Settings" icon={Settings} />
-      {saved && (
-        <div className="rise flex items-center gap-2 p-4 rounded-lg" style={{ background: 'rgba(75,120,86,0.10)', color: 'var(--success)' }}>
-          <Check className="w-4 h-4" /> <span className="text-[13px] font-medium">Preferences saved.</span>
-        </div>
-      )}
+
+      {/* Profile */}
       <div className="rise atelier-card p-7" style={{ animationDelay: '0.06s' }}>
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--brass-wash)', color: 'var(--brass)' }}><UserRound className="w-5 h-5" strokeWidth={1.6} /></div>
-          <Display as="h2" className="text-xl" style={{ color: 'var(--ink)', fontWeight: 600 }}>Profile</Display>
+        <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--brass-wash)', color: 'var(--brass)' }}><UserRound className="w-5 h-5" strokeWidth={1.6} /></div>
+            <Display as="h2" className="text-xl" style={{ color: 'var(--ink)', fontWeight: 600 }}>Profile</Display>
+          </div>
+          {!isEditingProfile ? (
+            <button type="button" onClick={startEditProfile} className="inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ background: 'var(--brass-wash)', color: 'var(--brass)', fontFamily: "'IBM Plex Mono', monospace" }}>
+              <Pencil className="w-3.5 h-3.5" strokeWidth={2} /> Edit
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ border: '1px solid var(--line)', color: 'var(--brass)', fontFamily: "'IBM Plex Mono', monospace" }}>
+              <Pencil className="w-3.5 h-3.5" strokeWidth={2} /> Editing
+            </span>
+          )}
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Full name" value={settings.name} onChange={(v) => setSettings({ ...settings, name: v })} />
-          <Field label="Email address" value={settings.email} onChange={(v) => setSettings({ ...settings, email: v })} />
-          <Field label="Phone number" value={settings.phone} onChange={(v) => setSettings({ ...settings, phone: v })} />
-        </div>
+
+        {profileNotice && (
+          <div className="rise mb-5 flex items-center gap-2 rounded-lg px-4 py-3 text-[13px]" style={{ color: 'var(--success)', background: '#EEF6EF', border: '1px solid #CDE2D1' }}>
+            <Check className="h-4 w-4 flex-shrink-0" />{profileNotice}
+          </div>
+        )}
+
+        <form onSubmit={saveProfile}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <ProfileField icon={UserRound} label="Full name" value={profileDraft.name} onChange={(v) => setProfileDraft({ ...profileDraft, name: v })} disabled={!isEditingProfile} />
+            <ProfileField icon={Mail} label="Email address" type="email" value={profileDraft.email} onChange={(v) => setProfileDraft({ ...profileDraft, email: v })} disabled={!isEditingProfile} />
+            <ProfileField icon={Phone} label="Phone number" value={profileDraft.phone} onChange={(v) => setProfileDraft({ ...profileDraft, phone: v })} disabled={!isEditingProfile} />
+          </div>
+          {isEditingProfile && (
+            <div className="mt-6 flex gap-3">
+              <button type="submit" className="inline-flex items-center gap-2 rounded-md px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white" style={{ background: 'var(--ink)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                <Save className="w-3.5 h-3.5" /> Save profile
+              </button>
+              <button type="button" onClick={cancelEditProfile} className="rounded-md px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ border: '1px solid var(--line)', color: 'var(--muted)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                Cancel
+              </button>
+            </div>
+          )}
+        </form>
       </div>
-      <div className="rise atelier-card p-7" style={{ animationDelay: '0.12s' }}>
+
+      {/* Password & Security */}
+      <div className="rise atelier-card p-7" style={{ animationDelay: '0.1s' }}>
+        <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--brass-wash)', color: 'var(--brass)' }}><Lock className="w-5 h-5" strokeWidth={1.6} /></div>
+            <div>
+              <Display as="h2" className="text-xl" style={{ color: 'var(--ink)', fontWeight: 600 }}>Password &amp; Security</Display>
+              <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>Change the password used to sign in to your account.</p>
+            </div>
+          </div>
+          {!isEditingPassword ? (
+            <button type="button" onClick={startEditPassword} className="inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ background: 'var(--brass-wash)', color: 'var(--brass)', fontFamily: "'IBM Plex Mono', monospace" }}>
+              <Pencil className="w-3.5 h-3.5" strokeWidth={2} /> Change password
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ border: '1px solid var(--line)', color: 'var(--brass)', fontFamily: "'IBM Plex Mono', monospace" }}>
+              <Pencil className="w-3.5 h-3.5" strokeWidth={2} /> Editing
+            </span>
+          )}
+        </div>
+
+        {passwordNotice && (
+          <div className="rise mb-5 flex items-center gap-2 rounded-lg px-4 py-3 text-[13px]" style={{ color: 'var(--success)', background: '#EEF6EF', border: '1px solid #CDE2D1' }}>
+            <Check className="h-4 w-4 flex-shrink-0" />{passwordNotice}
+          </div>
+        )}
+        {passwordError && (
+          <div className="rise mb-5 flex items-center gap-2 rounded-lg px-4 py-3 text-[13px]" style={{ color: 'var(--rust)', background: 'rgba(160,82,45,0.08)', border: '1px solid rgba(160,82,45,0.25)' }}>
+            <X className="h-4 w-4 flex-shrink-0" />{passwordError}
+          </div>
+        )}
+
+        {isEditingPassword ? (
+          <form onSubmit={savePassword}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <PasswordField label="Current password" value={passwordForm.current} onChange={(v) => setPasswordForm({ ...passwordForm, current: v })} show={showPassword} onToggleShow={() => setShowPassword((s) => !s)} />
+              <div className="hidden sm:block" />
+              <PasswordField label="New password" value={passwordForm.next} onChange={(v) => setPasswordForm({ ...passwordForm, next: v })} show={showPassword} onToggleShow={() => setShowPassword((s) => !s)} />
+              <PasswordField label="Confirm new password" value={passwordForm.confirm} onChange={(v) => setPasswordForm({ ...passwordForm, confirm: v })} show={showPassword} onToggleShow={() => setShowPassword((s) => !s)} />
+            </div>
+            <p className="mt-3 text-[11px]" style={{ color: 'var(--muted)', fontFamily: "'IBM Plex Mono', monospace" }}>USE AT LEAST 8 CHARACTERS</p>
+            <div className="mt-5 flex gap-3">
+              <button type="submit" className="inline-flex items-center gap-2 rounded-md px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white" style={{ background: 'var(--ink)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                <Save className="w-3.5 h-3.5" /> Update password
+              </button>
+              <button type="button" onClick={cancelEditPassword} className="rounded-md px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ border: '1px solid var(--line)', color: 'var(--muted)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="flex items-center gap-2.5 p-3 rounded-lg" style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}>
+            <Lock className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--muted)' }} strokeWidth={1.8} />
+            <span className="text-[12px]" style={{ color: 'var(--muted)', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.08em' }}>••••••••••••</span>
+          </div>
+        )}
+      </div>
+
+      {/* Notifications */}
+      <div className="rise atelier-card p-7" style={{ animationDelay: '0.16s' }}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--brass-wash)', color: 'var(--brass)' }}><Bell className="w-5 h-5" strokeWidth={1.6} /></div>
           <Display as="h2" className="text-xl" style={{ color: 'var(--ink)', fontWeight: 600 }}>Notifications</Display>
         </div>
-        <Toggle label="Fitting reminders" checked={settings.reminders} onClick={() => setSettings({ ...settings, reminders: !settings.reminders })} />
-        <Toggle label="Order updates" checked={settings.updates} onClick={() => setSettings({ ...settings, updates: !settings.updates })} last />
+        <Toggle label="Fitting reminders" checked={prefs.reminders} onClick={() => setPrefs({ ...prefs, reminders: !prefs.reminders })} />
+        <Toggle label="Order updates" checked={prefs.updates} onClick={() => setPrefs({ ...prefs, updates: !prefs.updates })} last />
+        <p className="mt-4 text-[11px]" style={{ color: 'var(--muted)', fontFamily: "'IBM Plex Mono', monospace" }}>CHANGES APPLY IMMEDIATELY</p>
       </div>
-      <button onClick={save} className="inline-flex items-center gap-2 px-5 py-3 rounded-md text-[10px] font-semibold uppercase tracking-[0.14em] text-white" style={{ background: 'var(--ink)', fontFamily: "'IBM Plex Mono', monospace" }}>
-        <Save className="w-4 h-4" /> Save settings
-      </button>
     </div>
   );
 }
-function Field({ label, value, onChange }) {
+function PasswordField({ label, value, onChange, show, onToggleShow, disabled = false }) {
   return (
-    <label className="text-[12px] font-medium block" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>
+    <label className="block text-[12px] font-medium" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>
       {label}
-      <input value={value} onChange={(e) => onChange(e.target.value)} className="input-field mt-2" />
+      <div className="relative mt-2">
+        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: disabled ? 'var(--muted)' : 'var(--brass)' }} strokeWidth={1.8} />
+        <input
+          required
+          type={show ? 'text' : 'password'}
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          className="input-field"
+          style={{ paddingLeft: 34, paddingRight: 34, background: disabled ? 'var(--brass-wash)' : '#fff', color: disabled ? 'var(--muted)' : 'var(--ink)' }}
+        />
+        <button type="button" onClick={onToggleShow} tabIndex={-1} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted)' }} aria-label={show ? 'Hide password' : 'Show password'}>
+          {show ? <EyeOff className="w-3.5 h-3.5" strokeWidth={1.8} /> : <Eye className="w-3.5 h-3.5" strokeWidth={1.8} />}
+        </button>
+      </div>
     </label>
   );
 }
@@ -760,6 +959,7 @@ export default function CustomerDashboard() {
   const [now, setNow] = useState(() => new Date());
   const [profile, setProfile] = useState(() => sessionUser());
   const [profileOpen, setProfileOpen] = useState(false);
+  const [catalog, setCatalog] = useState(() => getCatalog());
   useEffect(() => {
     const t = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(t);
@@ -779,6 +979,10 @@ export default function CustomerDashboard() {
       })
       .then((data) => { if (data.user) setProfile((current) => ({ ...current, ...data.user })); })
       .catch(() => { /* Use the profile saved by login if the dashboard endpoint is unavailable. */ });
+    fetch(`${API_URL}/auth/catalog`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (response) => { if (!response.ok) throw new Error('Unable to load catalog.'); return response.json(); })
+      .then((data) => { if (Array.isArray(data.catalog)) setCatalog(data.catalog); })
+      .catch(() => { /* Keep the bundled catalog if the server is unavailable. */ });
   }, [navigate]);
 
   const customerName = profile?.full_name || profile?.name || CUSTOMER.name;
@@ -794,7 +998,8 @@ export default function CustomerDashboard() {
 
   function renderView() {
     switch (view) {
-      case 'dashboard': return <DashboardView />;
+      case 'dashboard': return <DashboardView catalog={catalog} onBrowseGarments={() => setView('catalog')} />;
+      case 'catalog': return <CatalogView catalog={catalog} />;
       case 'orders': return <OrdersView />;
       case 'measurements': return <MeasurementsView />;
       case 'appointments': return <AppointmentsView />;
@@ -896,19 +1101,167 @@ export default function CustomerDashboard() {
 }
 
 function CustomerProfileModal({ profile, fallbackName, onClose, onSave }) {
-  const [form, setForm] = useState({ name: profile?.full_name || profile?.name || fallbackName, email: profile?.email || '', contact: profile?.contact_number || profile?.contact || '', address: profile?.address || '' });
+  const initialName = profile?.full_name || profile?.name || fallbackName;
+  const initialForm = { name: initialName, email: profile?.email || '', contact: profile?.contact_number || profile?.contact || '', address: profile?.address || '', photo: profile?.profile_picture || '' };
+  const [form, setForm] = useState(initialForm);
+  const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
-  const save = async (event) => {
-    event.preventDefault(); setSaving(true); setNotice('');
-    const updated = { ...profile, full_name: form.name, name: form.name, email: form.email, contact_number: form.contact, address: form.address };
-    try {
-      const response = await fetch(`${API_URL}/auth/profile`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ fullName: form.name, contactNumber: form.contact, address: form.address }) });
-      if (response.ok) { const data = await response.json(); onSave({ ...updated, ...data.user }); setNotice('Profile saved to your account.'); } else { onSave(updated); setNotice('Profile saved on this device.'); }
-    } catch { onSave(updated); setNotice('Profile saved on this device.'); } finally { setSaving(false); }
+  const memberSince = profile?.created_at ? new Date(profile.created_at).getFullYear().toString() : CUSTOMER.memberSince;
+  const initials = (form.name || fallbackName).split(' ').filter(Boolean).map((n) => n[0]).join('').slice(0, 2).toUpperCase();
+
+  const startEditing = () => { setNotice(''); setIsEditing(true); };
+  const cancelEditing = () => { setForm(initialForm); setNotice(''); setIsEditing(false); };
+
+  const pickPhoto = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => update('photo', reader.result);
+    reader.readAsDataURL(file);
   };
-  return <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><button onClick={onClose} className="absolute inset-0 bg-[#14171F]/70 backdrop-blur-sm" aria-label="Close profile" /><form onSubmit={save} className="relative w-full max-w-xl border-t-4 border-[#A9824F] bg-[#FAF8F3] p-7 shadow-2xl"><button type="button" onClick={onClose} className="absolute right-5 top-5 text-[#736B5E]"><X className="h-5 w-5" /></button><Eyebrow>Private client</Eyebrow><Display as="h2" className="mt-1 text-3xl" style={{ color: 'var(--ink)', fontWeight: 600 }}>My profile</Display><p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>Keep your contact details up to date for fitting and pickup notices.</p>{notice && <p className="mt-4 border border-[#A8C9B5] bg-[#EDF7F0] px-3 py-2 text-sm text-[#39705B]">{notice}</p>}<div className="mt-6 grid gap-4 sm:grid-cols-2"><ProfileField label="Full name" value={form.name} onChange={(value) => update('name', value)} /><ProfileField label="Email address" type="email" value={form.email} onChange={(value) => update('email', value)} /><ProfileField label="Contact number" value={form.contact} onChange={(value) => update('contact', value)} /><div className="sm:col-span-2"><ProfileField label="Address" value={form.address} onChange={(value) => update('address', value)} /></div></div><div className="mt-7 flex gap-3"><button disabled={saving} className="inline-flex items-center gap-2 bg-[#14171F] px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white disabled:opacity-60"><Save className="h-4 w-4" />{saving ? 'Saving...' : 'Save profile'}</button><button type="button" onClick={onClose} className="border border-[#E7E1D3] px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#736B5E]">Close</button></div></form></div>;
+
+  const save = async (event) => {
+    event.preventDefault();
+    if (!isEditing) return;
+    setSaving(true); setNotice('');
+    const updated = { ...profile, full_name: form.name, name: form.name, email: form.email, contact_number: form.contact, address: form.address, profile_picture: form.photo };
+    try {
+      const response = await fetch(`${API_URL}/auth/profile`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ fullName: form.name, contactNumber: form.contact, address: form.address, profilePicture: form.photo }) });
+      if (response.ok) { const data = await response.json(); onSave({ ...updated, ...data.user }); setNotice('Profile saved to your account.'); } else { onSave(updated); setNotice('Profile saved on this device.'); }
+    } catch { onSave(updated); setNotice('Profile saved on this device.'); } finally { setSaving(false); setIsEditing(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button onClick={onClose} className="absolute inset-0" style={{ background: 'rgba(20,23,31,0.62)', backdropFilter: 'blur(3px)' }} aria-label="Close profile" />
+      <form onSubmit={save} className="rise atelier-card relative w-full max-w-xl max-h-[90vh] overflow-y-auto" style={{ animationDuration: '0.35s' }}>
+        <button type="button" onClick={onClose} className="absolute right-5 top-5 z-10 w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-black/5" style={{ color: 'var(--muted)' }} aria-label="Close">
+          <X className="h-4 w-4" />
+        </button>
+
+        {/* Header band */}
+        <div className="px-8 pt-8 pb-7" style={{ background: 'var(--ink)', borderTopLeftRadius: 14, borderTopRightRadius: 14 }}>
+          <Eyebrow tone="var(--brass-soft)">Private client account</Eyebrow>
+          <Display as="h2" className="mt-1.5 text-[26px] text-white" style={{ fontWeight: 600 }}>My Profile</Display>
+          <div className="mt-6 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <label className="relative flex-shrink-0" style={{ cursor: isEditing ? 'pointer' : 'default' }}>
+                <div className="w-16 h-16 rounded-full flex items-center justify-center overflow-hidden" style={{ background: 'var(--brass)', border: '2px solid rgba(255,255,255,0.18)' }}>
+                  {form.photo
+                    ? <img src={form.photo} alt="Profile" className="h-full w-full object-cover" />
+                    : <span className="text-white text-lg font-semibold" style={{ fontFamily: "'Fraunces', serif" }}>{initials}</span>}
+                </div>
+                {isEditing && (
+                  <>
+                    <span className="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full flex items-center justify-center" style={{ background: 'var(--brass)', border: '2px solid var(--ink)' }}>
+                      <Camera className="w-3 h-3" style={{ color: 'var(--ink)' }} strokeWidth={2.2} />
+                    </span>
+                    <input type="file" accept="image/*" onChange={pickPhoto} className="sr-only" />
+                  </>
+                )}
+              </label>
+              <div className="min-w-0">
+                <div className="text-[16px] text-white font-medium truncate" style={{ fontFamily: "'Inter', sans-serif" }}>{form.name || fallbackName}</div>
+                <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1" style={{ background: 'rgba(169,130,79,0.16)' }}>
+                  <ShieldCheck className="w-3 h-3" style={{ color: 'var(--brass-soft)' }} strokeWidth={2} />
+                  <Eyebrow tone="var(--brass-soft)">{profile?.tier || CUSTOMER.tier} · Member since {memberSince}</Eyebrow>
+                </div>
+                {isEditing && <p className="mt-1.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.45)', fontFamily: "'Inter', sans-serif" }}>Tap your photo to change it</p>}
+              </div>
+            </div>
+            {!isEditing ? (
+              <button type="button" onClick={startEditing} className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-md px-3.5 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors" style={{ background: 'var(--brass)', color: 'var(--ink)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                <Pencil className="w-3.5 h-3.5" strokeWidth={2} /> Edit
+              </button>
+            ) : (
+              <span className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-md px-3.5 py-2 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ border: '1px solid rgba(201,168,118,0.4)', color: 'var(--brass-soft)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                <Pencil className="w-3.5 h-3.5" strokeWidth={2} /> Editing
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="px-8 py-7">
+          <p className="text-[13px]" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>
+            Keep your contact details current so we can reach you for fittings, pickups, and order updates.
+          </p>
+
+          {notice && (
+            <div className="mt-5 rise flex items-center gap-2 rounded-lg px-4 py-3 text-[13px]" style={{ color: 'var(--success)', background: '#EEF6EF', border: '1px solid #CDE2D1' }}>
+              <Check className="h-4 w-4 flex-shrink-0" />{notice}
+            </div>
+          )}
+
+          <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--line)' }}>
+            <Eyebrow>Contact information</Eyebrow>
+          </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <ProfileField icon={UserRound} label="Full name" value={form.name} onChange={(value) => update('name', value)} disabled={!isEditing} />
+            <ProfileField icon={Mail} label="Email address" type="email" value={form.email} onChange={(value) => update('email', value)} disabled={!isEditing} />
+            <ProfileField icon={Phone} label="Contact number" value={form.contact} onChange={(value) => update('contact', value)} disabled={!isEditing} />
+          </div>
+
+          <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--line)' }}>
+            <Eyebrow>Mailing address</Eyebrow>
+            <div className="mt-4">
+              <ProfileField icon={MapPin} label="Address" value={form.address} onChange={(value) => update('address', value)} disabled={!isEditing} />
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-8 py-6 flex items-center gap-3" style={{ borderTop: '1px solid var(--line)', background: 'var(--paper)', borderBottomLeftRadius: 14, borderBottomRightRadius: 14 }}>
+          {isEditing ? (
+            <>
+              <button disabled={saving} className="inline-flex items-center gap-2 rounded-md px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white transition-opacity disabled:opacity-60" style={{ background: 'var(--ink)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                <Save className="h-3.5 w-3.5" />{saving ? 'Saving…' : 'Save profile'}
+              </button>
+              <button type="button" disabled={saving} onClick={cancelEditing} className="rounded-md px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors disabled:opacity-60" style={{ border: '1px solid var(--line)', color: 'var(--muted)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={startEditing} className="inline-flex items-center gap-2 rounded-md px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white" style={{ background: 'var(--ink)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                <Pencil className="h-3.5 w-3.5" /> Edit profile
+              </button>
+              <button type="button" onClick={onClose} className="rounded-md px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors" style={{ border: '1px solid var(--line)', color: 'var(--muted)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                Close
+              </button>
+            </>
+          )}
+        </div>
+      </form>
+    </div>
+  );
 }
 
-function ProfileField({ label, value, onChange, type = 'text' }) { return <label className="block text-xs font-medium text-[#4C4941]">{label}<input required type={type} value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full border border-[#E7E1D3] bg-white px-3 py-2.5 text-sm text-[#14171F] outline-none focus:border-[#A9824F]" /></label>; }
+function ProfileField({ icon: Icon, label, value, onChange, type = 'text', disabled = false }) {
+  return (
+    <label className="block text-[12px] font-medium" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>
+      {label}
+      <div className="relative mt-2">
+        {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: disabled ? 'var(--muted)' : 'var(--brass)' }} strokeWidth={1.8} />}
+        <input
+          required
+          type={type}
+          value={value}
+          disabled={disabled}
+          readOnly={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          className="input-field"
+          style={{
+            paddingLeft: Icon ? 34 : undefined,
+            background: disabled ? 'var(--brass-wash)' : '#fff',
+            color: disabled ? 'var(--muted)' : 'var(--ink)',
+            cursor: disabled ? 'default' : 'text',
+            borderColor: disabled ? 'var(--line)' : undefined,
+          }}
+        />
+      </div>
+    </label>
+  );
+}

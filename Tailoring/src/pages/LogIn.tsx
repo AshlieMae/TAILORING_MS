@@ -88,30 +88,15 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [changeMode, setChangeMode] = useState(false);
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
- const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
-    setNotice('');
     setIsSubmitting(true);
     try {
-      if (changeMode) {
-        if (newPassword.length < 8) throw new Error('New password must be at least 8 characters.');
-        if (newPassword !== confirmPassword) throw new Error('New passwords do not match.');
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/change-password`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, currentPassword: password, newPassword }) });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Unable to change password.');
-        setNotice('Password changed successfully. You can now sign in.');
-        setChangeMode(false); setPassword(''); setNewPassword(''); setConfirmPassword('');
-        return;
-      }
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -243,10 +228,10 @@ export default function LoginPage() {
             className="text-3xl sm:text-4xl leading-tight mb-2 text-[#242017]"
             style={{ fontFamily: "'Fraunces', serif", fontWeight: 500 }}
           >
-            {changeMode ? 'Change password' : 'Welcome back'}
+            Welcome back
           </h1>
           <p className="text-[13px] text-[#847A5F] font-light mb-9 leading-relaxed">
-            {changeMode ? 'Enter your current password and choose a new one.' : 'Enter your details to pick up right where you left off.'}
+            Enter your details to pick up right where you left off.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -255,7 +240,6 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
-            {notice && <div role="status" className="border border-[#55734E]/30 bg-[#EEF5EA] px-3 py-2 text-sm text-[#3F6633]">{notice}</div>}
             <div className="ml-field" style={{ animationDelay: '0.05s' }}>
               <label htmlFor="email" className="block mb-2">
                 <Label>Email address</Label>
@@ -275,18 +259,9 @@ export default function LoginPage() {
             </div>
 
             <div className="ml-field" style={{ animationDelay: '0.12s' }}>
-              <div className="flex items-center justify-between mb-2">
-                <label htmlFor="password">
-                  <Label>Password</Label>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => { setChangeMode((value) => !value); setError(''); setNotice(''); setNewPassword(''); setConfirmPassword(''); }}
-                  className="text-[10px] tracking-[0.12em] uppercase text-[#A63D40] hover:text-[#8B3235] transition-colors"
-                >
-                  {changeMode ? 'Back to sign in' : 'Change password'}
-                </button>
-              </div>
+              <label htmlFor="password" className="block mb-2">
+                <Label>Password</Label>
+              </label>
               <div className="relative flex items-center border-b border-[#D8CFAE] focus-within:border-[#A63D40] transition-colors">
                 <Lock className="w-4 h-4 text-[#A69A76]" strokeWidth={1.5} />
                 <input
@@ -309,11 +284,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {changeMode && <>
-              <div className="ml-field" style={{ animationDelay: '0.16s' }}><label htmlFor="newPassword" className="block mb-2"><Label>New password</Label></label><input id="newPassword" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required className="w-full bg-transparent border-b border-[#D8CFAE] py-3 text-[14px] focus:border-[#A63D40] focus:outline-none" /></div>
-              <div className="ml-field" style={{ animationDelay: '0.2s' }}><label htmlFor="confirmPassword" className="block mb-2"><Label>Confirm new password</Label></label><input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="w-full bg-transparent border-b border-[#D8CFAE] py-3 text-[14px] focus:border-[#A63D40] focus:outline-none" /></div>
-            </>}
-
             <div className="ml-field flex items-center justify-between pt-1" style={{ animationDelay: '0.18s' }}>
               <label className="flex items-center gap-2.5 text-xs text-[#847A5F] cursor-pointer">
                 <input
@@ -334,7 +304,7 @@ export default function LoginPage() {
               style={{ animationDelay: '0.24s' }}
             >
               <span className="absolute left-4 w-1.5 h-1.5 rounded-full bg-[#EDE7D6]/70 shadow-[0_0_0_2px_rgba(237,231,214,0.15)]" />
-              {isSubmitting ? 'Saving...' : changeMode ? 'Update password' : 'Sign in'}
+              {isSubmitting ? 'Signing in...' : 'Sign in'}
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
             </button>
           </form>

@@ -31,6 +31,7 @@ const App: React.FC = () => {
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/customers" element={<AdminDashboard initialView="customers" />} />
       <Route path="/orders" element={<AdminDashboard initialView="orders" />} />
+      <Route path="/garment-catalog" element={<AdminDashboard initialView="catalog" />} />
       <Route path="/production" element={<AdminDashboard initialView="production" />} />
       <Route path="/inventory" element={<AdminDashboard initialView="inventory" />} />
       <Route path="/payments" element={<AdminDashboard initialView="payments" />} />

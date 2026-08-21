@@ -27,6 +27,7 @@ import { AdminCustomersView } from '../Pages_Admin/Customers';
 import { AdminOrdersView } from '../Pages_Admin/Orders';
 import { AdminProductionView } from '../Pages_Admin/Production';
 import { AdminInventoryManagementView } from '../Pages_Admin/InventoryManagement';
+import { AdminGarmentCatalogView } from '../Pages_Admin/GarmentCatalog';
 import { AdminPaymentsView } from '../Pages_Admin/Payments';
 import { AdminReportsView } from '../Pages_Admin/Reports';
 import { AdminSettingsWideView } from '../Pages_Admin/SettingsWide';
@@ -138,12 +139,13 @@ const stageTone: Record<string, string> = {
   'Ready for Pickup': 'border-[#B7D9D3] bg-[#E1EEEC] text-[#2C6E68]',
 };
 
-type ViewKey = 'dashboard' | 'customers' | 'orders' | 'production' | 'inventory' | 'payments' | 'reports' | 'settings' | 'users';
+type ViewKey = 'dashboard' | 'customers' | 'orders' | 'catalog' | 'production' | 'inventory' | 'payments' | 'reports' | 'settings' | 'users';
 
 const NAV: { label: string; icon: typeof LayoutDashboard; view: ViewKey }[] = [
   { label: 'Dashboard', icon: LayoutDashboard, view: 'dashboard' },
   { label: 'Customers', icon: Users, view: 'customers' },
   { label: 'Orders', icon: Shirt, view: 'orders' },
+  { label: 'Garment Catalog', icon: Shirt, view: 'catalog' },
   { label: 'Production', icon: Scissors, view: 'production' },
   { label: 'Inventory', icon: Boxes, view: 'inventory' },
   { label: 'Payments', icon: Wallet, view: 'payments' },
@@ -372,6 +374,8 @@ export default function AdminDashboard({ initialView = 'dashboard' }: { initialV
         return <AdminCustomersView externalQuery={quickSearch} />;
       case 'orders':
         return <AdminOrdersView externalQuery={quickSearch} />;
+      case 'catalog':
+        return <AdminGarmentCatalogView />;
       case 'production':
         return <AdminProductionView />;
       case 'inventory':

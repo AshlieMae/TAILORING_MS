@@ -207,10 +207,10 @@ export function RegisterCustomerModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
               <div>
-                <label htmlFor="custLastName" className="block mb-1.5"><MonoLabel>Last name</MonoLabel></label>
+                <label htmlFor="custFirstName" className="block mb-1.5"><MonoLabel>First name</MonoLabel></label>
                 <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
                   <User className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                  <input id="custLastName" value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} placeholder="Dela Cruz" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]" />
+                  <input id="custFirstName" value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} placeholder="Juana" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]" />
                 </div>
               </div>
               <div>
@@ -220,9 +220,9 @@ export function RegisterCustomerModal({
                 </div>
               </div>
               <div>
-                <label htmlFor="custFirstName" className="block mb-1.5"><MonoLabel>First name</MonoLabel></label>
+                <label htmlFor="custLastName" className="block mb-1.5"><MonoLabel>Last name</MonoLabel></label>
                 <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                  <input id="custFirstName" value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} placeholder="Juana" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none text-[#2A211D]" />
+                  <input id="custLastName" value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} placeholder="Dela Cruz" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none text-[#2A211D]" />
                 </div>
               </div>
               <div>
