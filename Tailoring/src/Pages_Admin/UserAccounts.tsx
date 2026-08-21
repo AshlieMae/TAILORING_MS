@@ -196,30 +196,56 @@ function CreateAccountModal({ onClose, onCreate }: { onClose: () => void; onCrea
   );
 }
 
-// Renders the full Basic Information record for a single account inline, inside the
+// Renders the Basic Information record for a single account inline, inside the
 // row's expanded panel — no modal, no separate button. Sourced exactly as returned by
-// GET /auth/users for that user's own database row. Fields that do not apply to the
-// account's role are shown as "N/A" rather than hidden or borrowed from elsewhere.
+// GET /auth/users for that user's own database row.
+//
+// The fields shown are role-based on the SELECTED account's user.role (never the
+// logged-in admin's role, never authToken/localStorage). Irrelevant fields are simply
+// not rendered — they are no longer shown as "N/A".
 function BasicInfoPanel({ user }: { user: PendingUser }) {
   const na = (value: string | null | undefined) => (value && value.trim() ? value : 'N/A');
-  const isStaff = user.role === 'front_desk' || user.role === 'tailor';
-  const isCustomer = user.role === 'customer';
+  const dateOrNA = (value: string | null | undefined) => (value ? new Date(value).toLocaleDateString() : 'N/A');
 
-  const rows: [string, string][] = [
+  const isCustomer = user.role === 'customer';
+  const isStaff = user.role === 'front_desk' || user.role === 'tailor';
+  const isAdmin = user.role === 'admin';
+
+  let rows: [string, string][] = [
     ['Full name', na(user.fullName)],
     ['Email', na(user.email)],
     ['Role', ROLE_LABEL[user.role]],
-    ['Contact number', na(user.contactNumber)],
-    ['Address', na(user.address)],
-    ['Date of birth', user.dateOfBirth ? new Date(user.dateOfBirth).toLocaleDateString() : 'N/A'],
-    ['Gender', na(user.gender)],
-    ['Civil status', na(user.civilStatus)],
-    ['Occupation', na(user.occupation)],
-    ['Employee ID', isStaff ? na(user.id) : 'N/A'],
-    ['Customer ID', isCustomer ? na(user.id) : 'N/A'],
-    ['Position', isStaff ? na(user.position) : 'N/A'],
-    ['Date hired', isStaff && user.dateHired ? new Date(user.dateHired).toLocaleDateString() : 'N/A'],
   ];
+
+  if (isCustomer) {
+    rows = [
+      ...rows,
+      ['Customer ID', na(user.id)],
+      ['Contact number', na(user.contactNumber)],
+      ['Address', na(user.address)],
+      ['Date of birth', dateOrNA(user.dateOfBirth)],
+      ['Gender', na(user.gender)],
+      ['Civil status', na(user.civilStatus)],
+      ['Occupation', na(user.occupation)],
+    ];
+  } else if (isStaff) {
+    rows = [
+      ...rows,
+      ['Employee ID', na(user.id)],
+      ['Contact number', na(user.contactNumber)],
+      ['Address', na(user.address)],
+      ['Position', na(user.position)],
+      ['Date hired', dateOrNA(user.dateHired)],
+    ];
+  } else if (isAdmin) {
+    rows = [
+      ...rows,
+      ['Contact number', na(user.contactNumber)],
+      ['Address', na(user.address)],
+      ['Position', na(user.position)],
+      ['Date hired', dateOrNA(user.dateHired)],
+    ];
+  }
 
   return (
     <div className="grid grid-cols-2 gap-x-6 gap-y-4 border-t px-8 py-6 sm:grid-cols-3 lg:grid-cols-4" style={{ borderColor: COLORS.border, background: COLORS.surfaceAlt }}>
