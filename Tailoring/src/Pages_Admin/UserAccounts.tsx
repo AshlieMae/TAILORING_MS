@@ -22,6 +22,10 @@ interface PendingUser {
   role: UserRole;
   status: AccountStatus;
   requestedAt: string;
+  updatedAt: string | null;
+  activityType?: 'profile_updated' | 'password_changed' | null;
+  activityDetails?: string | null;
+  activityAt?: string | null;
 }
 
 const ROLE_LABEL: Record<UserRole, string> = {
@@ -177,8 +181,8 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'Unable to load accounts.');
-        setUsers(data.users.map((user: { id: number; full_name: string | null; email: string; role: UserRole; status: AccountStatus; created_at: string }) => ({
-          dbId: user.id, id: accountIdentifier(user), fullName: user.full_name || user.email, email: user.email, role: user.role, status: user.status, requestedAt: user.created_at.slice(0, 10),
+        setUsers(data.users.map((user: { id: number; full_name: string | null; email: string; role: UserRole; status: AccountStatus; created_at: string; updated_at: string | null; activity_type?: 'profile_updated' | 'password_changed' | null; activity_details?: string | null; activity_at?: string | null }) => ({
+          dbId: user.id, id: accountIdentifier(user), fullName: user.full_name || user.email, email: user.email, role: user.role, status: user.status, requestedAt: user.created_at.slice(0, 10), updatedAt: user.updated_at, activityType: user.activity_type, activityDetails: user.activity_details, activityAt: user.activity_at,
         })));
       })
       .catch((requestError) => {
@@ -227,7 +231,7 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
     const response = await fetch(`${API_URL}/auth/users`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ email: form.email, password: form.tempPassword, role: form.role, fullName }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Unable to create account.');
-    const newUser: PendingUser = { dbId: data.user.id, id: accountIdentifier(data.user), fullName: data.user.full_name || fullName, email: data.user.email, role: data.user.role, status: data.user.status, requestedAt: data.user.created_at.slice(0, 10) };
+    const newUser: PendingUser = { dbId: data.user.id, id: accountIdentifier(data.user), fullName: data.user.full_name || fullName, email: data.user.email, role: data.user.role, status: data.user.status, requestedAt: data.user.created_at.slice(0, 10), updatedAt: data.user.updated_at };
     setUsers((prev) => [newUser, ...prev]);
     setShowCreateModal(false);
     setJustCreated(newUser.fullName);
@@ -292,8 +296,8 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
 
       <Card className="overflow-x-auto">
         <div className="min-w-[940px]">
-          <div className="hidden grid-cols-[1.25fr_1.55fr_0.9fr_0.85fr_0.95fr_1.15fr] gap-6 border-b px-8 py-4 md:grid" style={{ borderColor: COLORS.border, background: COLORS.surfaceAlt }}>
-            {['Name', 'Email', 'Role', 'Requested', 'Status', 'Actions'].map((h) => (
+          <div className="hidden grid-cols-[1.25fr_1.55fr_0.9fr_1.2fr_0.95fr_1.15fr] gap-6 border-b px-8 py-4 md:grid" style={{ borderColor: COLORS.border, background: COLORS.surfaceAlt }}>
+            {['Name', 'Email', 'Role', 'Latest update', 'Status', 'Actions'].map((h) => (
               <span key={h} className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: COLORS.faint }}>{h}</span>
             ))}
           </div>
@@ -307,7 +311,7 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
             return (
               <div
                 key={user.id}
-                className="relative grid min-w-[940px] grid-cols-[1.25fr_1.55fr_0.9fr_0.85fr_0.95fr_1.15fr] items-center gap-6 border-b py-5 pl-8 pr-8 transition-colors last:border-b-0"
+                className="relative grid min-w-[940px] grid-cols-[1.25fr_1.55fr_0.9fr_1.2fr_0.95fr_1.15fr] items-center gap-6 border-b py-5 pl-8 pr-8 transition-colors last:border-b-0"
                 style={{ borderColor: COLORS.border }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.surfaceAlt; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
@@ -319,7 +323,11 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
                 </div>
                 <div className="truncate text-[13px]" style={{ color: COLORS.inkSoft }}>{user.email}</div>
                 <div className="text-[12px]" style={{ color: COLORS.inkSoft }}>{ROLE_LABEL[user.role]}</div>
-                <div className="mono text-[12px]" style={{ color: COLORS.muted }}>{user.requestedAt}</div>
+                <div>
+                  <div className="mono text-[11px]" style={{ color: COLORS.muted }}>{user.activityAt ? new Date(user.activityAt).toLocaleString() : user.updatedAt ? new Date(user.updatedAt).toLocaleString() : user.requestedAt}</div>
+                  {user.activityType === 'password_changed' && <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: COLORS.success }}>Password changed</div>}
+                  {user.activityType === 'profile_updated' && user.activityDetails && <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: COLORS.success }}>Profile updated: {user.activityDetails}</div>}
+                </div>
                 <div><Badge tone={STATUS_TONE[user.status]}>{STATUS_LABEL[user.status]}</Badge></div>
 
                 <div className="flex items-center justify-end gap-2 whitespace-nowrap">

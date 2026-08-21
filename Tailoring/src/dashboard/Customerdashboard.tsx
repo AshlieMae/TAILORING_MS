@@ -760,11 +760,12 @@ function PaymentsView() {
 /* ============================================================
    SETTINGS VIEW
 ============================================================= */
-function SettingsView() {
-  const [profileForm, setProfileForm] = useState({ name: CUSTOMER.name, email: CUSTOMER.email, phone: '+63 917 000 1234' });
+function SettingsView({ profile, onProfileSaved, onUnauthorized }) {
+  const [profileForm, setProfileForm] = useState(() => ({ name: profile?.full_name || profile?.name || '', email: profile?.email || '', phone: profile?.contact_number || '' }));
   const [profileDraft, setProfileDraft] = useState(profileForm);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileNotice, setProfileNotice] = useState('');
+  const [profileError, setProfileError] = useState('');
 
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const [isEditingPassword, setIsEditingPassword] = useState(false);
@@ -774,28 +775,54 @@ function SettingsView() {
 
   const [prefs, setPrefs] = useState({ reminders: true, updates: true });
 
-  const startEditProfile = () => { setProfileDraft(profileForm); setProfileNotice(''); setIsEditingProfile(true); };
+  useEffect(() => {
+    const current = { name: profile?.full_name || profile?.name || '', email: profile?.email || '', phone: profile?.contact_number || '' };
+    setProfileForm(current); setProfileDraft(current);
+  }, [profile]);
+  useEffect(() => {
+    fetch(`${API_URL}/auth/preferences`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (response) => { const data = await response.json(); if (!response.ok) { if (response.status === 401) onUnauthorized(); throw new Error(data.message || 'Unable to load preferences.'); } return data; })
+      .then((data) => setPrefs({ reminders: !!data.preferences.reminder_notifications, updates: !!data.preferences.update_notifications }))
+      .catch(() => {});
+  }, []);
+  const startEditProfile = () => { setProfileDraft(profileForm); setProfileNotice(''); setProfileError(''); setIsEditingProfile(true); };
   const cancelEditProfile = () => { setProfileDraft(profileForm); setIsEditingProfile(false); };
-  const saveProfile = (event) => {
+  const saveProfile = async (event) => {
     event.preventDefault();
-    setProfileForm(profileDraft);
-    setIsEditingProfile(false);
-    setProfileNotice('Profile details saved.');
-    window.setTimeout(() => setProfileNotice(''), 2500);
+    setProfileError('');
+    try {
+      const response = await fetch(`${API_URL}/auth/profile`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ fullName: profileDraft.name, email: profileDraft.email, contactNumber: profileDraft.phone }) });
+      const data = await response.json();
+      if (!response.ok) { if (response.status === 401) onUnauthorized(); throw new Error(data.message || 'Unable to save profile.'); }
+      const saved = { ...data.user, name: data.user.full_name };
+      setProfileForm({ name: saved.full_name || '', email: saved.email || '', phone: saved.contact_number || '' });
+      onProfileSaved(saved); setIsEditingProfile(false); setProfileNotice('Profile details saved.');
+    } catch (error) { setProfileError(error instanceof Error ? error.message : 'Unable to save profile.'); }
   };
 
   const startEditPassword = () => { setPasswordForm({ current: '', next: '', confirm: '' }); setPasswordError(''); setPasswordNotice(''); setShowPassword(false); setIsEditingPassword(true); };
   const cancelEditPassword = () => { setPasswordForm({ current: '', next: '', confirm: '' }); setPasswordError(''); setIsEditingPassword(false); };
-  const savePassword = (event) => {
+  const savePassword = async (event) => {
     event.preventDefault();
     if (!passwordForm.current || !passwordForm.next || !passwordForm.confirm) { setPasswordError('Fill in all three fields.'); return; }
     if (passwordForm.next.length < 8) { setPasswordError('New password must be at least 8 characters.'); return; }
     if (passwordForm.next !== passwordForm.confirm) { setPasswordError('New password and confirmation do not match.'); return; }
     setPasswordError('');
-    setPasswordForm({ current: '', next: '', confirm: '' });
-    setIsEditingPassword(false);
-    setPasswordNotice('Password updated.');
-    window.setTimeout(() => setPasswordNotice(''), 2500);
+    try {
+      const response = await fetch(`${API_URL}/auth/change-password`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ currentPassword: passwordForm.current, newPassword: passwordForm.next }) });
+      const data = await response.json();
+      if (!response.ok) { if (response.status === 401) onUnauthorized(); throw new Error(data.message || 'Unable to update password.'); }
+      setPasswordForm({ current: '', next: '', confirm: '' }); setIsEditingPassword(false); setPasswordNotice(data.message || 'Password updated.');
+    } catch (error) { setPasswordError(error instanceof Error ? error.message : 'Unable to update password.'); }
+  };
+
+  const savePreferences = async (next) => {
+    const previous = prefs; setPrefs(next);
+    try {
+      const response = await fetch(`${API_URL}/auth/preferences`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify(next) });
+      const data = await response.json();
+      if (!response.ok) { if (response.status === 401) onUnauthorized(); throw new Error(data.message || 'Unable to save preferences.'); }
+    } catch (error) { setPrefs(previous); setProfileError(error instanceof Error ? error.message : 'Unable to save preferences.'); }
   };
 
   return (
@@ -825,6 +852,7 @@ function SettingsView() {
             <Check className="h-4 w-4 flex-shrink-0" />{profileNotice}
           </div>
         )}
+        {profileError && <div className="rise mb-5 flex items-center gap-2 rounded-lg px-4 py-3 text-[13px]" style={{ color: 'var(--rust)', background: 'rgba(160,82,45,0.08)', border: '1px solid rgba(160,82,45,0.25)' }}><X className="h-4 w-4 flex-shrink-0" />{profileError}</div>}
 
         <form onSubmit={saveProfile}>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -909,8 +937,8 @@ function SettingsView() {
           <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--brass-wash)', color: 'var(--brass)' }}><Bell className="w-5 h-5" strokeWidth={1.6} /></div>
           <Display as="h2" className="text-xl" style={{ color: 'var(--ink)', fontWeight: 600 }}>Notifications</Display>
         </div>
-        <Toggle label="Fitting reminders" checked={prefs.reminders} onClick={() => setPrefs({ ...prefs, reminders: !prefs.reminders })} />
-        <Toggle label="Order updates" checked={prefs.updates} onClick={() => setPrefs({ ...prefs, updates: !prefs.updates })} last />
+        <Toggle label="Fitting reminders" checked={prefs.reminders} onClick={() => savePreferences({ ...prefs, reminders: !prefs.reminders })} />
+        <Toggle label="Order updates" checked={prefs.updates} onClick={() => savePreferences({ ...prefs, updates: !prefs.updates })} last />
         <p className="mt-4 text-[11px]" style={{ color: 'var(--muted)', fontFamily: "'IBM Plex Mono', monospace" }}>CHANGES APPLY IMMEDIATELY</p>
       </div>
     </div>
@@ -972,9 +1000,16 @@ export default function CustomerDashboard() {
       return;
     }
     setProfile(user);
+    fetch(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) { if (response.status === 401) signOut(); throw new Error(data.message || 'Unable to load account profile.'); }
+        if (data.user) setProfile((current) => ({ ...current, ...data.user }));
+      })
+      .catch(() => {})
     fetch(`${API_URL}/customer/dashboard`, { headers: { Authorization: `Bearer ${authToken()}` } })
       .then(async (response) => {
-        if (!response.ok) throw new Error('Unable to load account profile.');
+        if (!response.ok) { if (response.status === 401) signOut(); throw new Error('Unable to load account profile.'); }
         return response.json();
       })
       .then((data) => { if (data.user) setProfile((current) => ({ ...current, ...data.user })); })
@@ -1004,7 +1039,7 @@ export default function CustomerDashboard() {
       case 'measurements': return <MeasurementsView />;
       case 'appointments': return <AppointmentsView />;
       case 'payments': return <PaymentsView />;
-      case 'settings': return <SettingsView />;
+      case 'settings': return <SettingsView profile={profile} onProfileSaved={(updated) => { setProfile(updated); const storage = localStorage.getItem('authToken') ? localStorage : sessionStorage; storage.setItem('currentUser', JSON.stringify(updated)); }} onUnauthorized={() => signOut()} />;
       default: return <DashboardView />;
     }
   }
@@ -1095,24 +1130,25 @@ export default function CustomerDashboard() {
           {renderView()}
         </main>
       </div>
-      {profileOpen && <CustomerProfileModal profile={profile} fallbackName={customerName} onClose={() => setProfileOpen(false)} onSave={(updated) => { setProfile(updated); const storage = localStorage.getItem('authToken') ? localStorage : sessionStorage; storage.setItem('currentUser', JSON.stringify(updated)); }} />}
+      {profileOpen && <CustomerProfileModal profile={profile} fallbackName={customerName} onClose={() => setProfileOpen(false)} onSave={(updated) => { setProfile(updated); const storage = localStorage.getItem('authToken') ? localStorage : sessionStorage; storage.setItem('currentUser', JSON.stringify(updated)); }} onUnauthorized={signOut} />}
     </div>
   );
 }
 
-function CustomerProfileModal({ profile, fallbackName, onClose, onSave }) {
+function CustomerProfileModal({ profile, fallbackName, onClose, onSave, onUnauthorized }) {
   const initialName = profile?.full_name || profile?.name || fallbackName;
   const initialForm = { name: initialName, email: profile?.email || '', contact: profile?.contact_number || profile?.contact || '', address: profile?.address || '', photo: profile?.profile_picture || '' };
   const [form, setForm] = useState(initialForm);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const memberSince = profile?.created_at ? new Date(profile.created_at).getFullYear().toString() : CUSTOMER.memberSince;
   const initials = (form.name || fallbackName).split(' ').filter(Boolean).map((n) => n[0]).join('').slice(0, 2).toUpperCase();
 
-  const startEditing = () => { setNotice(''); setIsEditing(true); };
-  const cancelEditing = () => { setForm(initialForm); setNotice(''); setIsEditing(false); };
+  const startEditing = () => { setNotice(''); setError(''); setIsEditing(true); };
+  const cancelEditing = () => { setForm(initialForm); setNotice(''); setError(''); setIsEditing(false); };
 
   const pickPhoto = (event) => {
     const file = event.target.files?.[0];
@@ -1125,12 +1161,13 @@ function CustomerProfileModal({ profile, fallbackName, onClose, onSave }) {
   const save = async (event) => {
     event.preventDefault();
     if (!isEditing) return;
-    setSaving(true); setNotice('');
-    const updated = { ...profile, full_name: form.name, name: form.name, email: form.email, contact_number: form.contact, address: form.address, profile_picture: form.photo };
+    setSaving(true); setNotice(''); setError('');
     try {
-      const response = await fetch(`${API_URL}/auth/profile`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ fullName: form.name, contactNumber: form.contact, address: form.address, profilePicture: form.photo }) });
-      if (response.ok) { const data = await response.json(); onSave({ ...updated, ...data.user }); setNotice('Profile saved to your account.'); } else { onSave(updated); setNotice('Profile saved on this device.'); }
-    } catch { onSave(updated); setNotice('Profile saved on this device.'); } finally { setSaving(false); setIsEditing(false); }
+      const response = await fetch(`${API_URL}/auth/profile`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ fullName: form.name, email: form.email, contactNumber: form.contact, address: form.address, profilePicture: form.photo }) });
+      const data = await response.json();
+      if (!response.ok) { if (response.status === 401) onUnauthorized(); throw new Error(data.message || 'Unable to save profile.'); }
+      onSave({ ...data.user, name: data.user.full_name }); setNotice('Profile saved to your account.'); setIsEditing(false);
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Unable to save profile.'); } finally { setSaving(false); }
   };
 
   return (
@@ -1194,6 +1231,7 @@ function CustomerProfileModal({ profile, fallbackName, onClose, onSave }) {
               <Check className="h-4 w-4 flex-shrink-0" />{notice}
             </div>
           )}
+          {error && <div role="alert" className="mt-5 rise flex items-center gap-2 rounded-lg px-4 py-3 text-[13px]" style={{ color: 'var(--rust)', background: 'rgba(160,82,45,0.08)', border: '1px solid rgba(160,82,45,0.25)' }}><X className="h-4 w-4 flex-shrink-0" />{error}</div>}
 
           <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--line)' }}>
             <Eyebrow>Contact information</Eyebrow>

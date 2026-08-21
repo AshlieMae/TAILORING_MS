@@ -54,6 +54,8 @@ const WALNUT = '#1E1912';
 const WALNUT_RAISED = '#2A2319';
 const WALNUT_LINE = '#3C3225';
 const WALNUT_MUTED = '#9C8F79';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const authToken = () => localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
 
 const FONT_IMPORT = `
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,600;1,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
@@ -355,12 +357,25 @@ export default function AdminDashboard({ initialView = 'dashboard' }: { initialV
   const [view, setView] = useState<ViewKey>(initialView);
   const [quickSearch, setQuickSearch] = useState('');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [accountActivity, setAccountActivity] = useState<{ activity_type: 'profile_updated' | 'password_changed'; details: string | null; created_at: string; full_name: string | null; email: string; customer_id: string | null; employee_id: string | null; role: string }[]>([]);
   const [showProfile, setShowProfile] = useState(false);
   const signOut = () => {
     localStorage.removeItem('authToken'); localStorage.removeItem('currentUser');
     sessionStorage.removeItem('authToken'); sessionStorage.removeItem('currentUser');
     navigate('/login', { replace: true });
   };
+
+  useEffect(() => {
+    const token = authToken();
+    if (!token) return;
+    fetch(`${API_URL}/auth/account-activity?limit=5`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'Unable to load account activity.');
+        setAccountActivity(Array.isArray(data.activity) ? data.activity : []);
+      })
+      .catch(() => {});
+  }, []);
 
   const currentNavLabel = NAV.find((n) => n.view === view)?.label ?? 'Dashboard';
 
@@ -487,12 +502,19 @@ export default function AdminDashboard({ initialView = 'dashboard' }: { initialV
             <div className="relative">
             <button onClick={() => setNotificationsOpen((open) => !open)} className="relative transition-colors" style={{ color: '#3D4F55' }} aria-label="Notifications" aria-expanded={notificationsOpen}>
               <Bell className="w-5 h-5" strokeWidth={1.5} />
-              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full ring-2" style={{ background: THREAD, boxShadow: `0 0 0 2px ${PAGE}` }} />
+              {accountActivity.length > 0 && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full ring-2" style={{ background: THREAD, boxShadow: `0 0 0 2px ${PAGE}` }} />}
             </button>
             {notificationsOpen && (
               <div className="absolute right-0 top-8 z-30 w-72 border p-4 shadow-[0_12px_30px_-12px_rgba(42,38,32,0.4)]" style={{ borderColor: LINE, background: PAPER }}>
                 <MonoLabel className="block mb-3">Notifications</MonoLabel>
-                <p className="text-[13px]" style={{ color: '#3D4F55' }}>Review pending accounts in User Management.</p>
+                <div className="space-y-3">
+                  {accountActivity.map((item) => {
+                    const identifier = item.role === 'customer' ? item.customer_id : item.employee_id;
+                    const message = item.activity_type === 'password_changed' ? 'changed password' : `updated profile${item.details ? `: ${item.details}` : ''}`;
+                    return <div key={`${item.email}-${item.created_at}`} className="border-b pb-3 last:border-0 last:pb-0" style={{ borderColor: LINE }}><p className="text-[12px]" style={{ color: '#3D4F55' }}><strong>{item.full_name || item.email}</strong>{identifier ? ` (${identifier})` : ''} {message}.</p><MonoLabel className="mt-1 block">{new Date(item.created_at).toLocaleString()}</MonoLabel></div>;
+                  })}
+                  {!accountActivity.length && <p className="text-[13px]" style={{ color: '#3D4F55' }}>No recent account updates.</p>}
+                </div>
                 <button onClick={() => { setView('users'); setNotificationsOpen(false); }} className="mt-3 text-[11px] tracking-[0.12em] uppercase" style={{ color: THREAD }}>Open User Management</button>
               </div>
             )}
