@@ -23,6 +23,17 @@ interface PendingUser {
   status: AccountStatus;
   requestedAt: string;
   updatedAt: string | null;
+  // Basic information — sourced per-row from the database (customers table for
+  // customer accounts, users table for admin/front_desk/tailor). Never derived
+  // from the logged-in session.
+  contactNumber: string | null;
+  address: string | null;
+  dateOfBirth: string | null;
+  gender: string | null;
+  civilStatus: string | null;
+  occupation: string | null;
+  position: string | null;
+  dateHired: string | null;
   activityType?: 'profile_updated' | 'password_changed' | 'settings_updated' | null;
   activityDetails?: string | null;
   activityAt?: string | null;
@@ -185,6 +196,43 @@ function CreateAccountModal({ onClose, onCreate }: { onClose: () => void; onCrea
   );
 }
 
+// Renders the full Basic Information record for a single account inline, inside the
+// row's expanded panel — no modal, no separate button. Sourced exactly as returned by
+// GET /auth/users for that user's own database row. Fields that do not apply to the
+// account's role are shown as "N/A" rather than hidden or borrowed from elsewhere.
+function BasicInfoPanel({ user }: { user: PendingUser }) {
+  const na = (value: string | null | undefined) => (value && value.trim() ? value : 'N/A');
+  const isStaff = user.role === 'front_desk' || user.role === 'tailor';
+  const isCustomer = user.role === 'customer';
+
+  const rows: [string, string][] = [
+    ['Full name', na(user.fullName)],
+    ['Email', na(user.email)],
+    ['Role', ROLE_LABEL[user.role]],
+    ['Contact number', na(user.contactNumber)],
+    ['Address', na(user.address)],
+    ['Date of birth', user.dateOfBirth ? new Date(user.dateOfBirth).toLocaleDateString() : 'N/A'],
+    ['Gender', na(user.gender)],
+    ['Civil status', na(user.civilStatus)],
+    ['Occupation', na(user.occupation)],
+    ['Employee ID', isStaff ? na(user.id) : 'N/A'],
+    ['Customer ID', isCustomer ? na(user.id) : 'N/A'],
+    ['Position', isStaff ? na(user.position) : 'N/A'],
+    ['Date hired', isStaff && user.dateHired ? new Date(user.dateHired).toLocaleDateString() : 'N/A'],
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-x-6 gap-y-4 border-t px-8 py-6 sm:grid-cols-3 lg:grid-cols-4" style={{ borderColor: COLORS.border, background: COLORS.surfaceAlt }}>
+      {rows.map(([label, value]) => (
+        <div key={label}>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ color: COLORS.faint }}>{label}</div>
+          <div className="mt-1 text-[13px]" style={{ color: COLORS.ink }}>{value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function UserManagementView({ externalQuery = '' }: { externalQuery?: string }) {
   const [users, setUsers] = useState<PendingUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -194,6 +242,15 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [justCreated, setJustCreated] = useState('');
   const [operationError, setOperationError] = useState('');
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  function toggleExpanded(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   useEffect(() => {
     const token = authToken();
@@ -206,8 +263,34 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'Unable to load accounts.');
-        setUsers(data.users.map((user: { id: number; full_name: string | null; email: string; role: UserRole; status: AccountStatus; created_at: string; updated_at: string | null; activity_type?: 'profile_updated' | 'password_changed' | 'settings_updated' | null; activity_details?: string | null; activity_at?: string | null }) => ({
-          dbId: user.id, id: accountIdentifier(user), fullName: user.full_name || user.email, email: user.email, role: user.role, status: user.status, requestedAt: user.created_at.slice(0, 10), updatedAt: user.updated_at, activityType: user.activity_type, activityDetails: user.activity_details, activityAt: user.activity_at,
+        setUsers(data.users.map((user: {
+          id: number; full_name: string | null; email: string; role: UserRole; status: AccountStatus;
+          created_at: string; updated_at: string | null;
+          contact_number: string | null; address: string | null;
+          date_of_birth: string | null; gender: string | null; civil_status: string | null; occupation: string | null;
+          position: string | null; date_hired: string | null;
+          activity_type?: 'profile_updated' | 'password_changed' | 'settings_updated' | null;
+          activity_details?: string | null; activity_at?: string | null;
+        }) => ({
+          dbId: user.id,
+          id: accountIdentifier(user),
+          fullName: user.full_name || user.email,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          requestedAt: user.created_at.slice(0, 10),
+          updatedAt: user.updated_at,
+          contactNumber: user.contact_number,
+          address: user.address,
+          dateOfBirth: user.date_of_birth,
+          gender: user.gender,
+          civilStatus: user.civil_status,
+          occupation: user.occupation,
+          position: user.position,
+          dateHired: user.date_hired,
+          activityType: user.activity_type,
+          activityDetails: user.activity_details,
+          activityAt: user.activity_at,
         })));
       })
       .catch((requestError) => {
@@ -256,7 +339,24 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
     const response = await fetch(`${API_URL}/auth/users`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ email: form.email, password: form.tempPassword, role: form.role, fullName, contactNumber: form.contactNumber, address: form.address, dateOfBirth: form.dateOfBirth, gender: form.gender, civilStatus: form.civilStatus, occupation: form.occupation }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || 'Unable to create account.');
-    const newUser: PendingUser = { dbId: data.user.id, id: accountIdentifier(data.user), fullName: data.user.full_name || fullName, email: data.user.email, role: data.user.role, status: data.user.status, requestedAt: data.user.created_at.slice(0, 10), updatedAt: data.user.updated_at };
+    const newUser: PendingUser = {
+      dbId: data.user.id,
+      id: accountIdentifier(data.user),
+      fullName: data.user.full_name || fullName,
+      email: data.user.email,
+      role: data.user.role,
+      status: data.user.status,
+      requestedAt: data.user.created_at.slice(0, 10),
+      updatedAt: data.user.updated_at,
+      contactNumber: data.user.contact_number ?? (form.role === 'customer' ? form.contactNumber : null),
+      address: data.user.address ?? (form.role === 'customer' ? form.address : null),
+      dateOfBirth: data.user.date_of_birth ?? (form.role === 'customer' ? form.dateOfBirth : null),
+      gender: data.user.gender ?? (form.role === 'customer' ? form.gender : null),
+      civilStatus: data.user.civil_status ?? (form.role === 'customer' ? form.civilStatus : null),
+      occupation: data.user.occupation ?? (form.role === 'customer' ? form.occupation : null),
+      position: data.user.position ?? null,
+      dateHired: data.user.date_hired ?? null,
+    };
     setUsers((prev) => [newUser, ...prev]);
     setShowCreateModal(false);
     setJustCreated(newUser.fullName);
@@ -333,53 +433,64 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
           {filtered.map((user) => {
             const actions = actionsFor(user.status);
             const confirming = pendingConfirm?.id === user.id;
+            const expanded = expandedIds.has(user.id);
             return (
-              <div
-                key={user.id}
-                className="relative grid min-w-[940px] grid-cols-[1.25fr_1.55fr_0.9fr_1.2fr_0.95fr_1.15fr] items-center gap-6 border-b py-5 pl-8 pr-8 transition-colors last:border-b-0"
-                style={{ borderColor: COLORS.border }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.surfaceAlt; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              >
-                <span className="absolute bottom-0 left-0 top-0 w-1" style={{ background: STATUS_TAB_COLOR[user.status] }} aria-hidden="true" />
-                <div>
-                  <div className="text-[14px] font-medium" style={{ color: COLORS.ink }}>{user.fullName}</div>
-                  <div className="mono text-[11px]" style={{ color: COLORS.faint }}>{user.id}</div>
-                </div>
-                <div className="truncate text-[13px]" style={{ color: COLORS.inkSoft }}>{user.email}</div>
-                <div className="text-[12px]" style={{ color: COLORS.inkSoft }}>{ROLE_LABEL[user.role]}</div>
-                <div>
-                  <div className="mono text-[11px]" style={{ color: COLORS.muted }}>{user.activityAt ? new Date(user.activityAt).toLocaleString() : user.updatedAt ? new Date(user.updatedAt).toLocaleString() : user.requestedAt}</div>
-                  {user.activityType === 'password_changed' && <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: COLORS.success }}>Password changed</div>}
-                  {user.activityType === 'profile_updated' && user.activityDetails && <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: COLORS.success }}>Profile updated: {user.activityDetails}</div>}
-                  {user.activityType === 'settings_updated' && user.activityDetails && <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: COLORS.success }}>Settings updated: {user.activityDetails}</div>}
-                </div>
-                <div><Badge tone={STATUS_TONE[user.status]}>{STATUS_LABEL[user.status]}</Badge></div>
-
-                <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                  {confirming ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px]" style={{ color: COLORS.muted }}>
-                        {pendingConfirm.action === 'rejected' ? 'Reject this account?' : pendingConfirm.action === 'disabled' ? 'Disable this account?' : 'Confirm?'}
-                      </span>
-                      <button onClick={() => applyStatusChange(user.id, pendingConfirm.action)} className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-white" style={{ background: COLORS.navy, borderRadius: 6 }}>Yes</button>
-                      <button onClick={() => setPendingConfirm(null)} className="border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ borderColor: COLORS.border, color: COLORS.muted, borderRadius: 6 }}>Cancel</button>
+              <div key={user.id} className="border-b last:border-b-0" style={{ borderColor: COLORS.border }}>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleExpanded(user.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(user.id); } }}
+                  aria-expanded={expanded}
+                  className="relative grid min-w-[940px] cursor-pointer grid-cols-[1.25fr_1.55fr_0.9fr_1.2fr_0.95fr_1.15fr] items-center gap-6 py-5 pl-8 pr-8 transition-colors"
+                  onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.surfaceAlt; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <span className="absolute bottom-0 left-0 top-0 w-1" style={{ background: STATUS_TAB_COLOR[user.status] }} aria-hidden="true" />
+                  <div className="flex items-center gap-2">
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform" style={{ color: COLORS.faint, transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
+                    <div>
+                      <div className="text-[14px] font-medium" style={{ color: COLORS.ink }}>{user.fullName}</div>
+                      <div className="mono text-[11px]" style={{ color: COLORS.faint }}>{user.id}</div>
                     </div>
-                  ) : (
-                    actions.map((a) => (
-                      <button
-                        key={a.key}
-                        onClick={() => (a.key === 'rejected' || a.key === 'disabled' ? setPendingConfirm({ id: user.id, action: a.key }) : applyStatusChange(user.id, a.key))}
-                        className="flex items-center gap-1.5 border px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] transition-colors"
-                        style={{ borderColor: COLORS.border, color: a.tone, borderRadius: 6 }}
-                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.borderStrong; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; }}
-                      >
-                        {a.icon}{a.label}
-                      </button>
-                    ))
-                  )}
+                  </div>
+                  <div className="truncate text-[13px]" style={{ color: COLORS.inkSoft }}>{user.email}</div>
+                  <div className="text-[12px]" style={{ color: COLORS.inkSoft }}>{ROLE_LABEL[user.role]}</div>
+                  <div>
+                    <div className="mono text-[11px]" style={{ color: COLORS.muted }}>{user.activityAt ? new Date(user.activityAt).toLocaleString() : user.updatedAt ? new Date(user.updatedAt).toLocaleString() : user.requestedAt}</div>
+                    {user.activityType === 'password_changed' && <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: COLORS.success }}>Password changed</div>}
+                    {user.activityType === 'profile_updated' && user.activityDetails && <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: COLORS.success }}>Profile updated: {user.activityDetails}</div>}
+                    {user.activityType === 'settings_updated' && user.activityDetails && <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ color: COLORS.success }}>Settings updated: {user.activityDetails}</div>}
+                  </div>
+                  <div><Badge tone={STATUS_TONE[user.status]}>{STATUS_LABEL[user.status]}</Badge></div>
+
+                  <div className="flex items-center justify-end gap-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    {confirming ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px]" style={{ color: COLORS.muted }}>
+                          {pendingConfirm.action === 'rejected' ? 'Reject this account?' : pendingConfirm.action === 'disabled' ? 'Disable this account?' : 'Confirm?'}
+                        </span>
+                        <button onClick={() => applyStatusChange(user.id, pendingConfirm.action)} className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-white" style={{ background: COLORS.navy, borderRadius: 6 }}>Yes</button>
+                        <button onClick={() => setPendingConfirm(null)} className="border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ borderColor: COLORS.border, color: COLORS.muted, borderRadius: 6 }}>Cancel</button>
+                      </div>
+                    ) : (
+                      actions.map((a) => (
+                        <button
+                          key={a.key}
+                          onClick={() => (a.key === 'rejected' || a.key === 'disabled' ? setPendingConfirm({ id: user.id, action: a.key }) : applyStatusChange(user.id, a.key))}
+                          className="flex items-center gap-1.5 border px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] transition-colors"
+                          style={{ borderColor: COLORS.border, color: a.tone, borderRadius: 6 }}
+                          onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.borderStrong; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; }}
+                        >
+                          {a.icon}{a.label}
+                        </button>
+                      ))
+                    )}
+                  </div>
                 </div>
+
+                {expanded && <BasicInfoPanel user={user} />}
               </div>
             );
           })}
