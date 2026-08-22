@@ -158,6 +158,17 @@ const NAV = [
 
 const formatPeso = (n) => `₱${n.toLocaleString('en-PH')}`;
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+function dateForInput(value) {
+  if (!value) return '';
+  const raw = String(value);
+  // MySQL DATE values can reach the browser as an ISO timestamp at UTC midnight.
+  // Use the local calendar parts so a saved 10/10 does not display as 09/10.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (number) => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
 
 function sessionUser() {
   const stored = localStorage.getItem('currentUser') || sessionStorage.getItem('currentUser');
@@ -987,6 +998,7 @@ export default function CustomerDashboard() {
   const [now, setNow] = useState(() => new Date());
   const [profile, setProfile] = useState(() => sessionUser());
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileLoadError, setProfileLoadError] = useState('');
   const [catalog, setCatalog] = useState(() => getCatalog());
   useEffect(() => {
     const t = window.setInterval(() => setNow(new Date()), 60_000);
@@ -1004,16 +1016,24 @@ export default function CustomerDashboard() {
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok) { if (response.status === 401) signOut(); throw new Error(data.message || 'Unable to load account profile.'); }
-        if (data.user) setProfile((current) => ({ ...current, ...data.user }));
+        if (data.user) {
+          setProfile((current) => ({ ...current, ...data.user }));
+          setProfileLoadError('');
+        }
       })
-      .catch(() => {})
-    fetch(`${API_URL}/customer/dashboard`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .catch(() => setProfileLoadError('Unable to load your saved profile details. Please refresh after the server is running.'));
+    fetch(`${API_URL}/auth/customer/dashboard`, { headers: { Authorization: `Bearer ${authToken()}` } })
       .then(async (response) => {
         if (!response.ok) { if (response.status === 401) signOut(); throw new Error('Unable to load account profile.'); }
         return response.json();
       })
-      .then((data) => { if (data.user) setProfile((current) => ({ ...current, ...data.user })); })
-      .catch(() => { /* Use the profile saved by login if the dashboard endpoint is unavailable. */ });
+      .then((data) => {
+        if (data.user) {
+          setProfile((current) => ({ ...current, ...data.user }));
+          setProfileLoadError('');
+        }
+      })
+      .catch(() => setProfileLoadError('Unable to load your saved profile details. Please refresh after the server is running.'));
     fetch(`${API_URL}/auth/catalog`, { headers: { Authorization: `Bearer ${authToken()}` } })
       .then(async (response) => { if (!response.ok) throw new Error('Unable to load catalog.'); return response.json(); })
       .then((data) => { if (Array.isArray(data.catalog)) setCatalog(data.catalog); })
@@ -1127,17 +1147,26 @@ export default function CustomerDashboard() {
         </header>
 
         <main className="w-full px-6 sm:px-10 xl:px-12 py-10">
+          {profileLoadError && (
+            <div role="alert" className="mb-5 rounded-lg px-4 py-3 text-[13px]" style={{ color: 'var(--rust)', background: 'rgba(160,82,45,0.08)', border: '1px solid rgba(160,82,45,0.25)' }}>
+              {profileLoadError}
+            </div>
+          )}
           {renderView()}
         </main>
       </div>
-      {profileOpen && <CustomerProfileModal profile={profile} fallbackName={customerName} onClose={() => setProfileOpen(false)} onSave={(updated) => { setProfile(updated); const storage = localStorage.getItem('authToken') ? localStorage : sessionStorage; storage.setItem('currentUser', JSON.stringify(updated)); }} onUnauthorized={signOut} />}
+      {profileOpen && <CustomerProfileModal profile={profile} fallbackName={customerName} onClose={() => setProfileOpen(false)} onSave={(updated) => {
+        setProfile((current) => ({ ...current, ...updated }));
+        const storage = localStorage.getItem('authToken') ? localStorage : sessionStorage;
+        storage.setItem('currentUser', JSON.stringify({ ...(sessionUser() || {}), ...updated }));
+      }} onUnauthorized={signOut} />}
     </div>
   );
 }
 
 function CustomerProfileModal({ profile, fallbackName, onClose, onSave, onUnauthorized }) {
   const initialName = profile?.full_name || profile?.name || fallbackName;
-  const initialForm = { name: initialName, email: profile?.email || '', contact: profile?.contact_number || profile?.contact || '', address: profile?.address || '', photo: profile?.profile_picture || '', dateOfBirth: profile?.date_of_birth || '', gender: profile?.gender || '', civilStatus: profile?.civil_status || '', occupation: profile?.occupation || '' };
+  const initialForm = { name: initialName, email: profile?.email || '', contact: profile?.contact_number || profile?.contact || '', address: profile?.address || '', photo: profile?.profile_picture || '', dateOfBirth: dateForInput(profile?.date_of_birth), gender: profile?.gender || '', civilStatus: profile?.civil_status || '', occupation: profile?.occupation || '' };
   const [form, setForm] = useState(initialForm);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1166,7 +1195,9 @@ function CustomerProfileModal({ profile, fallbackName, onClose, onSave, onUnauth
       const response = await fetch(`${API_URL}/auth/profile`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ fullName: form.name, email: form.email, contactNumber: form.contact, address: form.address, profilePicture: form.photo, dateOfBirth: form.dateOfBirth, gender: form.gender, civilStatus: form.civilStatus, occupation: form.occupation }) });
       const data = await response.json();
       if (!response.ok) { if (response.status === 401) onUnauthorized(); throw new Error(data.message || 'Unable to save profile.'); }
-      onSave({ ...data.user, name: data.user.full_name }); setNotice('Profile saved to your account.'); setIsEditing(false);
+      const savedProfile = { ...data.user, name: data.user.full_name };
+      setForm({ name: savedProfile.full_name || '', email: savedProfile.email || '', contact: savedProfile.contact_number || '', address: savedProfile.address || '', photo: savedProfile.profile_picture || '', dateOfBirth: dateForInput(savedProfile.date_of_birth), gender: savedProfile.gender || '', civilStatus: savedProfile.civil_status || '', occupation: savedProfile.occupation || '' });
+      onSave(savedProfile); setNotice('Profile saved to your account.'); setIsEditing(false);
     } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Unable to save profile.'); } finally { setSaving(false); }
   };
 
@@ -1252,7 +1283,7 @@ function CustomerProfileModal({ profile, fallbackName, onClose, onSave, onUnauth
           <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--line)' }}>
             <Eyebrow>Basic information</Eyebrow>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <ProfileField label="Birth date" type="date" value={form.dateOfBirth} onChange={(value) => update('dateOfBirth', value)} disabled={!isEditing} />
+              <BirthDateField value={form.dateOfBirth} onChange={(value) => update('dateOfBirth', value)} disabled={!isEditing} />
               <ProfileSelect label="Gender" value={form.gender} onChange={(value) => update('gender', value)} disabled={!isEditing} options={['Female', 'Male', 'Non-binary', 'Prefer not to say']} />
               <ProfileSelect label="Civil status" value={form.civilStatus} onChange={(value) => update('civilStatus', value)} disabled={!isEditing} options={['Single', 'Married', 'Widowed', 'Separated']} />
               <ProfileField label="Occupation" value={form.occupation} onChange={(value) => update('occupation', value)} disabled={!isEditing} />
@@ -1310,6 +1341,29 @@ function ProfileField({ icon: Icon, label, value, onChange, type = 'text', disab
           }}
         />
       </div>
+    </label>
+  );
+}
+
+function BirthDateField({ value, onChange, disabled = false }) {
+  return (
+    <label className="block text-[12px] font-medium" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>
+      Birth date
+      <input
+        required
+        type="date"
+        value={dateForInput(value)}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        onClick={(event) => {
+          if (!disabled && typeof event.currentTarget.showPicker === 'function') {
+            try { event.currentTarget.showPicker(); } catch { /* Native picker is unavailable in some browsers. */ }
+          }
+        }}
+        className="input-field mt-2"
+        style={{ background: disabled ? 'var(--brass-wash)' : '#fff', color: disabled ? 'var(--muted)' : 'var(--ink)', cursor: disabled ? 'default' : 'pointer', borderColor: disabled ? 'var(--line)' : undefined }}
+      />
+      {!disabled && <span className="mt-1 block text-[10px]" style={{ color: 'var(--muted)' }}>Choose a new date from the calendar.</span>}
     </label>
   );
 }
