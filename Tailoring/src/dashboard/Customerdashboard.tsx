@@ -772,12 +772,19 @@ function PaymentsView() {
    SETTINGS VIEW
 ============================================================= */
 function SettingsView({ profile, onProfileSaved, onUnauthorized }) {
-  const [profileForm, setProfileForm] = useState(() => ({ name: profile?.full_name || profile?.name || '', email: profile?.email || '', phone: profile?.contact_number || '' }));
-  const [profileDraft, setProfileDraft] = useState(profileForm);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileNotice, setProfileNotice] = useState('');
   const [profileError, setProfileError] = useState('');
-
+  const [profileForm, setProfileForm] = useState(() => ({
+    name: profile?.full_name || profile?.name || '',
+    email: profile?.email || '',
+    phone: profile?.contact_number || '',
+    dateOfBirth: dateForInput(profile?.date_of_birth),
+    gender: profile?.gender || '',
+    civilStatus: profile?.civil_status || '',
+    occupation: profile?.occupation || '',
+  }));
+  const [profileDraft, setProfileDraft] = useState(profileForm);
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
   const [isEditingPassword, setIsEditingPassword] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -787,26 +794,57 @@ function SettingsView({ profile, onProfileSaved, onUnauthorized }) {
   const [prefs, setPrefs] = useState({ reminders: true, updates: true });
 
   useEffect(() => {
-    const current = { name: profile?.full_name || profile?.name || '', email: profile?.email || '', phone: profile?.contact_number || '' };
+    const current = {
+      name: profile?.full_name || profile?.name || '',
+      email: profile?.email || '',
+      phone: profile?.contact_number || '',
+      dateOfBirth: dateForInput(profile?.date_of_birth),
+      gender: profile?.gender || '',
+      civilStatus: profile?.civil_status || '',
+      occupation: profile?.occupation || '',
+    };
     setProfileForm(current); setProfileDraft(current);
   }, [profile]);
+
   useEffect(() => {
     fetch(`${API_URL}/auth/preferences`, { headers: { Authorization: `Bearer ${authToken()}` } })
       .then(async (response) => { const data = await response.json(); if (!response.ok) { if (response.status === 401) onUnauthorized(); throw new Error(data.message || 'Unable to load preferences.'); } return data; })
       .then((data) => setPrefs({ reminders: !!data.preferences.reminder_notifications, updates: !!data.preferences.update_notifications }))
       .catch(() => {});
   }, []);
+
   const startEditProfile = () => { setProfileDraft(profileForm); setProfileNotice(''); setProfileError(''); setIsEditingProfile(true); };
   const cancelEditProfile = () => { setProfileDraft(profileForm); setIsEditingProfile(false); };
+
   const saveProfile = async (event) => {
     event.preventDefault();
     setProfileError('');
     try {
-      const response = await fetch(`${API_URL}/auth/profile`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ fullName: profileDraft.name, email: profileDraft.email, contactNumber: profileDraft.phone }) });
+      const response = await fetch(`${API_URL}/auth/profile`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+        body: JSON.stringify({
+          fullName: profileDraft.name,
+          email: profileDraft.email,
+          contactNumber: profileDraft.phone,
+          dateOfBirth: profileDraft.dateOfBirth,
+          gender: profileDraft.gender,
+          civilStatus: profileDraft.civilStatus,
+          occupation: profileDraft.occupation,
+        }),
+      });
       const data = await response.json();
       if (!response.ok) { if (response.status === 401) onUnauthorized(); throw new Error(data.message || 'Unable to save profile.'); }
       const saved = { ...data.user, name: data.user.full_name };
-      setProfileForm({ name: saved.full_name || '', email: saved.email || '', phone: saved.contact_number || '' });
+      setProfileForm({
+        name: saved.full_name || '',
+        email: saved.email || '',
+        phone: saved.contact_number || '',
+        dateOfBirth: dateForInput(saved.date_of_birth),
+        gender: saved.gender || '',
+        civilStatus: saved.civil_status || '',
+        occupation: saved.occupation || '',
+      });
       onProfileSaved(saved); setIsEditingProfile(false); setProfileNotice('Profile details saved.');
     } catch (error) { setProfileError(error instanceof Error ? error.message : 'Unable to save profile.'); }
   };
@@ -871,6 +909,17 @@ function SettingsView({ profile, onProfileSaved, onUnauthorized }) {
             <ProfileField icon={Mail} label="Email address" type="email" value={profileDraft.email} onChange={(v) => setProfileDraft({ ...profileDraft, email: v })} disabled={!isEditingProfile} />
             <ProfileField icon={Phone} label="Phone number" value={profileDraft.phone} onChange={(v) => setProfileDraft({ ...profileDraft, phone: v })} disabled={!isEditingProfile} />
           </div>
+
+          <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--line)' }}>
+            <Eyebrow>Basic information</Eyebrow>
+          </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <BirthDateField value={profileDraft.dateOfBirth} onChange={(v) => setProfileDraft({ ...profileDraft, dateOfBirth: v })} disabled={!isEditingProfile} />
+            <ProfileSelect label="Gender" value={profileDraft.gender} onChange={(v) => setProfileDraft({ ...profileDraft, gender: v })} disabled={!isEditingProfile} options={['Female', 'Male', 'Non-binary', 'Prefer not to say']} />
+            <ProfileSelect label="Civil status" value={profileDraft.civilStatus} onChange={(v) => setProfileDraft({ ...profileDraft, civilStatus: v })} disabled={!isEditingProfile} options={['Single', 'Married', 'Widowed', 'Separated']} />
+            <ProfileField label="Occupation" value={profileDraft.occupation} onChange={(v) => setProfileDraft({ ...profileDraft, occupation: v })} disabled={!isEditingProfile} />
+          </div>
+
           {isEditingProfile && (
             <div className="mt-6 flex gap-3">
               <button type="submit" className="inline-flex items-center gap-2 rounded-md px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white" style={{ background: 'var(--ink)', fontFamily: "'IBM Plex Mono', monospace" }}>
@@ -955,6 +1004,7 @@ function SettingsView({ profile, onProfileSaved, onUnauthorized }) {
     </div>
   );
 }
+
 function PasswordField({ label, value, onChange, show, onToggleShow, disabled = false }) {
   return (
     <label className="block text-[12px] font-medium" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>

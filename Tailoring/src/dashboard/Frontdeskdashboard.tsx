@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+// Pages/FrontDesk/FrontDeskDashboard.tsx
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FrontDeskCustomersExactView } from '../Pages_Frontdesk/CustomersdeskExact';
 import { FrontDeskOrdersView } from '../Pages_Frontdesk/Ordersdesk';
@@ -6,34 +7,8 @@ import { FrontDeskMeasurementsView } from '../Pages_Frontdesk/Measurementsdesk';
 import { FrontDeskAppointmentsView } from '../Pages_Frontdesk/Appointmentsdesk';
 import { FrontDeskPaymentsView } from '../Pages_Frontdesk/Paymentsdesk';
 import { FrontDeskSettingsView } from '../Pages_Frontdesk/Settingsdesk';
-
-// NOTE: this file adds data visualizations using "recharts".
-// If it isn't already in package.json, install it once with:
-//   npm install recharts
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  Tooltip,
-} from 'recharts';
-
-function LiveDateTime() {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
-  return <MonoLabel className="hidden sm:inline">{now.toLocaleString(undefined, { weekday: 'short', month: 'short', day: '2-digit', hour: 'numeric', minute: '2-digit' })}</MonoLabel>;
-}
-
+import frontDeskApi, { authToken, type Order, type Appointment, type Customer } from '../../services/frontDeskApi';
+import { RegisterCustomerModal, type NewCustomerForm } from '../pages/FrontDesk/FrontDeskModals';
 import type { ReactNode } from 'react';
 import {
   LayoutDashboard,
@@ -45,7 +20,6 @@ import {
   Settings,
   Bell,
   Search,
-  ChevronRight,
   Menu,
   X,
   UserPlus,
@@ -56,30 +30,25 @@ import {
   PackageCheck,
   Printer,
   Clock,
-  CheckCircle2,
   Check,
-  User,
-  Mail,
-  Phone,
-  MapPin,
-  Lock,
   LogOut,
-  TrendingUp,
   ArrowUpRight,
-  Scissors,
   AlertCircle,
+  Loader2,
+  Scissors,
+  User,
+  Calendar,
+  DollarSign,
 } from 'lucide-react';
 
-/* ---------------------------------------------------------------
-   FRONT DESK — Dashboard
-   Premium Creamy Beige & Espresso "counter ledger" theme, with
-   real production/revenue charts. Functionality is unchanged —
-   only presentation, plus additive chart components.
-
-   UPDATE: orders now capture fabric quantity + total order amount,
-   and job cards track running balance so front desk staff (and,
-   eventually, customers) can see exactly how much is left to pay.
------------------------------------------------------------------- */
+function LiveDateTime() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return <MonoLabel className="hidden sm:inline">{now.toLocaleString(undefined, { weekday: 'short', month: 'short', day: '2-digit', hour: 'numeric', minute: '2-digit' })}</MonoLabel>;
+}
 
 const FONT_IMPORT = `
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Space+Mono:wght@400;700&display=swap');
@@ -87,14 +56,6 @@ const FONT_IMPORT = `
 @keyframes riseIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
-}
-@keyframes drawLedgerLine {
-  from { opacity: 0; transform: scaleX(0); }
-  to { opacity: 1; transform: scaleX(1); }
-}
-@keyframes stampIn {
-  from { opacity: 0; transform: scale(0.85) rotate(-4deg); }
-  to { opacity: 1; transform: scale(1) rotate(-4deg); }
 }
 .dash-in { opacity: 0; animation: riseIn 0.55s cubic-bezier(0.22,1,0.36,1) forwards; }
 `;
@@ -116,14 +77,6 @@ const FRONT_DESK_THEME = `
   border-radius: inherit;
 }
 .ticket-edge { background-image: linear-gradient(135deg, #FAF7F2 25%, transparent 25%), linear-gradient(225deg, #FAF7F2 25%, transparent 25%); background-size: 14px 14px; background-position: 0 0; background-color: #FFFFFF; }
-.frontdesk-theme .module-customers > :first-child > :first-child { padding: 1.5rem; border: 1px solid #E8DFD3; border-radius: 1rem; background: linear-gradient(115deg, #FFFDF9 0%, #F3E8D9 100%); }
-.frontdesk-theme .module-orders > :first-child > :first-child { padding: 1.5rem; border-radius: 1rem; color: #FFF9F1; background: linear-gradient(118deg, #392A23, #76523B); }
-.frontdesk-theme .module-orders > :first-child > :first-child h1, .frontdesk-theme .module-orders > :first-child > :first-child p, .frontdesk-theme .module-orders > :first-child > :first-child span { color: inherit; }
-.frontdesk-theme .module-measurements > :first-child > :first-child { padding: 1.5rem; border: 1px solid #D8E4DE; border-radius: 1rem; background: linear-gradient(115deg, #F9FCF9, #E5F0EA); }
-.frontdesk-theme .module-appointments > :first-child > :first-child { padding: 1.5rem; border: 1px solid #DCD5E8; border-radius: 1rem; background: linear-gradient(115deg, #FCFAFF, #ECE6F6); }
-.frontdesk-theme .module-payments > :first-child > :first-child { padding: 1.5rem; border: 1px solid #E9DDB7; border-radius: 1rem; background: linear-gradient(115deg, #FFFCF2, #F6EACB); }
-.frontdesk-theme .module-settings > :first-child > :first-child { padding: 1.5rem; border: 1px solid #D7D5D2; border-radius: 1rem; background: linear-gradient(115deg, #FFFFFF, #F1EFEB); }
-.frontdesk-theme .module-settings > :first-child { width: 100%; max-width: none; }
 `;
 
 function MonoLabel({ children, className = '' }: { children: ReactNode; className?: string }) {
@@ -137,768 +90,14 @@ function MonoLabel({ children, className = '' }: { children: ReactNode; classNam
   );
 }
 
-const GARMENT_TYPES = ['Barong Tagalog', 'Two-piece Suit', "Women's Coat", 'Evening Gown', 'School Uniform Set', 'Custom garment'];
-const FITTING_STAGES = ['Measuring', 'Pattern Cutting', 'Initial Assembly', 'First Fitting', 'Final Alterations', 'Ready for Pickup'];
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-const authToken = () => localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+function formatPeso(amount: number) {
+  return `₱${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
 
 function currentUser() {
   const stored = localStorage.getItem('currentUser') || sessionStorage.getItem('currentUser');
   try { return stored ? JSON.parse(stored) : null; } catch { return null; }
 }
-
-function formatPeso(amount: number) {
-  return `₱${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-}
-
-/* ---------------------------------------------------------------
-   Register customer modal
------------------------------------------------------------------- */
-export interface NewCustomerForm {
-  lastName: string;
-  middleName: string;
-  firstName: string;
-  suffix: string;
-  contact: string;
-  email: string;
-  password: string;
-  address: string;
-  dateOfBirth: string;
-  gender: string;
-  civilStatus: string;
-  occupation: string;
-}
-
-export function RegisterCustomerModal({
-  onClose,
-  onRegister,
-}: {
-  onClose: () => void;
-  onRegister: (form: NewCustomerForm) => Promise<void>;
-}) {
-  const [form, setForm] = useState<NewCustomerForm>({ lastName: '', middleName: '', firstName: '', suffix: '', contact: '', email: '', password: '', address: '', dateOfBirth: '', gender: '', civilStatus: '', occupation: '' });
-  const [error, setError] = useState('');
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.lastName.trim() || !form.firstName.trim() || !form.dateOfBirth || !form.gender || !form.contact.trim() || !form.email.trim() || !form.password) {
-      setError('Last name, first name, birth date, gender, contact number, email, and temporary password are required.');
-      return;
-    }
-    if (form.password.length < 8) {
-      setError('Temporary password must be at least 8 characters.');
-      return;
-    }
-    try { await onRegister(form); } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Unable to register customer.'); }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#1F1916]/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
-
-      <div className="relative w-full max-w-2xl bg-[#FFFFFF] border border-[#E8DFD3] rounded-xl shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-7 sm:px-10 pt-8 pb-2">
-          <MonoLabel>New customer</MonoLabel>
-          <button onClick={onClose} aria-label="Close" className="text-[#A3958B] hover:text-[#2A211D] transition-colors p-1 rounded-full hover:bg-[#F2ECE1]">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="px-7 sm:px-10 pb-9 pt-2">
-          <h2 className="text-3xl leading-tight mb-2 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>
-            Register customer
-          </h2>
-          <p className="text-[14px] text-[#766A62] font-light mb-8 leading-relaxed">
-            Create a customer account at the counter. It will remain pending until an Admin approves it.
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div role="alert" className="border border-[#C86A58]/30 bg-[#FDF4F2] px-4 py-3 rounded-lg text-sm text-[#9A3B2A]">
-                {error}
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
-              <div>
-                <label htmlFor="custFirstName" className="block mb-1.5"><MonoLabel>First name</MonoLabel></label>
-                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                  <User className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                  <input id="custFirstName" value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} placeholder="Juana" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]" />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="custMiddleName" className="block mb-1.5"><MonoLabel>Middle name</MonoLabel></label>
-                <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                  <input id="custMiddleName" value={form.middleName} onChange={(e) => setForm((f) => ({ ...f, middleName: e.target.value }))} placeholder="Santos" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none text-[#2A211D]" />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="custLastName" className="block mb-1.5"><MonoLabel>Last name</MonoLabel></label>
-                <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                  <input id="custLastName" value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} placeholder="Dela Cruz" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none text-[#2A211D]" />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="custSuffix" className="block mb-1.5"><MonoLabel>Suffix (optional)</MonoLabel></label>
-                <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                  <input id="custSuffix" value={form.suffix} onChange={(e) => setForm((f) => ({ ...f, suffix: e.target.value }))} placeholder="Jr., Sr., III" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none text-[#2A211D]" />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
-              <div>
-                <label htmlFor="custBirthDate" className="block mb-1.5"><MonoLabel>Birth date</MonoLabel></label>
-                <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                  <input id="custBirthDate" type="date" value={form.dateOfBirth} onChange={(e) => setForm((f) => ({ ...f, dateOfBirth: e.target.value }))} required className="w-full bg-transparent text-[14px] py-2.5 focus:outline-none text-[#2A211D]" />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="custGender" className="block mb-1.5"><MonoLabel>Gender</MonoLabel></label>
-                <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                  <select id="custGender" value={form.gender} onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))} required className="w-full bg-transparent text-[14px] py-2.5 focus:outline-none text-[#2A211D]">
-                    <option value="">Select gender</option><option>Female</option><option>Male</option><option>Non-binary</option><option>Prefer not to say</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label htmlFor="custCivilStatus" className="block mb-1.5"><MonoLabel>Civil status (optional)</MonoLabel></label>
-                <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors"><select id="custCivilStatus" value={form.civilStatus} onChange={(e) => setForm((f) => ({ ...f, civilStatus: e.target.value }))} className="w-full bg-transparent text-[14px] py-2.5 focus:outline-none text-[#2A211D]"><option value="">Select status</option><option>Single</option><option>Married</option><option>Widowed</option><option>Separated</option></select></div>
-              </div>
-              <div>
-                <label htmlFor="custOccupation" className="block mb-1.5"><MonoLabel>Occupation (optional)</MonoLabel></label>
-                <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors"><input id="custOccupation" value={form.occupation} onChange={(e) => setForm((f) => ({ ...f, occupation: e.target.value }))} placeholder="e.g. Teacher" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none text-[#2A211D]" /></div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
-              <div>
-                <label htmlFor="custContact" className="block mb-1.5"><MonoLabel>Contact number</MonoLabel></label>
-                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                  <Phone className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                  <input id="custContact" value={form.contact} onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))} placeholder="0917 000 0000" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]" />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="custEmail" className="block mb-1.5"><MonoLabel>Email address</MonoLabel></label>
-                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                  <Mail className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                  <input id="custEmail" type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="you@example.com" required className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]" />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="custPassword" className="block mb-1.5"><MonoLabel>Temporary password</MonoLabel></label>
-              <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                <Lock className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                <input id="custPassword" type="password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} placeholder="At least 8 characters" required className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]" />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="custAddress" className="block mb-1.5"><MonoLabel>Address (optional)</MonoLabel></label>
-              <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                <MapPin className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                <input id="custAddress" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="Street, Barangay, City" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]" />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 px-4 py-3 rounded-lg border border-[#E2D7C7] text-[#766A62] text-[11px] font-semibold tracking-[0.14em] uppercase hover:bg-[#F2ECE1] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="flex-1 px-4 py-3 rounded-lg bg-[#2A211D] text-[#FAF7F2] text-[11px] font-semibold tracking-[0.14em] uppercase hover:bg-[#3D312B] transition-colors shadow-md"
-              >
-                Register customer
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------------
-   Create order modal
-   UPDATE: now captures fabric quantity and the total order amount,
-   so the job card carries an actual price to reconcile payments
-   against later.
------------------------------------------------------------------- */
-export interface NewOrderForm {
-  customer: string;
-  garment: string;
-  fabric: string;
-  fabricQuantity: string;
-  totalAmount: string;
-  dueDate: string;
-  scheduleFitting: boolean;
-  fittingDate: string;
-  fittingTime: string;
-  collectDeposit: boolean;
-  depositAmount: string;
-}
-
-export function CreateOrderModal({
-  onClose,
-  onCreate,
-}: {
-  onClose: () => void;
-  onCreate: (form: NewOrderForm) => void;
-}) {
- const [form, setForm] = useState<NewOrderForm>({
-  customer: '',
-  garment: GARMENT_TYPES[0],
-  fabric: '',
-  fabricQuantity: '',
-  totalAmount: '',
-  dueDate: '',
-  scheduleFitting: false,
-  fittingDate: '',
-  fittingTime: '',
-  collectDeposit: false,
-  depositAmount: '',
-});
-
-  const [error, setError] = useState('');
-
-  function handleSubmit(e: React.FormEvent) {
-  e.preventDefault();
-  if (!form.customer.trim()) {
-    setError('Customer name is required.');
-    return;
-  }
-  const totalNum = Number(form.totalAmount);
-  if (!form.totalAmount.trim() || Number.isNaN(totalNum) || totalNum <= 0) {
-    setError('Enter a valid total order amount — this is what balances and receipts are calculated against.');
-    return;
-  }
-  if (form.scheduleFitting && (!form.fittingDate || !form.fittingTime)) {
-    setError('Choose both a date and time for the first fitting.');
-    return;
-  }
-  if (form.collectDeposit) {
-    const amountNum = Number(form.depositAmount);
-    if (!form.depositAmount.trim() || Number.isNaN(amountNum) || amountNum <= 0) {
-      setError('Enter a valid deposit amount.');
-      return;
-    }
-    if (amountNum > totalNum) {
-      setError('Deposit cannot be more than the total order amount.');
-      return;
-    }
-  }
-  onCreate(form);
-}
-
-  const totalNumPreview = Number(form.totalAmount) || 0;
-  const depositNumPreview = form.collectDeposit ? Number(form.depositAmount) || 0 : 0;
-  const balancePreview = Math.max(totalNumPreview - depositNumPreview, 0);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#1F1916]/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
-
-      <div className="relative w-full max-w-xl bg-[#FFFFFF] border border-[#E8DFD3] rounded-xl shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-7 sm:px-10 pt-8 pb-2">
-          <MonoLabel>New job card</MonoLabel>
-          <button onClick={onClose} aria-label="Close" className="text-[#A3958B] hover:text-[#2A211D] transition-colors p-1 rounded-full hover:bg-[#F2ECE1]">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="px-7 sm:px-10 pb-9 pt-2">
-          <h2 className="text-3xl leading-tight mb-2 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>
-            Create order
-          </h2>
-          <p className="text-[14px] text-[#766A62] font-light mb-8 leading-relaxed">
-            Opens a new job card at the Measuring stage. Fabric quantity and total amount set the balance customers and staff will see going forward.
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div role="alert" className="border border-[#C86A58]/30 bg-[#FDF4F2] px-4 py-3 rounded-lg text-sm text-[#9A3B2A]">
-                {error}
-              </div>
-            )}
-
-            <div>
-              <label htmlFor="orderCustomer" className="block mb-1.5"><MonoLabel>Customer</MonoLabel></label>
-              <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                <User className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                <input id="orderCustomer" value={form.customer} onChange={(e) => setForm((f) => ({ ...f, customer: e.target.value }))} placeholder="Customer full name" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]" />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="orderGarment" className="block mb-1.5"><MonoLabel>Garment type</MonoLabel></label>
-              <select
-                id="orderGarment"
-                value={form.garment}
-                onChange={(e) => setForm((f) => ({ ...f, garment: e.target.value }))}
-                className="w-full bg-transparent border-b border-[#E2D7C7] focus:border-[#2A211D] text-[14px] py-2.5 focus:outline-none text-[#2A211D]"
-              >
-                {GARMENT_TYPES.map((g) => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
-              <div>
-                <label htmlFor="orderFabric" className="block mb-1.5"><MonoLabel>Fabric (optional)</MonoLabel></label>
-                <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                  <input id="orderFabric" value={form.fabric} onChange={(e) => setForm((f) => ({ ...f, fabric: e.target.value }))} placeholder="Italian Wool — Charcoal" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none text-[#2A211D]" />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="orderFabricQty" className="block mb-1.5"><MonoLabel>Fabric quantity (optional)</MonoLabel></label>
-                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                  <Scissors className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                  <input id="orderFabricQty" value={form.fabricQuantity} onChange={(e) => setForm((f) => ({ ...f, fabricQuantity: e.target.value }))} placeholder="e.g. 2.5 yards" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]" />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
-              <div>
-                <label htmlFor="orderTotal" className="block mb-1.5"><MonoLabel>Total order amount (₱)</MonoLabel></label>
-                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                  <Banknote className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                  <input id="orderTotal" type="number" min="0" step="1" value={form.totalAmount} onChange={(e) => setForm((f) => ({ ...f, totalAmount: e.target.value }))} placeholder="4,800" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]" />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="orderDue" className="block mb-1.5"><MonoLabel>Due date (optional)</MonoLabel></label>
-                <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                  <input id="orderDue" type="date" value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} className="w-full bg-transparent text-[14px] py-2.5 focus:outline-none text-[#2A211D]" />
-                </div>
-              </div>
-            </div>
-            <div className="rounded-lg border border-[#E8DFD3] bg-[#FCFAF7] p-4">
-  <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-[#2A211D]">
-    <input
-      type="checkbox"
-      checked={form.collectDeposit}
-      onChange={(e) => setForm((f) => ({ ...f, collectDeposit: e.target.checked }))}
-      className="h-4 w-4 accent-[#8C6F3E]"
-    />
-    Collect deposit now
-  </label>
-  {form.collectDeposit && (
-    <div className="mt-4">
-      <label htmlFor="orderDeposit" className="block mb-1.5"><MonoLabel>Deposit amount (₱)</MonoLabel></label>
-      <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-        <Banknote className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-        <input
-          id="orderDeposit"
-          type="number"
-          min="0"
-          step="1"
-          value={form.depositAmount}
-          onChange={(e) => setForm((f) => ({ ...f, depositAmount: e.target.value }))}
-          placeholder="2,400"
-          className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
-        />
-      </div>
-      <p className="text-[11px] text-[#A3958B] mt-2">Cash only. Logged immediately with the new job card.</p>
-    </div>
-  )}
-</div>
-
-            {totalNumPreview > 0 && (
-              <div className="rounded-lg border border-dashed border-[#D9C8B7] bg-[#FCFAF7] px-4 py-3 flex items-center justify-between">
-                <MonoLabel>Balance after this order</MonoLabel>
-                <span className="text-[14px] font-semibold text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{formatPeso(balancePreview)}</span>
-              </div>
-            )}
-
-            <div className="rounded-lg border border-[#E8DFD3] bg-[#FCFAF7] p-4">
-              <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-[#2A211D]">
-                <input type="checkbox" checked={form.scheduleFitting} onChange={(e) => setForm((f) => ({ ...f, scheduleFitting: e.target.checked }))} className="h-4 w-4 accent-[#8C6F3E]" />
-                Schedule first fitting with this order
-              </label>
-              {form.scheduleFitting && <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <label className="block"><MonoLabel>First fitting date</MonoLabel><input required type="date" value={form.fittingDate} onChange={(e) => setForm((f) => ({ ...f, fittingDate: e.target.value }))} className="mt-2 w-full border-b border-[#E2D7C7] bg-transparent py-2 text-[14px] text-[#2A211D] outline-none focus:border-[#2A211D]" /></label>
-                <label className="block"><MonoLabel>First fitting time</MonoLabel><input required type="time" value={form.fittingTime} onChange={(e) => setForm((f) => ({ ...f, fittingTime: e.target.value }))} className="mt-2 w-full border-b border-[#E2D7C7] bg-transparent py-2 text-[14px] text-[#2A211D] outline-none focus:border-[#2A211D]" /></label>
-              </div>}
-            </div>
-            
-
-            <div className="flex items-center gap-3 pt-4">
-              <button type="button" onClick={onClose} className="flex-1 px-4 py-3 rounded-lg border border-[#E2D7C7] text-[#766A62] text-[11px] font-semibold tracking-[0.14em] uppercase hover:bg-[#F2ECE1] transition-colors">
-                Cancel
-              </button>
-              <button type="submit" className="flex-1 px-4 py-3 rounded-lg bg-[#2A211D] text-[#FAF7F2] text-[11px] font-semibold tracking-[0.14em] uppercase hover:bg-[#3D312B] transition-colors shadow-md">
-                Create order
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------------
-   Record payment modal
-   UPDATE: looks up the job card's total/paid-so-far so staff (and
-   the customer, on their own screen) can see the balance due
-   instead of typing an amount blind.
------------------------------------------------------------------- */
-interface NewPaymentForm {
-  jobCardId: string;
-  paymentType: 'deposit' | 'final';
-  amount: string;
-}
-
-export interface JobCardRecord {
-  customer: string;
-  garment: string;
-  fabric: string;
-  fabricQuantity: string;
-  totalAmount: number;
-  amountPaid: number;
-}
-
-function RecordPaymentModal({
-  onClose,
-  onRecord,
-  jobCards,
-}: {
-  onClose: () => void;
-  onRecord: (form: NewPaymentForm) => void;
-  jobCards: Record<string, JobCardRecord>;
-}) {
-  const [form, setForm] = useState<NewPaymentForm>({ jobCardId: '', paymentType: 'deposit', amount: '' });
-  const [error, setError] = useState('');
-
-  const matchedCard = jobCards[form.jobCardId.trim().toUpperCase()];
-  const balanceDue = matchedCard ? Math.max(matchedCard.totalAmount - matchedCard.amountPaid, 0) : null;
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const amountNum = Number(form.amount);
-    if (!form.jobCardId.trim()) {
-      setError('Job card ID is required.');
-      return;
-    }
-    if (!form.amount.trim() || Number.isNaN(amountNum) || amountNum <= 0) {
-      setError('Enter a valid payment amount.');
-      return;
-    }
-    if (matchedCard && balanceDue !== null && amountNum > balanceDue) {
-      setError(`Amount exceeds the balance due of ${formatPeso(balanceDue)} for this job card.`);
-      return;
-    }
-    onRecord(form);
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#1F1916]/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
-
-      <div className="relative w-full max-w-xl bg-[#FFFFFF] border border-[#E8DFD3] rounded-xl shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-7 sm:px-10 pt-8 pb-2">
-          <MonoLabel>Cash transaction</MonoLabel>
-          <button onClick={onClose} aria-label="Close" className="text-[#A3958B] hover:text-[#2A211D] transition-colors p-1 rounded-full hover:bg-[#F2ECE1]">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="px-7 sm:px-10 pb-9 pt-2">
-          <h2 className="text-3xl leading-tight mb-2 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>
-            Record payment
-          </h2>
-          <p className="text-[14px] text-[#766A62] font-light mb-8 leading-relaxed">
-            Logs a cash payment against a job card and prints a receipt.
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div role="alert" className="border border-[#C86A58]/30 bg-[#FDF4F2] px-4 py-3 rounded-lg text-sm text-[#9A3B2A]">
-                {error}
-              </div>
-            )}
-
-            <div>
-              <label htmlFor="payJobCard" className="block mb-1.5"><MonoLabel>Job card ID</MonoLabel></label>
-              <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                <input id="payJobCard" value={form.jobCardId} onChange={(e) => setForm((f) => ({ ...f, jobCardId: e.target.value }))} placeholder="JC-3021" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none text-[#2A211D]" />
-              </div>
-            </div>
-
-            {form.jobCardId.trim() && (
-              matchedCard ? (
-                <div className="rounded-lg border border-[#E8DFD3] bg-[#FCFAF7] p-4 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[13.5px] font-medium text-[#2A211D]">{matchedCard.customer}</span>
-                    <span className="text-[11px] text-[#766A62]">{matchedCard.garment}</span>
-                  </div>
-                  {matchedCard.fabric && (
-                    <div className="flex items-center gap-1.5 text-[12px] text-[#766A62]">
-                      <Scissors className="w-3.5 h-3.5 text-[#A3958B]" strokeWidth={1.6} />
-                      {matchedCard.fabric}{matchedCard.fabricQuantity ? ` — ${matchedCard.fabricQuantity}` : ''}
-                    </div>
-                  )}
-                  <div className="border-t border-dashed border-[#E2D7C7] pt-2.5 grid grid-cols-3 gap-2 text-center">
-                    <div>
-                      <MonoLabel>Total</MonoLabel>
-                      <div className="text-[13px] font-semibold text-[#2A211D] mt-0.5" style={{ fontFamily: "'Space Mono', monospace" }}>{formatPeso(matchedCard.totalAmount)}</div>
-                    </div>
-                    <div>
-                      <MonoLabel>Paid so far</MonoLabel>
-                      <div className="text-[13px] font-semibold text-[#4E7357] mt-0.5" style={{ fontFamily: "'Space Mono', monospace" }}>{formatPeso(matchedCard.amountPaid)}</div>
-                    </div>
-                    <div>
-                      <MonoLabel>Balance due</MonoLabel>
-                      <div className="text-[13px] font-semibold text-[#9E5B4B] mt-0.5" style={{ fontFamily: "'Space Mono', monospace" }}>{formatPeso(balanceDue ?? 0)}</div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 rounded-lg border border-[#E9DDB7] bg-[#FFFCF2] px-4 py-3 text-[12.5px] text-[#8C6F3E]">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
-                  No job card found with this ID yet — you can still record the payment manually.
-                </div>
-              )
-            )}
-
-            <div>
-              <label className="block mb-2"><MonoLabel>Payment type</MonoLabel></label>
-              <div className="grid grid-cols-2 gap-3">
-                {([
-                  { key: 'deposit', label: 'Deposit (50%)' },
-                  { key: 'final', label: 'Final balance' },
-                ] as const).map((t) => (
-                  <button
-                    key={t.key}
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, paymentType: t.key, amount: t.key === 'final' && balanceDue ? String(balanceDue) : f.amount }))}
-                    className={`px-3 py-3 rounded-lg border text-[11px] font-semibold tracking-[0.08em] uppercase transition-all ${
-                      form.paymentType === t.key
-                        ? 'bg-[#2A211D] border-[#2A211D] text-[#FAF7F2] shadow-sm'
-                        : 'border-[#E2D7C7] text-[#766A62] hover:border-[#A3958B] hover:bg-[#FAF7F2]'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="payAmount" className="block mb-1.5"><MonoLabel>Amount (₱)</MonoLabel></label>
-              <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                <Banknote className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                <input id="payAmount" type="number" min="0" step="1" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="2,400" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]" />
-              </div>
-              <p className="text-[11px] text-[#A3958B] mt-2">Cash only. A receipt is printed automatically once recorded.</p>
-            </div>
-
-            <div className="flex items-center gap-3 pt-4">
-              <button type="button" onClick={onClose} className="flex-1 px-4 py-3 rounded-lg border border-[#E2D7C7] text-[#766A62] text-[11px] font-semibold tracking-[0.14em] uppercase hover:bg-[#F2ECE1] transition-colors">
-                Cancel
-              </button>
-              <button type="submit" className="flex-1 px-4 py-3 rounded-lg bg-[#2A211D] text-[#FAF7F2] text-[11px] font-semibold tracking-[0.14em] uppercase hover:bg-[#3D312B] transition-colors shadow-md">
-                Record payment
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------------
-   Schedule fitting modal
------------------------------------------------------------------- */
-interface NewFittingForm {
-  customer: string;
-  garment: string;
-  time: string;
-  stage: string;
-}
-
-function ScheduleFittingModal({
-  onClose,
-  onSchedule,
-}: {
-  onClose: () => void;
-  onSchedule: (form: NewFittingForm) => void;
-}) {
-  const [form, setForm] = useState<NewFittingForm>({ customer: '', garment: '', time: '', stage: FITTING_STAGES[3] });
-  const [error, setError] = useState('');
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.customer.trim() || !form.garment.trim() || !form.time.trim()) {
-      setError('Customer, garment, and time are required.');
-      return;
-    }
-    onSchedule(form);
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#1F1916]/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
-
-      <div className="relative w-full max-w-xl bg-[#FFFFFF] border border-[#E8DFD3] rounded-xl shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-7 sm:px-10 pt-8 pb-2">
-          <MonoLabel>Fitting scheduler</MonoLabel>
-          <button onClick={onClose} aria-label="Close" className="text-[#A3958B] hover:text-[#2A211D] transition-colors p-1 rounded-full hover:bg-[#F2ECE1]">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="px-7 sm:px-10 pb-9 pt-2">
-          <h2 className="text-3xl leading-tight mb-2 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>
-            Schedule fitting
-          </h2>
-          <p className="text-[14px] text-[#766A62] font-light mb-8 leading-relaxed">
-            Books an appointment slot on today's fitting scheduler.
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div role="alert" className="border border-[#C86A58]/30 bg-[#FDF4F2] px-4 py-3 rounded-lg text-sm text-[#9A3B2A]">
-                {error}
-              </div>
-            )}
-
-            <div>
-              <label htmlFor="fitCustomer" className="block mb-1.5"><MonoLabel>Customer</MonoLabel></label>
-              <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                <User className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                <input id="fitCustomer" value={form.customer} onChange={(e) => setForm((f) => ({ ...f, customer: e.target.value }))} placeholder="Customer full name" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
-              <div>
-                <label htmlFor="fitGarment" className="block mb-1.5"><MonoLabel>Garment</MonoLabel></label>
-                <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                  <input id="fitGarment" value={form.garment} onChange={(e) => setForm((f) => ({ ...f, garment: e.target.value }))} placeholder="Barong Tagalog" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none text-[#2A211D]" />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="fitTime" className="block mb-1.5"><MonoLabel>Time</MonoLabel></label>
-                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                  <Clock className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                  <input id="fitTime" value={form.time} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} placeholder="4:30 PM" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]" />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="fitStage" className="block mb-1.5"><MonoLabel>Stage</MonoLabel></label>
-              <select
-                id="fitStage"
-                value={form.stage}
-                onChange={(e) => setForm((f) => ({ ...f, stage: e.target.value }))}
-                className="w-full bg-transparent border-b border-[#E2D7C7] focus:border-[#2A211D] text-[14px] py-2.5 focus:outline-none text-[#2A211D]"
-              >
-                {FITTING_STAGES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-3 pt-4">
-              <button type="button" onClick={onClose} className="flex-1 px-4 py-3 rounded-lg border border-[#E2D7C7] text-[#766A62] text-[11px] font-semibold tracking-[0.14em] uppercase hover:bg-[#F2ECE1] transition-colors">
-                Cancel
-              </button>
-              <button type="submit" className="flex-1 px-4 py-3 rounded-lg bg-[#2A211D] text-[#FAF7F2] text-[11px] font-semibold tracking-[0.14em] uppercase hover:bg-[#3D312B] transition-colors shadow-md">
-                Schedule fitting
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- Sample data ---------------- */
-
-const TODAY_STATS_INIT = {
-  collected: 18650,
-  walkIns: 11,
-  fittings: 5,
-  pickups: 4,
-};
-
-const DAY_BOOK: { time: string; label: string; detail: string; kind: 'customer' | 'order' | 'payment' | 'pickup' | 'appointment' }[] = [
-  { time: '9:04 AM', label: 'New customer', detail: 'Reyna Fuentes registered', kind: 'customer' },
-  { time: '9:20 AM', label: 'Order created', detail: 'JC-3021 — Barong Tagalog for Reyna Fuentes', kind: 'order' },
-  { time: '9:22 AM', label: 'Deposit received', detail: '₱2,400 — JC-3021, cash', kind: 'payment' },
-  { time: '10:15 AM', label: 'Garment released', detail: 'JC-3010 — Tomas Villareal, balance settled', kind: 'pickup' },
-  { time: '11:02 AM', label: 'Order created', detail: 'JC-3022 — Two-piece Suit for Boyet Salcedo', kind: 'order' },
-  { time: '11:40 AM', label: 'Final payment', detail: '₱6,250 — JC-3005, cash', kind: 'payment' },
-  { time: '1:18 PM', label: 'New customer', detail: 'Marisol Chan registered', kind: 'customer' },
-];
-
-const DAY_BOOK_META: Record<string, { icon: typeof UserPlus; tone: string; bg: string }> = {
-  customer: { icon: UserPlus, tone: '#8C6F3E', bg: '#F9F4EB' },
-  order: { icon: FilePlus2, tone: '#4A6B82', bg: '#F0F5F8' },
-  payment: { icon: Banknote, tone: '#4E7357', bg: '#F1F6F2' },
-  pickup: { icon: PackageCheck, tone: '#9E5B4B', bg: '#FAF2F0' },
-  appointment: { icon: CalendarPlus, tone: '#715A80', bg: '#F5F2F7' },
-};
-
-const FITTINGS_TODAY_INIT = [
-  { time: '2:00 PM', customer: 'Consuelo Reyes', garment: "Women's Coat", stage: 'Final Alterations' },
-  { time: '2:45 PM', customer: 'Delfin Ortega', garment: 'Two-piece Suit', stage: 'First Fitting' },
-  { time: '3:30 PM', customer: 'Reyna Fuentes', garment: 'Barong Tagalog', stage: 'First Fitting' },
-  { time: '4:15 PM', customer: 'Marisol Chan', garment: 'Evening Gown', stage: 'Initial Assembly' },
-];
-
-const PICKUP_QUEUE = [
-  { id: 'JC-3018', customer: 'Tomas Villareal', garment: 'School Uniform Set', balance: '₱0 — paid in full' },
-  { id: 'JC-3007', customer: 'Boyet Salcedo', garment: 'Barong Tagalog', balance: '₱1,200 due on release' },
-  { id: 'JC-3012', customer: 'Consuelo Reyes', garment: "Women's Coat", balance: '₱0 — paid in full' },
-];
-
-/* UPDATE: job cards now carry fabric + pricing data so a payment
-   can be reconciled against a real total instead of a blind number. */
-const JOB_CARDS_INIT: Record<string, JobCardRecord> = {
-  'JC-3021': { customer: 'Reyna Fuentes', garment: 'Barong Tagalog', fabric: 'Jusi — Cream', fabricQuantity: '2.5 yards', totalAmount: 4800, amountPaid: 2400 },
-  'JC-3005': { customer: 'Delfin Ortega', garment: 'Two-piece Suit', fabric: 'Italian Wool — Charcoal', fabricQuantity: '4 yards', totalAmount: 12500, amountPaid: 12500 },
-  'JC-3010': { customer: 'Tomas Villareal', garment: 'School Uniform Set', fabric: 'Cotton Twill', fabricQuantity: '3 yards', totalAmount: 2800, amountPaid: 2800 },
-  'JC-3018': { customer: 'Tomas Villareal', garment: 'School Uniform Set', fabric: 'Cotton Twill', fabricQuantity: '3 yards', totalAmount: 2800, amountPaid: 2800 },
-  'JC-3007': { customer: 'Boyet Salcedo', garment: 'Barong Tagalog', fabric: 'Piña-Seda', fabricQuantity: '2 yards', totalAmount: 5200, amountPaid: 4000 },
-  'JC-3012': { customer: 'Consuelo Reyes', garment: "Women's Coat", fabric: 'Wool Blend — Camel', fabricQuantity: '3.5 yards', totalAmount: 7600, amountPaid: 7600 },
-};
-
-/* Illustrative chart data — purely presentational, doesn't touch app state or logic. */
-const WEEKLY_REVENUE = [
-  { day: 'Mon', amount: 12400 },
-  { day: 'Tue', amount: 15800 },
-  { day: 'Wed', amount: 9200 },
-  { day: 'Thu', amount: 17650 },
-  { day: 'Fri', amount: 21300 },
-  { day: 'Sat', amount: 26800 },
-  { day: 'Sun', amount: 18650 },
-];
-
-const PRODUCTION_MIX = [
-  { stage: 'Measuring', count: 4, color: '#C9BBA6' },
-  { stage: 'Pattern cutting', count: 6, color: '#8FAF9E' },
-  { stage: 'Assembly', count: 8, color: '#C9A15C' },
-  { stage: 'Fitting', count: 5, color: '#A8644A' },
-  { stage: 'Ready for pickup', count: 3, color: '#6E8F72' },
-];
-
-const COLLECTED_SPARK = [9, 12, 8, 15, 11, 17, 18.65];
 
 type ViewKey = 'dashboard' | 'customers' | 'orders' | 'measurements' | 'appointments' | 'payments' | 'settings';
 
@@ -912,209 +111,960 @@ const NAV: { label: string; icon: typeof LayoutDashboard; view: ViewKey }[] = [
   { label: 'Settings', icon: Settings, view: 'settings' },
 ];
 
-/* ==================================================================
-   CHART COMPONENTS — additive, presentational only
-================================================================== */
-
-function ChartTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="rounded-lg border border-[#E2D7C7] bg-[#FFFCF8] px-3 py-2 shadow-lg">
-      <div className="text-[10px] uppercase tracking-[0.14em] text-[#8C7E74]" style={{ fontFamily: "'Space Mono', monospace" }}>{label}</div>
-      <div className="text-[13px] font-semibold text-[#2A211D] mt-0.5">₱{Number(payload[0].value).toLocaleString()}</div>
-    </div>
-  );
+// ============================================================
+// CREATE ORDER MODAL
+// ============================================================
+interface CreateOrderFormData {
+  customerId: string;
+  customerName: string;
+  garmentType: string;
+  uniformCategory: string;
+  styleDesign: string;
+  fabric: string;
+  fabricQuantity: string;
+  quantity: number;
+  specialInstructions: string;
+  targetCompletionDate: string;
+  assignedTailorId: string;
+  depositAmount: string;
+  collectDeposit: boolean;
 }
 
-function RevenueTrendCard() {
+const GARMENT_TYPES = ['Barong Tagalog', 'Two-piece Suit', "Women's Coat", 'Evening Gown', 'School Uniform Set', 'Custom garment'];
+const UNIFORM_CATEGORIES = ['Regular University Uniform', 'Departmental Uniform', 'PE Uniform', 'Sports / Intramural Jersey', 'Custom/Bespoke Apparel', 'Not Applicable'];
+
+function CreateOrderModal({ 
+  onClose, 
+  onCreate, 
+  customers 
+}: { 
+  onClose: () => void; 
+  onCreate: (data: CreateOrderFormData) => Promise<void>;
+  customers: Customer[];
+}) {
+  const [form, setForm] = useState<CreateOrderFormData>({
+    customerId: '',
+    customerName: '',
+    garmentType: GARMENT_TYPES[0],
+    uniformCategory: UNIFORM_CATEGORIES[0],
+    styleDesign: '',
+    fabric: '',
+    fabricQuantity: '',
+    quantity: 1,
+    specialInstructions: '',
+    targetCompletionDate: '',
+    assignedTailorId: '',
+    depositAmount: '',
+    collectDeposit: true,
+  });
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [priceCalculation, setPriceCalculation] = useState<{
+    laborCost: number;
+    fabricCost: number;
+    additionalCharges: number;
+    discount: number;
+    totalAmount: number;
+    depositRequired: number;
+    remainingBalance: number;
+  } | null>(null);
+  const [calculating, setCalculating] = useState(false);
+
+  const selectedCustomer = customers.find(c => c.customer_id === form.customerId);
+
+  const calculatePrice = async () => {
+    if (!form.garmentType) return;
+    setCalculating(true);
+    try {
+      const result = await frontDeskApi.calculatePrice({
+        garmentType: form.garmentType,
+        uniformCategory: form.uniformCategory,
+        fabric: form.fabric || 'Standard',
+        fabricQuantity: parseFloat(form.fabricQuantity) || 0,
+        quantity: form.quantity || 1,
+        additionalCharges: 0,
+        discount: 0,
+      });
+      setPriceCalculation(result);
+    } catch (err) {
+      console.error('Price calculation failed:', err);
+      // Fallback calculation
+      const basePrice = form.garmentType === 'Barong Tagalog' ? 2500 :
+                        form.garmentType === 'Two-piece Suit' ? 4800 :
+                        form.garmentType === "Women's Coat" ? 3500 :
+                        form.garmentType === 'Evening Gown' ? 5000 :
+                        form.garmentType === 'School Uniform Set' ? 1800 : 3000;
+      const total = basePrice * (form.quantity || 1);
+      setPriceCalculation({
+        laborCost: total * 0.6,
+        fabricCost: total * 0.3,
+        additionalCharges: 0,
+        discount: 0,
+        totalAmount: total,
+        depositRequired: total * 0.5,
+        remainingBalance: total * 0.5,
+      });
+    } finally {
+      setCalculating(false);
+    }
+  };
+
+  useEffect(() => {
+    if (form.garmentType) {
+      calculatePrice();
+    }
+  }, [form.garmentType, form.quantity, form.fabricQuantity]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.customerId) {
+      setError('Please select a customer.');
+      return;
+    }
+    if (!form.garmentType) {
+      setError('Please select a garment type.');
+      return;
+    }
+    if (!form.targetCompletionDate) {
+      setError('Please set a target completion date.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await onCreate(form);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create order.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const totalAmount = priceCalculation?.totalAmount || 0;
+  const depositRequired = priceCalculation?.depositRequired || (totalAmount * 0.5);
+  const remainingBalance = priceCalculation?.remainingBalance || (totalAmount * 0.5);
+
   return (
-    <div className="dash-in dash-card rounded-xl p-6 sm:p-7" style={{ animationDelay: '0.42s' }}>
-      <div className="flex items-start justify-between gap-3 mb-1">
-        <div>
-          <MonoLabel>Weekly ledger</MonoLabel>
-          <h2 className="text-xl font-normal mt-0.5 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Revenue trend</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-[#1F1916]/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
+      <div className="relative w-full max-w-3xl bg-[#FFFFFF] border border-[#E8DFD3] rounded-xl shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-7 sm:px-10 pt-8 pb-2">
+          <MonoLabel>New order</MonoLabel>
+          <button onClick={onClose} className="text-[#A3958B] hover:text-[#2A211D] transition-colors p-1 rounded-full hover:bg-[#F2ECE1]">
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        <span className="inline-flex items-center gap-1 rounded-full bg-[#F1F5F0] border border-[#C7DDD3] px-2.5 py-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-[#4E7357] flex-shrink-0">
-          <TrendingUp className="w-3 h-3" strokeWidth={2} /> +14.6%
-        </span>
-      </div>
-      <p className="text-[12.5px] text-[#8C7E74] mb-5">Cash collected at the counter, last 7 days</p>
-      <div className="h-48 -ml-2">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={WEEKLY_REVENUE} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#B89255" stopOpacity={0.55} />
-                <stop offset="100%" stopColor="#B89255" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid vertical={false} stroke="#ECE3D8" strokeDasharray="3 4" />
-            <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: '#A3958B', fontSize: 11, fontFamily: 'Space Mono, monospace' }} />
-            <YAxis hide domain={['dataMin - 3000', 'dataMax + 3000']} />
-            <Tooltip content={<ChartTooltip />} cursor={{ stroke: '#D9C8B7', strokeWidth: 1 }} />
-            <Area
-              type="monotone"
-              dataKey="amount"
-              stroke="#8C6F3E"
-              strokeWidth={2.25}
-              fill="url(#revenueFill)"
-              dot={{ r: 3, stroke: '#8C6F3E', strokeWidth: 2, fill: '#FFFFFF' }}
-              activeDot={{ r: 5, fill: '#8C6F3E' }}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
 
-function ProductionMixCard() {
-  const total = PRODUCTION_MIX.reduce((sum, s) => sum + s.count, 0);
-  return (
-    <div className="dash-in dash-card rounded-xl p-6 sm:p-7" style={{ animationDelay: '0.46s' }}>
-      <MonoLabel>Workshop floor</MonoLabel>
-      <h2 className="text-xl font-normal mt-0.5 mb-1 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Production mix</h2>
-      <p className="text-[12.5px] text-[#8C7E74] mb-5">{total} garments currently in progress, by stage</p>
-      <div className="flex items-center gap-6">
-        <div className="relative h-32 w-32 flex-shrink-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={PRODUCTION_MIX} dataKey="count" nameKey="stage" innerRadius={38} outerRadius={58} paddingAngle={3} stroke="none">
-                {PRODUCTION_MIX.map((entry) => (
-                  <Cell key={entry.stage} fill={entry.color} />
-                ))}
-              </Pie>
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="text-xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{total}</span>
-            <span className="text-[9px] uppercase tracking-[0.14em] text-[#A3958B]">Active</span>
-          </div>
+        <div className="px-7 sm:px-10 pb-9 pt-2">
+          <h2 className="text-3xl leading-tight mb-2 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>
+            Create Custom Order
+          </h2>
+          <p className="text-[14px] text-[#766A62] font-light mb-6 leading-relaxed">
+            Create a new job card for a custom garment order. You can collect and save the initial deposit before you finish.
+          </p>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {error && (
+              <div className="border border-[#C86A58]/30 bg-[#FDF4F2] px-4 py-3 rounded-lg text-sm text-[#9A3B2A]">
+                {error}
+              </div>
+            )}
+
+            {/* Customer Selection */}
+            <div>
+              <label className="block mb-1.5"><MonoLabel>Customer</MonoLabel></label>
+              <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
+                <User className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
+                <select
+                  value={form.customerId}
+                  onChange={(e) => {
+                    const customer = customers.find(c => c.customer_id === e.target.value);
+                    setForm(f => ({ 
+                      ...f, 
+                      customerId: e.target.value,
+                      customerName: customer?.full_name || ''
+                    }));
+                  }}
+                  className="w-full bg-transparent text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
+                >
+                  <option value="">Select a customer</option>
+                  {customers.map(c => (
+                    <option key={c.customer_id} value={c.customer_id}>{c.full_name} ({c.customer_id})</option>
+                  ))}
+                </select>
+              </div>
+              {selectedCustomer && (
+                <div className="mt-2 text-xs text-[#766A62]">
+                  {selectedCustomer.email} · {selectedCustomer.contact_number}
+                </div>
+              )}
+            </div>
+
+            {/* Garment Details */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+              <div>
+                <label className="block mb-1.5"><MonoLabel>Garment type</MonoLabel></label>
+                <select
+                  value={form.garmentType}
+                  onChange={(e) => setForm(f => ({ ...f, garmentType: e.target.value }))}
+                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+                >
+                  {GARMENT_TYPES.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block mb-1.5"><MonoLabel>Uniform category</MonoLabel></label>
+                <select
+                  value={form.uniformCategory}
+                  onChange={(e) => setForm(f => ({ ...f, uniformCategory: e.target.value }))}
+                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+                >
+                  {UNIFORM_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+              <div>
+                <label className="block mb-1.5"><MonoLabel>Style/Design</MonoLabel></label>
+                <input
+                  value={form.styleDesign}
+                  onChange={(e) => setForm(f => ({ ...f, styleDesign: e.target.value }))}
+                  placeholder="e.g. Classic, Modern, Embroidered"
+                  className="w-full border-b border-[#E2D7C7] bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+                />
+              </div>
+              <div>
+                <label className="block mb-1.5"><MonoLabel>Fabric</MonoLabel></label>
+                <input
+                  value={form.fabric}
+                  onChange={(e) => setForm(f => ({ ...f, fabric: e.target.value }))}
+                  placeholder="e.g. Italian Wool, Cotton, Silk"
+                  className="w-full border-b border-[#E2D7C7] bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+              <div>
+                <label className="block mb-1.5"><MonoLabel>Fabric quantity (yards)</MonoLabel></label>
+                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
+                  <Scissors className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={form.fabricQuantity}
+                    onChange={(e) => setForm(f => ({ ...f, fabricQuantity: e.target.value }))}
+                    placeholder="2.5"
+                    className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block mb-1.5"><MonoLabel>Quantity</MonoLabel></label>
+                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
+                  <Package className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.quantity}
+                    onChange={(e) => setForm(f => ({ ...f, quantity: parseInt(e.target.value) || 1 }))}
+                    className="w-full bg-transparent text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+              <div>
+                <label className="block mb-1.5"><MonoLabel>Target completion date</MonoLabel></label>
+                <input
+                  type="date"
+                  value={form.targetCompletionDate}
+                  onChange={(e) => setForm(f => ({ ...f, targetCompletionDate: e.target.value }))}
+                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+                />
+              </div>
+              <div>
+                <label className="block mb-1.5"><MonoLabel>Assigned tailor (optional)</MonoLabel></label>
+                <input
+                  value={form.assignedTailorId}
+                  onChange={(e) => setForm(f => ({ ...f, assignedTailorId: e.target.value }))}
+                  placeholder="Tailor name or ID"
+                  className="w-full border-b border-[#E2D7C7] bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block mb-1.5"><MonoLabel>Special instructions</MonoLabel></label>
+              <textarea
+                value={form.specialInstructions}
+                onChange={(e) => setForm(f => ({ ...f, specialInstructions: e.target.value }))}
+                placeholder="Any special requests or notes for the tailor..."
+                rows={2}
+                className="w-full border-b border-[#E2D7C7] bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D] resize-none"
+              />
+            </div>
+
+            {/* Price Breakdown */}
+            {priceCalculation && (
+              <div className="rounded-lg border border-[#E8DFD3] bg-[#FCFAF7] p-4 space-y-2">
+                <div className="flex items-center gap-2 mb-2">
+                  <DollarSign className="w-4 h-4 text-[#8C6F3E]" />
+                  <h3 className="text-sm font-semibold text-[#2A211D]">Price Breakdown</h3>
+                  {calculating && <Loader2 className="w-4 h-4 animate-spin text-[#8C6F3E] ml-auto" />}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex justify-between"><span className="text-[#766A62]">Labor Cost:</span><span className="font-medium">{formatPeso(priceCalculation.laborCost)}</span></div>
+                  <div className="flex justify-between"><span className="text-[#766A62]">Fabric Cost:</span><span className="font-medium">{formatPeso(priceCalculation.fabricCost)}</span></div>
+                  <div className="flex justify-between"><span className="text-[#766A62]">Additional Charges:</span><span className="font-medium">{formatPeso(priceCalculation.additionalCharges)}</span></div>
+                  <div className="flex justify-between"><span className="text-[#766A62]">Discount:</span><span className="font-medium text-[#4E7357]">-{formatPeso(priceCalculation.discount)}</span></div>
+                  <div className="col-span-2 border-t border-dashed border-[#E2D7C7] pt-2 flex justify-between font-semibold">
+                    <span>Total Amount:</span>
+                    <span className="text-[#2A211D]">{formatPeso(priceCalculation.totalAmount)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Initial deposit is recorded automatically with the new job card. */}
+            <div className="rounded-lg border border-[#E8DFD3] bg-[#FCFAF7] p-4">
+              <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-[#2A211D]">
+                <input
+                  type="checkbox"
+                  checked={form.collectDeposit}
+                  onChange={(e) => setForm(f => ({ ...f, collectDeposit: e.target.checked }))}
+                  className="h-4 w-4 accent-[#8C6F3E]"
+                />
+                Collect initial deposit now (recorded automatically when this order is created)
+              </label>
+              {form.collectDeposit && (
+                <div className="mt-4">
+                  <label className="block mb-1.5"><MonoLabel>Deposit amount (₱)</MonoLabel></label>
+                  <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
+                    <Banknote className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={form.depositAmount}
+                      onChange={(e) => setForm(f => ({ ...f, depositAmount: e.target.value }))}
+                      placeholder={String(depositRequired)}
+                      className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
+                    />
+                  </div>
+                  <p className="text-[11px] text-[#A3958B] mt-2">
+                    Enter the amount collected now. It will be saved as the initial payment for this new job card. Suggested deposit: {formatPeso(depositRequired)} · Balance after deposit: {formatPeso(remainingBalance)}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={saving}
+                className="flex-1 px-4 py-3 rounded-lg border border-[#E2D7C7] text-[#766A62] text-[11px] font-semibold tracking-[0.14em] uppercase hover:bg-[#F2ECE1] transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 px-4 py-3 rounded-lg bg-[#2A211D] text-[#FAF7F2] text-[11px] font-semibold tracking-[0.14em] uppercase hover:bg-[#3D312B] transition-colors shadow-md disabled:opacity-50"
+              >
+                {saving ? 'Creating...' : 'Create Order'}
+              </button>
+            </div>
+          </form>
         </div>
-        <ul className="flex-1 space-y-2.5 min-w-0">
-          {PRODUCTION_MIX.map((s) => (
-            <li key={s.stage} className="flex items-center justify-between gap-3 text-[12.5px]">
-              <span className="flex items-center gap-2 min-w-0 text-[#5E5048]">
-                <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
-                <span className="truncate">{s.stage}</span>
-              </span>
-              <span className="text-[#2A211D] font-medium flex-shrink-0" style={{ fontFamily: "'Space Mono', monospace" }}>{s.count}</span>
-            </li>
-          ))}
-        </ul>
       </div>
     </div>
   );
 }
 
-function MiniSparkline({ data, color }: { data: number[]; color: string }) {
-  const points = data.map((value, index) => ({ index, value }));
+// ============================================================
+// RECORD PAYMENT MODAL
+// ============================================================
+interface RecordPaymentFormData {
+  jobCardId: string;
+  orderId: string;
+  amount: string;
+  paymentType: 'Deposit' | 'Final Payment' | 'Partial';
+  paymentMethod: 'Cash' | 'Card' | 'Bank Transfer' | 'GCash' | 'Other';
+  notes: string;
+}
+
+function RecordPaymentModal({ 
+  onClose, 
+  onRecord, 
+  orders 
+}: { 
+  onClose: () => void; 
+  onRecord: (data: any) => Promise<void>;
+  orders: Order[];
+}) {
+  const [form, setForm] = useState<RecordPaymentFormData>({
+    jobCardId: '',
+    orderId: '',
+    amount: '',
+    paymentType: 'Deposit',
+    paymentMethod: 'Cash',
+    notes: '',
+  });
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const selectedOrder = orders.find(o => o.job_card_id === form.jobCardId.toUpperCase());
+
+  const handleJobCardSearch = (value: string) => {
+    setForm(f => ({ ...f, jobCardId: value }));
+    const found = orders.find(o => o.job_card_id === value.toUpperCase());
+    if (found) {
+      setForm(f => ({ ...f, orderId: found.order_id }));
+    }
+  };
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const amountNum = Number(form.amount);
+    if (!form.jobCardId.trim()) {
+      setError('Job card ID is required.');
+      return;
+    }
+    if (!form.amount.trim() || Number.isNaN(amountNum) || amountNum <= 0) {
+      setError('Enter a valid payment amount.');
+      return;
+    }
+    if (selectedOrder && amountNum > selectedOrder.remaining_balance) {
+      setError(`Amount exceeds the balance due of ${formatPeso(selectedOrder.remaining_balance)} for this job card.`);
+      return;
+    }
+    if (!selectedOrder) {
+      setError('Job card not found. Please check the ID.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await onRecord({
+        orderId: selectedOrder.order_id,
+        amount: amountNum,
+        paymentType: form.paymentType,
+        paymentMethod: form.paymentMethod,
+        notes: form.notes,
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to record payment.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <div className="h-9 w-20 flex-shrink-0">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={points} barCategoryGap="20%">
-          <Bar dataKey="value" radius={[2, 2, 0, 0]}>
-            {points.map((_, i) => (
-              <Cell key={i} fill={color} fillOpacity={i === points.length - 1 ? 1 : 0.35} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-[#1F1916]/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-xl bg-[#FFFFFF] border border-[#E8DFD3] rounded-xl shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-7 sm:px-10 pt-8 pb-2">
+          <MonoLabel>Record payment</MonoLabel>
+          <button onClick={onClose} className="text-[#A3958B] hover:text-[#2A211D] transition-colors p-1 rounded-full hover:bg-[#F2ECE1]">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="px-7 sm:px-10 pb-9 pt-2">
+          <h2 className="text-3xl leading-tight mb-2 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>
+            Record Payment
+          </h2>
+          <p className="text-[14px] text-[#766A62] font-light mb-6 leading-relaxed">
+            Record an additional deposit, partial payment, or final balance for an existing job card. Initial deposits can be collected while creating an order.
+          </p>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {error && (
+              <div className="border border-[#C86A58]/30 bg-[#FDF4F2] px-4 py-3 rounded-lg text-sm text-[#9A3B2A]">
+                {error}
+              </div>
+            )}
+
+            <div>
+              <label className="block mb-1.5"><MonoLabel>Existing job card</MonoLabel></label>
+              <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
+                <Package className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
+                <select
+                  value={form.jobCardId}
+                  onChange={(e) => handleJobCardSearch(e.target.value)}
+                  className="w-full bg-transparent text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
+                >
+                  <option value="">Select an existing job card</option>
+                  {orders.filter((order) => order.production_status !== 'Released').map((order) => (
+                    <option key={order.order_id} value={order.job_card_id}>
+                      {order.job_card_id} — {order.customer_name} ({formatPeso(order.remaining_balance)} balance)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="mt-2 text-[11px] text-[#A3958B]">Choose the job card receiving this additional, partial, or final payment.</p>
+            </div>
+
+            {selectedOrder && (
+              <div className="rounded-lg border border-[#E8DFD3] bg-[#FCFAF7] p-4">
+                <div className="flex justify-between items-center">
+                  <span className="font-medium text-[#2A211D]">{selectedOrder.customer_name}</span>
+                  <span className="text-sm text-[#766A62]">{selectedOrder.garment_type}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-dashed border-[#E2D7C7]">
+                  <div>
+                    <MonoLabel>Total</MonoLabel>
+                    <div className="text-sm font-semibold text-[#2A211D]">{formatPeso(selectedOrder.total_amount)}</div>
+                  </div>
+                  <div>
+                    <MonoLabel>Paid</MonoLabel>
+                    <div className="text-sm font-semibold text-[#4E7357]">{formatPeso(selectedOrder.deposit_paid)}</div>
+                  </div>
+                  <div>
+                    <MonoLabel>Balance</MonoLabel>
+                    <div className="text-sm font-semibold text-[#9E5B4B]">{formatPeso(selectedOrder.remaining_balance)}</div>
+                  </div>
+                </div>
+                <div className="mt-2 text-xs text-[#766A62]">
+                  Status: {selectedOrder.payment_status} · Production: {selectedOrder.production_status}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block mb-1.5"><MonoLabel>Payment type</MonoLabel></label>
+                <select
+                  value={form.paymentType}
+                  onChange={(e) => setForm(f => ({ ...f, paymentType: e.target.value as any }))}
+                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+                >
+                  <option value="Deposit">Deposit</option>
+                  <option value="Final Payment">Final Payment</option>
+                  <option value="Partial">Partial</option>
+                </select>
+              </div>
+              <div>
+                <label className="block mb-1.5"><MonoLabel>Payment method</MonoLabel></label>
+                <select
+                  value={form.paymentMethod}
+                  onChange={(e) => setForm(f => ({ ...f, paymentMethod: e.target.value as any }))}
+                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+                >
+                  <option value="Cash">Cash</option>
+                  <option value="Card">Card</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="GCash">GCash</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block mb-1.5"><MonoLabel>Amount (₱)</MonoLabel></label>
+              <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
+                <Banknote className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.amount}
+                  onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))}
+                  placeholder="0"
+                  className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
+                />
+              </div>
+              {selectedOrder && selectedOrder.remaining_balance > 0 && (
+                <p className="text-[11px] text-[#A3958B] mt-1">
+                  Remaining balance: {formatPeso(selectedOrder.remaining_balance)}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block mb-1.5"><MonoLabel>Notes (optional)</MonoLabel></label>
+              <input
+                value={form.notes}
+                onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="e.g. Cash payment"
+                className="w-full border-b border-[#E2D7C7] bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={saving}
+                className="flex-1 px-4 py-3 rounded-lg border border-[#E2D7C7] text-[#766A62] text-[11px] font-semibold uppercase hover:bg-[#F2ECE1] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 px-4 py-3 rounded-lg bg-[#2A211D] text-[#FAF7F2] text-[11px] font-semibold uppercase hover:bg-[#3D312B] shadow-md disabled:opacity-50"
+              >
+                {saving ? 'Recording...' : 'Record Payment'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   );
 }
 
-/* ==================================================================
-   DASHBOARD VIEW
-================================================================== */
+// ============================================================
+// SCHEDULE FITTING MODAL
+// ============================================================
+interface ScheduleFittingFormData {
+  customerId: string;
+  orderId: string;
+  appointmentDate: string;
+  appointmentTime: string;
+  appointmentType: 'First Fitting' | 'Final Fitting' | 'Consultation' | 'Pickup';
+  notes: string;
+}
+
+function ScheduleFittingModal({ 
+  onClose, 
+  onSchedule,
+  customers,
+  orders
+}: { 
+  onClose: () => void; 
+  onSchedule: (data: any) => Promise<void>;
+  customers: Customer[];
+  orders: Order[];
+}) {
+  const [form, setForm] = useState<ScheduleFittingFormData>({
+    customerId: '',
+    orderId: '',
+    appointmentDate: new Date().toISOString().split('T')[0],
+    appointmentTime: '',
+    appointmentType: 'First Fitting',
+    notes: '',
+  });
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const filteredOrders = orders.filter(o => o.customer_id === form.customerId && o.production_status !== 'Released');
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.customerId || !form.orderId || !form.appointmentDate || !form.appointmentTime) {
+      setError('Customer, order, date, and time are required.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await onSchedule(form);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to schedule appointment.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-[#1F1916]/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-xl bg-[#FFFFFF] border border-[#E8DFD3] rounded-xl shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-7 sm:px-10 pt-8 pb-2">
+          <MonoLabel>Schedule fitting</MonoLabel>
+          <button onClick={onClose} className="text-[#A3958B] hover:text-[#2A211D] transition-colors p-1 rounded-full hover:bg-[#F2ECE1]">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="px-7 sm:px-10 pb-9 pt-2">
+          <h2 className="text-3xl leading-tight mb-2 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>
+            Schedule Fitting
+          </h2>
+          <p className="text-[14px] text-[#766A62] font-light mb-6 leading-relaxed">
+            Book a fitting appointment for a customer.
+          </p>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {error && (
+              <div className="border border-[#C86A58]/30 bg-[#FDF4F2] px-4 py-3 rounded-lg text-sm text-[#9A3B2A]">
+                {error}
+              </div>
+            )}
+
+            <div>
+              <label className="block mb-1.5"><MonoLabel>Customer</MonoLabel></label>
+              <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
+                <User className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
+                <select
+                  value={form.customerId}
+                  onChange={(e) => setForm(f => ({ ...f, customerId: e.target.value, orderId: '' }))}
+                  className="w-full bg-transparent text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
+                >
+                  <option value="">Select customer</option>
+                  {customers.map(c => (
+                    <option key={c.customer_id} value={c.customer_id}>{c.full_name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block mb-1.5"><MonoLabel>Order (Job Card)</MonoLabel></label>
+              <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
+                <Package className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
+                <select
+                  value={form.orderId}
+                  onChange={(e) => setForm(f => ({ ...f, orderId: e.target.value }))}
+                  disabled={!form.customerId}
+                  className="w-full bg-transparent text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D] disabled:opacity-50"
+                >
+                  <option value="">Select order</option>
+                  {filteredOrders.map(o => (
+                    <option key={o.order_id} value={o.order_id}>
+                      {o.job_card_id} - {o.garment_type} ({o.production_status})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {filteredOrders.length === 0 && form.customerId && (
+                <p className="text-[11px] text-[#A3958B] mt-1">No active orders for this customer.</p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block mb-1.5"><MonoLabel>Date</MonoLabel></label>
+                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
+                  <Calendar className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
+                  <input
+                    type="date"
+                    value={form.appointmentDate}
+                    onChange={(e) => setForm(f => ({ ...f, appointmentDate: e.target.value }))}
+                    className="w-full bg-transparent text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block mb-1.5"><MonoLabel>Time</MonoLabel></label>
+                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
+                  <Clock className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
+                  <input
+                    type="time"
+                    value={form.appointmentTime}
+                    onChange={(e) => setForm(f => ({ ...f, appointmentTime: e.target.value }))}
+                    className="w-full bg-transparent text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block mb-1.5"><MonoLabel>Appointment type</MonoLabel></label>
+              <select
+                value={form.appointmentType}
+                onChange={(e) => setForm(f => ({ ...f, appointmentType: e.target.value as any }))}
+                className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+              >
+                <option value="First Fitting">First Fitting</option>
+                <option value="Final Fitting">Final Fitting</option>
+                <option value="Consultation">Consultation</option>
+                <option value="Pickup">Pickup</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block mb-1.5"><MonoLabel>Notes (optional)</MonoLabel></label>
+              <input
+                value={form.notes}
+                onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="Special instructions for the fitting..."
+                className="w-full border-b border-[#E2D7C7] bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={saving}
+                className="flex-1 px-4 py-3 rounded-lg border border-[#E2D7C7] text-[#766A62] text-[11px] font-semibold uppercase hover:bg-[#F2ECE1] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 px-4 py-3 rounded-lg bg-[#2A211D] text-[#FAF7F2] text-[11px] font-semibold uppercase hover:bg-[#3D312B] shadow-md disabled:opacity-50"
+              >
+                {saving ? 'Scheduling...' : 'Schedule Fitting'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// DASHBOARD VIEW
+// ============================================================
 
 function DashboardView() {
-  const [dayBook, setDayBook] = useState(DAY_BOOK);
-  const [fittings, setFittings] = useState(FITTINGS_TODAY_INIT);
-  const [stats, setStats] = useState(TODAY_STATS_INIT);
-  const [jobCards, setJobCards] = useState<Record<string, JobCardRecord>>(JOB_CARDS_INIT);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    todayCustomers: 0,
+    todayOrders: 0,
+    pendingPayments: 0,
+    upcomingFittings: 0,
+    readyForPickup: 0,
+    todayCollected: 0,
+  });
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [readyForPickup, setReadyForPickup] = useState<Order[]>([]);
+  const [upcomingFittings, setUpcomingFittings] = useState<Appointment[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<null | 'customer' | 'order' | 'payment' | 'fitting'>(null);
   const [banner, setBanner] = useState('');
 
-  function nowTime() {
-    return new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  }
-
-  function announce(message: string) {
-    setBanner(message);
-    setTimeout(() => setBanner(''), 4000);
-  }
-
-  async function handleRegisterCustomer(form: NewCustomerForm) {
-    const response = await fetch(`${API_URL}/auth/customers`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify(form) });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || 'Unable to register customer.');
-    const fullName =
-      [form.firstName, form.middleName, form.lastName].map((n) => n.trim()).filter(Boolean).join(' ') +
-      (form.suffix.trim() ? `, ${form.suffix.trim()}` : '');
-    setDayBook((prev) => [{ time: nowTime(), label: 'New customer', detail: `${fullName} registered`, kind: 'customer' }, ...prev]);
-    setStats((s) => ({ ...s, walkIns: s.walkIns + 1 }));
-    setActiveModal(null);
-    announce(`${fullName}'s account was submitted for admin approval.`);
-  }
-
-  function handleCreateOrder(form: NewOrderForm) {
-    const jobCardId = `JC-${Math.floor(3000 + Math.random() * 900)}`;
-    const totalAmount = Number(form.totalAmount) || 0;
-    const depositAmount = form.collectDeposit ? Number(form.depositAmount) || 0 : 0;
-
-    setJobCards((prev) => ({
-      ...prev,
-      [jobCardId]: {
-        customer: form.customer,
-        garment: form.garment,
-        fabric: form.fabric,
-        fabricQuantity: form.fabricQuantity,
-        totalAmount,
-        amountPaid: depositAmount,
-      },
-    }));
-
-    setDayBook((prev) => [{ time: nowTime(), label: 'Order created', detail: `${jobCardId} — ${form.garment} for ${form.customer} · Total ${formatPeso(totalAmount)}`, kind: 'order' }, ...prev]);
-    if (depositAmount > 0) {
-      setDayBook((prev) => [{ time: nowTime(), label: 'Deposit received', detail: `${formatPeso(depositAmount)} — ${jobCardId}, cash`, kind: 'payment' }, ...prev]);
-      setStats((s) => ({ ...s, collected: s.collected + depositAmount }));
+  const loadDashboardData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [statsData, activityData, pickupData, fittingsData, customersData, ordersData] = await Promise.all([
+        frontDeskApi.getDashboardStats(),
+        frontDeskApi.getRecentActivity(),
+        frontDeskApi.getReadyForPickup(),
+        frontDeskApi.getUpcomingFittings(),
+        frontDeskApi.searchCustomers(''),
+        frontDeskApi.getAllOrders(),
+      ]);
+      setStats(statsData);
+      setRecentActivity(activityData);
+      setReadyForPickup(pickupData);
+      setUpcomingFittings(fittingsData);
+      setCustomers(customersData);
+      setOrders(ordersData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
+    } finally {
+      setLoading(false);
     }
-    if (form.scheduleFitting) {
-      const time = new Date(`${form.fittingDate}T${form.fittingTime}`).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-      setFittings((prev) => [...prev, { time, customer: form.customer, garment: form.garment, stage: 'First Fitting' }]);
-      setDayBook((prev) => [{ time: nowTime(), label: 'First fitting booked', detail: `${form.customer} — ${time}`, kind: 'appointment' }, ...prev]);
-      setStats((s) => ({ ...s, fittings: s.fittings + 1 }));
+  }, []);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  const handleRegisterCustomer = async (form: NewCustomerForm) => {
+    try {
+      await frontDeskApi.registerCustomer({
+        firstName: form.firstName,
+        middleName: form.middleName,
+        lastName: form.lastName,
+        suffix: form.suffix,
+        email: form.email,
+        contactNumber: form.contact,
+        address: form.address,
+        dateOfBirth: form.dateOfBirth,
+        gender: form.gender,
+        civilStatus: form.civilStatus,
+        occupation: form.occupation,
+        password: form.password,
+      });
+      const fullName = [form.firstName, form.middleName, form.lastName].filter(Boolean).join(' ') + (form.suffix ? `, ${form.suffix}` : '');
+      setBanner(`${fullName}'s account was submitted for admin approval.`);
+      setActiveModal(null);
+      loadDashboardData();
+      setTimeout(() => setBanner(''), 5000);
+    } catch (err) {
+      throw err;
     }
-    setActiveModal(null);
-    announce(`${jobCardId} was opened for ${form.customer} — balance ${formatPeso(Math.max(totalAmount - depositAmount, 0))}.${form.scheduleFitting ? ' First fitting scheduled.' : ''}`);
-  }
+  };
 
-  function handleRecordPayment(form: NewPaymentForm) {
-    const amountNum = Number(form.amount) || 0;
-    const label = form.paymentType === 'deposit' ? 'Deposit received' : 'Final payment';
-    const cardId = form.jobCardId.trim().toUpperCase();
+  const handleCreateOrder = async (data: CreateOrderFormData) => {
+    try {
+      const newOrder = await frontDeskApi.createOrder({
+        customerId: data.customerId,
+        garmentType: data.garmentType,
+        uniformCategory: data.uniformCategory,
+        styleDesign: data.styleDesign,
+        fabric: data.fabric,
+        fabricQuantity: parseFloat(data.fabricQuantity) || 0,
+        quantity: data.quantity,
+        referenceImage: '',
+        specialInstructions: data.specialInstructions,
+        targetCompletionDate: data.targetCompletionDate,
+        assignedTailorId: data.assignedTailorId,
+        measurementSnapshotId: '',
+        orderNotes: '',
+      });
 
-    setJobCards((prev) => {
-      if (!prev[cardId]) return prev;
-      return { ...prev, [cardId]: { ...prev[cardId], amountPaid: prev[cardId].amountPaid + amountNum } };
+      if (data.collectDeposit && data.depositAmount) {
+        const depositAmount = parseFloat(data.depositAmount);
+        if (depositAmount > 0) {
+          await frontDeskApi.recordPayment({
+            orderId: newOrder.order_id,
+            amount: depositAmount,
+            paymentType: 'Deposit',
+            paymentMethod: 'Cash',
+            notes: 'Initial deposit recorded at front desk',
+          });
+          setBanner('Order created successfully. Deposit payment has been recorded.');
+        } else {
+          setBanner(`Order ${newOrder.job_card_id} created successfully.`);
+        }
+      } else {
+        setBanner(`Order ${newOrder.job_card_id} created successfully.`);
+      }
+      setActiveModal(null);
+      loadDashboardData();
+      setTimeout(() => setBanner(''), 5000);
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  const handleRecordPayment = async (data: any) => {
+    await frontDeskApi.recordPayment(data);
+    setBanner(`Payment of ${formatPeso(data.amount)} recorded successfully.`);
+    loadDashboardData();
+    setTimeout(() => setBanner(''), 5000);
+  };
+
+  const handleScheduleFitting = async (data: ScheduleFittingFormData) => {
+    await frontDeskApi.createAppointment({
+      customerId: data.customerId,
+      orderId: data.orderId,
+      appointmentDate: data.appointmentDate,
+      appointmentTime: data.appointmentTime,
+      appointmentType: data.appointmentType,
+      notes: data.notes,
     });
+    setBanner(`Fitting appointment scheduled successfully.`);
+    loadDashboardData();
+    setTimeout(() => setBanner(''), 5000);
+  };
 
-    const updatedCard = jobCards[cardId];
-    const newBalance = updatedCard ? Math.max(updatedCard.totalAmount - (updatedCard.amountPaid + amountNum), 0) : null;
-
-    setDayBook((prev) => [{ time: nowTime(), label, detail: `₱${amountNum.toLocaleString()} — ${form.jobCardId}, cash${newBalance !== null ? ` · Balance ${formatPeso(newBalance)}` : ''}`, kind: 'payment' }, ...prev]);
-    setStats((s) => ({ ...s, collected: s.collected + amountNum }));
-    setActiveModal(null);
-    announce(`₱${amountNum.toLocaleString()} recorded for ${form.jobCardId}.${newBalance !== null ? ` Balance due: ${formatPeso(newBalance)}.` : ''}`);
-  }
-
-  function handleScheduleFitting(form: NewFittingForm) {
-    setFittings((prev) => [...prev, { time: form.time, customer: form.customer, garment: form.garment, stage: form.stage }]);
-    setDayBook((prev) => [{ time: nowTime(), label: 'Fitting scheduled', detail: `${form.customer} — ${form.time}, ${form.stage}`, kind: 'appointment' }, ...prev]);
-    setStats((s) => ({ ...s, fittings: s.fittings + 1 }));
-    setActiveModal(null);
-    announce(`Fitting booked for ${form.customer} at ${form.time}.`);
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="w-8 h-8 animate-spin text-[#8C6F3E]" />
+      </div>
+    );
   }
 
   return (
@@ -1133,55 +1083,51 @@ function DashboardView() {
         </div>
       )}
 
-      {/* ---------------- QUICK ACTIONS ---------------- */}
+      {error && (
+        <div className="dash-in flex items-center gap-2 border border-[#C86A58]/30 bg-[#FDF4F2] px-4 py-3 text-sm text-[#9A3B2A] rounded-lg shadow-sm">
+          <AlertCircle className="w-4 h-4" />
+          <span className="font-medium">{error}</span>
+        </div>
+      )}
+
       <div className="dash-in grid grid-cols-2 lg:grid-cols-4 gap-4" style={{ animationDelay: '0.04s' }}>
         <QuickAction icon={<UserPlus className="w-5 h-5" strokeWidth={1.6} />} label="Register customer" hint="New profile" onClick={() => setActiveModal('customer')} />
-        <QuickAction icon={<FilePlus2 className="w-5 h-5" strokeWidth={1.6} />} label="Create order" hint="New job card" onClick={() => setActiveModal('order')} />
-        <QuickAction icon={<Banknote className="w-5 h-5" strokeWidth={1.6} />} label="Record payment" hint="Deposit or balance" onClick={() => setActiveModal('payment')} />
+        <QuickAction icon={<FilePlus2 className="w-5 h-5" strokeWidth={1.6} />} label="Create order" hint="New job card" helper="Create a new job card and optionally collect the initial deposit." onClick={() => setActiveModal('order')} />
+        <QuickAction icon={<Banknote className="w-5 h-5" strokeWidth={1.6} />} label="Record payment" hint="Existing job card" helper="Record additional payments for existing job cards." onClick={() => setActiveModal('payment')} />
         <QuickAction icon={<CalendarPlus className="w-5 h-5" strokeWidth={1.6} />} label="Schedule fitting" hint="Book appointment" onClick={() => setActiveModal('fitting')} />
       </div>
 
-      {/* ---------------- STATS ---------------- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard delay={0.1} label="Collected today" value={`₱${stats.collected.toLocaleString()}`} icon={<Wallet className="w-4 h-4" strokeWidth={1.6} />} spark={COLLECTED_SPARK} sparkColor="#8C6F3E" trendLabel="+8.2% vs yesterday" />
-        <StatCard delay={0.14} label="Walk-ins today" value={`${stats.walkIns}`} icon={<Users className="w-4 h-4" strokeWidth={1.6} />} />
-        <StatCard delay={0.18} label="Fittings today" value={`${stats.fittings}`} icon={<CalendarClock className="w-4 h-4" strokeWidth={1.6} />} />
-        <StatCard delay={0.22} label="Ready for pickup" value={`${stats.pickups}`} icon={<Package className="w-4 h-4" strokeWidth={1.6} />} tone="warn" />
-      </div>
-
-      {/* ---------------- CHARTS ---------------- */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-6">
-        <RevenueTrendCard />
-        <ProductionMixCard />
+        <StatCard delay={0.1} label="Collected today" value={formatPeso(stats.todayCollected)} icon={<Wallet className="w-4 h-4" strokeWidth={1.6} />} />
+        <StatCard delay={0.14} label="Customers today" value={`${stats.todayCustomers}`} icon={<Users className="w-4 h-4" strokeWidth={1.6} />} />
+        <StatCard delay={0.18} label="Fittings today" value={`${stats.upcomingFittings}`} icon={<CalendarClock className="w-4 h-4" strokeWidth={1.6} />} />
+        <StatCard delay={0.22} label="Ready for pickup" value={`${stats.readyForPickup}`} icon={<Package className="w-4 h-4" strokeWidth={1.6} />} tone="warn" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-6">
-        {/* ---------------- THE COUNTER CHIT ---------------- */}
         <div className="dash-in dash-card rounded-xl overflow-hidden" style={{ animationDelay: '0.28s' }}>
           <div className="ticket-edge h-3 w-full" aria-hidden="true" />
           <div className="p-6 sm:p-8 pt-5">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <MonoLabel>Today's chit</MonoLabel>
+                <MonoLabel>Today's activity</MonoLabel>
                 <h2 className="text-xl font-normal mt-0.5 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>The counter roll</h2>
               </div>
-              <button className="hidden sm:flex items-center gap-1 text-[11px] font-semibold tracking-[0.14em] uppercase text-[#A8644A] hover:text-[#2A211D] transition-colors">
-                Full history <ChevronRight className="w-3.5 h-3.5" />
-              </button>
             </div>
             <div className="border-b border-dashed border-[#E2D7C7] my-5" />
 
-            <div className="space-y-0">
-              {dayBook.map((entry, i) => {
-                const meta = DAY_BOOK_META[entry.kind];
-                const Icon = meta.icon;
-                return (
-                  <div key={i} className="dash-in flex items-center gap-3.5 py-3 border-b border-dashed border-[#ECE3D8] last:border-b-0" style={{ animationDelay: `${0.34 + i * 0.05}s` }}>
-                    <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                      style={{ backgroundColor: meta.bg, color: meta.tone }}
-                    >
-                      <Icon className="w-4 h-4" strokeWidth={1.8} />
+            <div className="space-y-0 max-h-80 overflow-y-auto">
+              {recentActivity.length === 0 ? (
+                <p className="text-center text-[#766A62] py-8">No activity yet today.</p>
+              ) : (
+                recentActivity.map((entry, i) => (
+                  <div key={i} className="flex items-center gap-3.5 py-3 border-b border-dashed border-[#ECE3D8] last:border-b-0">
+                    <div className="w-8 h-8 rounded-lg bg-[#F9F4EB] text-[#8C6F3E] flex items-center justify-center flex-shrink-0">
+                      {entry.kind === 'customer' ? <UserPlus className="w-4 h-4" strokeWidth={1.8} /> :
+                       entry.kind === 'order' ? <FilePlus2 className="w-4 h-4" strokeWidth={1.8} /> :
+                       entry.kind === 'payment' ? <Banknote className="w-4 h-4" strokeWidth={1.8} /> :
+                       entry.kind === 'pickup' ? <PackageCheck className="w-4 h-4" strokeWidth={1.8} /> :
+                       <CalendarPlus className="w-4 h-4" strokeWidth={1.8} />}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline justify-between gap-3">
@@ -1193,65 +1139,83 @@ function DashboardView() {
                       <p className="text-[12.5px] text-[#766A62] mt-0.5 truncate">{entry.detail}</p>
                     </div>
                   </div>
-                );
-              })}
+                ))
+              )}
             </div>
             <div className="border-t-2 border-dashed border-[#E2D7C7] mt-3 pt-4 flex items-center justify-between">
               <MonoLabel>Collected today</MonoLabel>
-              <span className="text-[16px] text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>₱{stats.collected.toLocaleString()}</span>
+              <span className="text-[16px] text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>{formatPeso(stats.todayCollected)}</span>
             </div>
           </div>
           <div className="ticket-edge h-3 w-full rotate-180" aria-hidden="true" />
         </div>
 
-        {/* ---------------- RIGHT COLUMN ---------------- */}
         <div className="space-y-6">
-          {/* Fittings today */}
           <div className="dash-in dash-card rounded-xl p-6 sm:p-7" style={{ animationDelay: '0.32s' }}>
             <MonoLabel>Fitting scheduler</MonoLabel>
             <h2 className="text-xl font-normal mt-0.5 mb-5 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Today's fittings</h2>
             <div className="space-y-4">
-              {fittings.map((f) => (
-                <div key={`${f.time}-${f.customer}`} className="flex items-center gap-3.5">
-                  <div className="flex flex-col items-center flex-shrink-0 w-14">
-                    <Clock className="w-3.5 h-3.5 text-[#B89255] mb-0.5" strokeWidth={1.8} />
-                    <span className="text-[11px] text-[#8C7E74] font-medium" style={{ fontFamily: "'Space Mono', monospace" }}>{f.time}</span>
+              {upcomingFittings.length === 0 ? (
+                <p className="text-center text-[#766A62] py-4">No fittings scheduled today.</p>
+              ) : (
+                upcomingFittings.slice(0, 4).map((f) => (
+                  <div key={f.appointment_id} className="flex items-center gap-3.5">
+                    <div className="flex flex-col items-center flex-shrink-0 w-14">
+                      <Clock className="w-3.5 h-3.5 text-[#B89255] mb-0.5" strokeWidth={1.8} />
+                      <span className="text-[11px] text-[#8C7E74] font-medium" style={{ fontFamily: "'Space Mono', monospace" }}>{f.appointment_time}</span>
+                    </div>
+                    <div className="min-w-0 flex-1 border-l border-[#ECE3D8] pl-3.5">
+                      <div className="text-[13.5px] text-[#2A211D] font-medium truncate">{f.customer_name}</div>
+                      <div className="text-[12px] text-[#766A62] truncate">{f.appointment_type}</div>
+                    </div>
                   </div>
-                  <div className="min-w-0 flex-1 border-l border-[#ECE3D8] pl-3.5">
-                    <div className="text-[13.5px] text-[#2A211D] font-medium truncate">{f.customer}</div>
-                    <div className="text-[12px] text-[#766A62] truncate">{f.garment} · {f.stage}</div>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
-            <button className="mt-6 w-full text-center text-[11px] font-semibold tracking-[0.14em] uppercase text-[#766A62] border border-[#E2D7C7] rounded-lg py-2.5 hover:border-[#A3958B] hover:bg-[#FAF7F2] transition-colors">
-              Open full schedule
-            </button>
           </div>
 
-          {/* Ready for pickup / release queue */}
           <div className="dash-in dash-card rounded-xl p-6 sm:p-7" style={{ animationDelay: '0.38s' }}>
             <MonoLabel>Release queue</MonoLabel>
             <h2 className="text-xl font-normal mt-0.5 mb-5 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Ready for pickup</h2>
             <div className="space-y-4">
-              {PICKUP_QUEUE.map((p) => (
-                <div key={p.id} className="flex items-center justify-between gap-3 border-t border-[#ECE3D8] pt-4 first:border-t-0 first:pt-0">
-                  <div className="min-w-0">
-                    <div className="text-[13.5px] text-[#2A211D] font-medium truncate">{p.customer}</div>
-                    <div className="text-[12px] text-[#766A62] truncate">{p.garment}</div>
-                    <div className="text-[11px] mt-0.5 font-medium" style={{ color: p.balance.startsWith('₱0') ? '#4E7357' : '#9E5B4B', fontFamily: "'Space Mono', monospace" }}>
-                      {p.balance}
+              {readyForPickup.length === 0 ? (
+                <p className="text-center text-[#766A62] py-4">No garments ready for pickup.</p>
+              ) : (
+                readyForPickup.slice(0, 3).map((order) => (
+                  <div key={order.order_id} className="flex items-center justify-between gap-3 border-t border-[#ECE3D8] pt-4 first:border-t-0 first:pt-0">
+                    <div className="min-w-0">
+                      <div className="text-[13.5px] text-[#2A211D] font-medium truncate">{order.customer_name}</div>
+                      <div className="text-[12px] text-[#766A62] truncate">{order.garment_type}</div>
+                      <div className="text-[11px] mt-0.5 font-medium" style={{ color: order.remaining_balance > 0 ? '#9E5B4B' : '#4E7357', fontFamily: "'Space Mono', monospace" }}>
+                        {order.remaining_balance > 0 ? `Balance: ${formatPeso(order.remaining_balance)}` : 'Paid in full'}
+                      </div>
                     </div>
+                    <button
+                      className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#2A211D] text-[#FAF7F2] text-[10px] font-semibold tracking-[0.1em] uppercase hover:bg-[#3D312B] transition-colors shadow-sm"
+                      aria-label={`Release ${order.job_card_id}`}
+                      onClick={async () => {
+                        if (order.remaining_balance > 0) {
+                          setBanner(`Cannot release ${order.job_card_id} - balance of ${formatPeso(order.remaining_balance)} remains.`);
+                          setTimeout(() => setBanner(''), 5000);
+                          return;
+                        }
+                        try {
+                          await frontDeskApi.releaseOrder(order.order_id);
+                          setBanner(`${order.job_card_id} released successfully.`);
+                          loadDashboardData();
+                          setTimeout(() => setBanner(''), 5000);
+                        } catch (err) {
+                          setBanner(err instanceof Error ? err.message : 'Failed to release order.');
+                          setTimeout(() => setBanner(''), 5000);
+                        }
+                      }}
+                    >
+                      <PackageCheck className="w-3.5 h-3.5" />
+                      Release
+                    </button>
                   </div>
-                  <button
-                    className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#2A211D] text-[#FAF7F2] text-[10px] font-semibold tracking-[0.1em] uppercase hover:bg-[#3D312B] transition-colors shadow-sm"
-                    aria-label={`Release ${p.id}`}
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Release
-                  </button>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -1261,33 +1225,32 @@ function DashboardView() {
         <RegisterCustomerModal onClose={() => setActiveModal(null)} onRegister={handleRegisterCustomer} />
       )}
       {activeModal === 'order' && (
-        <CreateOrderModal onClose={() => setActiveModal(null)} onCreate={handleCreateOrder} />
+        <CreateOrderModal 
+          onClose={() => setActiveModal(null)} 
+          onCreate={handleCreateOrder}
+          customers={customers}
+        />
       )}
       {activeModal === 'payment' && (
-        <RecordPaymentModal onClose={() => setActiveModal(null)} onRecord={handleRecordPayment} jobCards={jobCards} />
+        <RecordPaymentModal 
+          onClose={() => setActiveModal(null)} 
+          onRecord={handleRecordPayment}
+          orders={orders}
+        />
       )}
       {activeModal === 'fitting' && (
-        <ScheduleFittingModal onClose={() => setActiveModal(null)} onSchedule={handleScheduleFitting} />
+        <ScheduleFittingModal 
+          onClose={() => setActiveModal(null)} 
+          onSchedule={handleScheduleFitting}
+          customers={customers}
+          orders={orders}
+        />
       )}
     </div>
   );
 }
 
-/* placeholder page */
-function ComingSoonView({ label }: { label: string }) {
-  return (
-    <div className="dash-in dash-card rounded-xl p-16 text-center">
-      <MonoLabel>{label}</MonoLabel>
-      <h2 className="text-2xl font-normal mt-2 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>
-        This page isn't built yet
-      </h2>
-      <p className="text-[13px] text-[#766A62] mt-2">Ask to have the {label} page created next.</p>
-    </div>
-  );
-}
-
-/* ---------------- Quick action button ---------------- */
-function QuickAction({ icon, label, hint, onClick }: { icon: ReactNode; label: string; hint: string; onClick?: () => void }) {
+function QuickAction({ icon, label, hint, helper, onClick }: { icon: ReactNode; label: string; hint: string; helper?: string; onClick?: () => void }) {
   return (
     <button
       onClick={onClick}
@@ -1301,41 +1264,19 @@ function QuickAction({ icon, label, hint, onClick }: { icon: ReactNode; label: s
         <ArrowUpRight className="w-3.5 h-3.5 opacity-0 -translate-x-1 group-hover:opacity-70 group-hover:translate-x-0 transition-all" />
       </div>
       <MonoLabel className="text-[#C2B5A8] block mt-1">{hint}</MonoLabel>
+      {helper && <p className="mt-2 text-xs leading-relaxed text-[#E4D8CD]">{helper}</p>}
     </button>
   );
 }
 
-/* ---------------- Stat card ---------------- */
-function StatCard({
-  label,
-  value,
-  icon,
-  delay = 0,
-  tone = 'default',
-  spark,
-  sparkColor = '#8C6F3E',
-  trendLabel,
-}: {
-  label: string;
-  value: string;
-  icon: ReactNode;
-  delay?: number;
-  tone?: 'default' | 'warn';
-  spark?: number[];
-  sparkColor?: string;
-  trendLabel?: string;
-}) {
+function StatCard({ label, value, icon, delay = 0, tone = 'default' }: { label: string; value: string; icon: ReactNode; delay?: number; tone?: 'default' | 'warn' }) {
   return (
     <div className="dash-in dash-card rounded-xl p-5 sm:p-6 transition-shadow hover:shadow-md" style={{ animationDelay: `${delay}s` }}>
       <div className="flex items-center justify-between mb-4">
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${tone === 'warn' ? 'bg-[#FAF2F0] text-[#9E5B4B]' : 'bg-[#F9F4EB] text-[#8C6F3E]'}`}>{icon}</div>
-        {spark && <MiniSparkline data={spark} color={sparkColor} />}
       </div>
       <div className="text-2xl font-normal mb-1 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{value}</div>
-      <div className="flex items-center justify-between gap-2">
-        <MonoLabel className="block">{label}</MonoLabel>
-        {trendLabel && <span className="text-[10px] font-semibold text-[#4E7357] flex-shrink-0">{trendLabel}</span>}
-      </div>
+      <MonoLabel className="block">{label}</MonoLabel>
     </div>
   );
 }
@@ -1348,16 +1289,40 @@ export default function FrontDeskDashboard({ initialView = 'dashboard' }: { init
   const navigate = useNavigate();
   const [profile, setProfile] = useState(() => currentUser());
   const [navOpen, setNavOpen] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
   const [view, setView] = useState<ViewKey>(initialView);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    fetch(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${authToken()}` } })
-      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(); setProfile(data.user); const storage = localStorage.getItem('authToken') ? localStorage : sessionStorage; storage.setItem('currentUser', JSON.stringify(data.user)); })
-      .catch(() => {});
-  }, []);
+    const token = authToken();
+    if (!token) {
+      navigate('/login', { replace: true });
+      return;
+    }
+    fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error();
+        setProfile(data.user);
+        const storage = localStorage.getItem('authToken') ? localStorage : sessionStorage;
+        storage.setItem('currentUser', JSON.stringify(data.user));
+      })
+      .catch(() => {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('currentUser');
+        sessionStorage.removeItem('authToken');
+        sessionStorage.removeItem('currentUser');
+        navigate('/login', { replace: true });
+      })
+      .finally(() => setLoading(false));
+  }, [navigate]);
+
   const signOut = () => {
-    localStorage.removeItem('authToken'); localStorage.removeItem('currentUser');
-    sessionStorage.removeItem('authToken'); sessionStorage.removeItem('currentUser');
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('currentUser');
+    sessionStorage.removeItem('authToken');
+    sessionStorage.removeItem('currentUser');
     navigate('/login', { replace: true });
   };
 
@@ -1380,23 +1345,22 @@ export default function FrontDeskDashboard({ initialView = 'dashboard' }: { init
       case 'settings':
         return <div className="module-settings"><FrontDeskSettingsView /></div>;
       default:
-        return <ComingSoonView label={currentNavLabel} />;
+        return <div className="dash-in dash-card rounded-xl p-16 text-center">Coming soon</div>;
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="frontdesk-theme min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-[#8C6F3E]" />
+      </div>
+    );
   }
 
   return (
     <div className="frontdesk-theme min-h-screen bg-[#FAF7F2] text-[#2A211D] antialiased flex" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       <style>{FONT_IMPORT + FRONT_DESK_THEME}</style>
 
-      <div
-        className="fixed inset-0 pointer-events-none opacity-[0.03]"
-        style={{
-          backgroundImage: 'radial-gradient(#2A211D 0.7px, transparent 0.7px)',
-          backgroundSize: '16px 16px',
-        }}
-      />
-
-      {/* ---------------- SIDEBAR ---------------- */}
       <aside
         className={`${navOpen ? 'fixed inset-y-0 left-0 translate-x-0' : 'fixed inset-y-0 left-0 -translate-x-full'} z-40 lg:relative lg:inset-auto lg:translate-x-0 lg:z-0 w-72 flex-shrink-0 h-screen lg:h-auto lg:min-h-screen bg-[#EFE7DC] text-[#2A211D] flex flex-col justify-between transition-transform duration-300 border-r border-[#E2D7C7]`}
       >
@@ -1438,7 +1402,7 @@ export default function FrontDeskDashboard({ initialView = 'dashboard' }: { init
         </div>
 
         <div className="px-8 py-6 border-t border-[#E2D7C7] space-y-4 bg-[#E8DFD3]/40">
-          <button type="button" onClick={() => setShowProfile(true)} className="flex w-full items-center gap-3 rounded-lg p-1 text-left transition-colors hover:bg-[#FAF7F2]/70">
+          <button type="button" className="flex w-full items-center gap-3 rounded-lg p-1 text-left transition-colors hover:bg-[#FAF7F2]/70">
             <div className="w-9 h-9 overflow-hidden rounded-full bg-[#FAF7F2] border border-[#E2D7C7] flex items-center justify-center shadow-sm">
               {profile?.profile_picture ? (
                 <img src={profile.profile_picture} alt="Profile" className="h-full w-full object-cover" />
@@ -1457,11 +1421,8 @@ export default function FrontDeskDashboard({ initialView = 'dashboard' }: { init
         </div>
       </aside>
 
-      {showProfile && <FrontDeskProfileModal profile={profile} onClose={() => setShowProfile(false)} onEdit={() => navigate('/complete-profile')} />}
-
       {navOpen && <div className="fixed inset-0 bg-[#1F1916]/30 z-30 lg:hidden backdrop-blur-xs" onClick={() => setNavOpen(false)} />}
 
-      {/* ---------------- MAIN ---------------- */}
       <div className="flex-1 min-w-0">
         <header className="sticky top-0 z-20 bg-[#FAF7F2]/90 backdrop-blur-md border-b border-[#E8DFD3] px-6 sm:px-10 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
@@ -1503,37 +1464,4 @@ export default function FrontDeskDashboard({ initialView = 'dashboard' }: { init
       </div>
     </div>
   );
-}
-
-function FrontDeskProfileModal({ profile, onClose, onEdit }: { profile: any; onClose: () => void; onEdit: () => void }) {
-  const details: [string, string][] = [
-    ['Employee ID', profile?.employee_id || 'Not set'], ['Position', profile?.position || 'Front Desk'],
-    ['Department', 'Customer Service & Reception'], ['Date Hired', profile?.date_hired ? new Date(profile.date_hired).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'Not set'],
-    ['Account Status', profile?.status || 'Approved'],
-  ];
-  const responsibilities = ['Register new customers', 'Create tailoring job orders', 'Record customer measurements', 'Schedule fitting appointments', 'Process deposits and final payments', 'Print and issue receipts', 'Release completed garments', 'Assist customers with inquiries'];
-  return <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <button aria-label="Close profile" onClick={onClose} className="absolute inset-0 bg-[#1F1916]/45 backdrop-blur-sm" />
-    <section className="relative max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[#E2D7C7] bg-[#FFFCF8] shadow-2xl">
-      <header className="flex items-start justify-between border-b border-[#E8DFD3] px-6 py-6 sm:px-8">
-        <div><MonoLabel>Front Desk Staff Profile</MonoLabel><h2 className="mt-1 text-3xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{profile?.full_name || 'Front Desk Staff'}</h2></div>
-        <button onClick={onClose} className="rounded-full p-2 text-[#766A62] hover:bg-[#F2ECE1]"><X className="h-5 w-5" /></button>
-      </header>
-      <div className="space-y-8 p-6 sm:p-8">
-        <div className="flex items-center gap-5 rounded-xl bg-[#F8F3EB] p-5">
-          <div className="h-20 w-20 overflow-hidden rounded-full border border-[#D9C8B7] bg-[#EFE7DC]">{profile?.profile_picture ? <img src={profile.profile_picture} alt="Profile" className="h-full w-full object-cover" /> : <User className="m-6 h-8 w-8 text-[#8C6F3E]" />}</div>
-          <div><div className="text-lg font-medium">{profile?.full_name || 'Front Desk Staff'}</div><p className="text-sm text-[#766A62]">{profile?.position || 'Front Desk'}</p><p className="mt-1 text-xs text-[#8C7E74]">{profile?.email || 'No email'}</p></div>
-        </div>
-        <ProfileSection title="Personal Information" items={[['Full Name', profile?.full_name], ['Email Address', profile?.email], ['Contact Number', profile?.contact_number], ['Address', profile?.address]]} />
-        <ProfileSection title="Employment Information" items={details} />
-        <ProfileSection title="Account Information" items={[["Username", profile?.email?.split('@')[0] || 'Not set'], ['Role', 'Front Desk'], ['Last Login', 'Current session'], ['Password', '••••••••••••']]} />
-        <div><h3 className="text-lg text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Responsibilities</h3><ul className="mt-3 grid gap-2 sm:grid-cols-2">{responsibilities.map((item) => <li key={item} className="flex gap-2 text-sm text-[#766A62]"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#8C6F3E]" />{item}</li>)}</ul></div>
-        <div className="flex flex-wrap gap-3 border-t border-[#E8DFD3] pt-6"><button onClick={onEdit} className="rounded-lg bg-[#2A211D] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white">Edit Profile</button><button onClick={onEdit} className="rounded-lg border border-[#D9C8B7] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#5E5048]">Change Photo</button></div>
-      </div>
-    </section>
-  </div>;
-}
-
-function ProfileSection({ title, items }: { title: string; items: [string, string | undefined][] }) {
-  return <div><h3 className="text-lg text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{title}</h3><dl className="mt-3 grid gap-x-6 gap-y-4 sm:grid-cols-2">{items.map(([label, value]) => <div key={label}><dt className="text-[10px] font-medium uppercase tracking-[0.16em] text-[#8C7E74]">{label}</dt><dd className="mt-1 text-sm text-[#2A211D]">{value || 'Not set'}</dd></div>)}</dl></div>;
 }
