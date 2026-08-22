@@ -66,6 +66,8 @@ import {
   LogOut,
   TrendingUp,
   ArrowUpRight,
+  Scissors,
+  AlertCircle,
 } from 'lucide-react';
 
 /* ---------------------------------------------------------------
@@ -73,6 +75,10 @@ import {
    Premium Creamy Beige & Espresso "counter ledger" theme, with
    real production/revenue charts. Functionality is unchanged —
    only presentation, plus additive chart components.
+
+   UPDATE: orders now capture fabric quantity + total order amount,
+   and job cards track running balance so front desk staff (and,
+   eventually, customers) can see exactly how much is left to pay.
 ------------------------------------------------------------------ */
 
 const FONT_IMPORT = `
@@ -139,6 +145,10 @@ const authToken = () => localStorage.getItem('authToken') || sessionStorage.getI
 function currentUser() {
   const stored = localStorage.getItem('currentUser') || sessionStorage.getItem('currentUser');
   try { return stored ? JSON.parse(stored) : null; } catch { return null; }
+}
+
+function formatPeso(amount: number) {
+  return `₱${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
 /* ---------------------------------------------------------------
@@ -319,12 +329,22 @@ export function RegisterCustomerModal({
 
 /* ---------------------------------------------------------------
    Create order modal
+   UPDATE: now captures fabric quantity and the total order amount,
+   so the job card carries an actual price to reconcile payments
+   against later.
 ------------------------------------------------------------------ */
 export interface NewOrderForm {
   customer: string;
   garment: string;
   fabric: string;
+  fabricQuantity: string;
+  totalAmount: string;
   dueDate: string;
+  scheduleFitting: boolean;
+  fittingDate: string;
+  fittingTime: string;
+  collectDeposit: boolean;
+  depositAmount: string;
 }
 
 export function CreateOrderModal({
@@ -334,23 +354,60 @@ export function CreateOrderModal({
   onClose: () => void;
   onCreate: (form: NewOrderForm) => void;
 }) {
-  const [form, setForm] = useState<NewOrderForm>({ customer: '', garment: GARMENT_TYPES[0], fabric: '', dueDate: '' });
+ const [form, setForm] = useState<NewOrderForm>({
+  customer: '',
+  garment: GARMENT_TYPES[0],
+  fabric: '',
+  fabricQuantity: '',
+  totalAmount: '',
+  dueDate: '',
+  scheduleFitting: false,
+  fittingDate: '',
+  fittingTime: '',
+  collectDeposit: false,
+  depositAmount: '',
+});
+
   const [error, setError] = useState('');
 
   function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.customer.trim()) {
-      setError('Customer name is required.');
+  e.preventDefault();
+  if (!form.customer.trim()) {
+    setError('Customer name is required.');
+    return;
+  }
+  const totalNum = Number(form.totalAmount);
+  if (!form.totalAmount.trim() || Number.isNaN(totalNum) || totalNum <= 0) {
+    setError('Enter a valid total order amount — this is what balances and receipts are calculated against.');
+    return;
+  }
+  if (form.scheduleFitting && (!form.fittingDate || !form.fittingTime)) {
+    setError('Choose both a date and time for the first fitting.');
+    return;
+  }
+  if (form.collectDeposit) {
+    const amountNum = Number(form.depositAmount);
+    if (!form.depositAmount.trim() || Number.isNaN(amountNum) || amountNum <= 0) {
+      setError('Enter a valid deposit amount.');
       return;
     }
-    onCreate(form);
+    if (amountNum > totalNum) {
+      setError('Deposit cannot be more than the total order amount.');
+      return;
+    }
   }
+  onCreate(form);
+}
+
+  const totalNumPreview = Number(form.totalAmount) || 0;
+  const depositNumPreview = form.collectDeposit ? Number(form.depositAmount) || 0 : 0;
+  const balancePreview = Math.max(totalNumPreview - depositNumPreview, 0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-[#1F1916]/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
 
-      <div className="relative w-full max-w-xl bg-[#FFFFFF] border border-[#E8DFD3] rounded-xl shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-xl bg-[#FFFFFF] border border-[#E8DFD3] rounded-xl shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between px-7 sm:px-10 pt-8 pb-2">
           <MonoLabel>New job card</MonoLabel>
           <button onClick={onClose} aria-label="Close" className="text-[#A3958B] hover:text-[#2A211D] transition-colors p-1 rounded-full hover:bg-[#F2ECE1]">
@@ -363,7 +420,7 @@ export function CreateOrderModal({
             Create order
           </h2>
           <p className="text-[14px] text-[#766A62] font-light mb-8 leading-relaxed">
-            Opens a new job card at the Measuring stage. Fabric quantity and measurements follow.
+            Opens a new job card at the Measuring stage. Fabric quantity and total amount set the balance customers and staff will see going forward.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -403,12 +460,78 @@ export function CreateOrderModal({
                 </div>
               </div>
               <div>
+                <label htmlFor="orderFabricQty" className="block mb-1.5"><MonoLabel>Fabric quantity (optional)</MonoLabel></label>
+                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
+                  <Scissors className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
+                  <input id="orderFabricQty" value={form.fabricQuantity} onChange={(e) => setForm((f) => ({ ...f, fabricQuantity: e.target.value }))} placeholder="e.g. 2.5 yards" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]" />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+              <div>
+                <label htmlFor="orderTotal" className="block mb-1.5"><MonoLabel>Total order amount (₱)</MonoLabel></label>
+                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
+                  <Banknote className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
+                  <input id="orderTotal" type="number" min="0" step="1" value={form.totalAmount} onChange={(e) => setForm((f) => ({ ...f, totalAmount: e.target.value }))} placeholder="4,800" className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]" />
+                </div>
+              </div>
+              <div>
                 <label htmlFor="orderDue" className="block mb-1.5"><MonoLabel>Due date (optional)</MonoLabel></label>
                 <div className="border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
                   <input id="orderDue" type="date" value={form.dueDate} onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))} className="w-full bg-transparent text-[14px] py-2.5 focus:outline-none text-[#2A211D]" />
                 </div>
               </div>
             </div>
+            <div className="rounded-lg border border-[#E8DFD3] bg-[#FCFAF7] p-4">
+  <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-[#2A211D]">
+    <input
+      type="checkbox"
+      checked={form.collectDeposit}
+      onChange={(e) => setForm((f) => ({ ...f, collectDeposit: e.target.checked }))}
+      className="h-4 w-4 accent-[#8C6F3E]"
+    />
+    Collect deposit now
+  </label>
+  {form.collectDeposit && (
+    <div className="mt-4">
+      <label htmlFor="orderDeposit" className="block mb-1.5"><MonoLabel>Deposit amount (₱)</MonoLabel></label>
+      <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
+        <Banknote className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
+        <input
+          id="orderDeposit"
+          type="number"
+          min="0"
+          step="1"
+          value={form.depositAmount}
+          onChange={(e) => setForm((f) => ({ ...f, depositAmount: e.target.value }))}
+          placeholder="2,400"
+          className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
+        />
+      </div>
+      <p className="text-[11px] text-[#A3958B] mt-2">Cash only. Logged immediately with the new job card.</p>
+    </div>
+  )}
+</div>
+
+            {totalNumPreview > 0 && (
+              <div className="rounded-lg border border-dashed border-[#D9C8B7] bg-[#FCFAF7] px-4 py-3 flex items-center justify-between">
+                <MonoLabel>Balance after this order</MonoLabel>
+                <span className="text-[14px] font-semibold text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{formatPeso(balancePreview)}</span>
+              </div>
+            )}
+
+            <div className="rounded-lg border border-[#E8DFD3] bg-[#FCFAF7] p-4">
+              <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-[#2A211D]">
+                <input type="checkbox" checked={form.scheduleFitting} onChange={(e) => setForm((f) => ({ ...f, scheduleFitting: e.target.checked }))} className="h-4 w-4 accent-[#8C6F3E]" />
+                Schedule first fitting with this order
+              </label>
+              {form.scheduleFitting && <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <label className="block"><MonoLabel>First fitting date</MonoLabel><input required type="date" value={form.fittingDate} onChange={(e) => setForm((f) => ({ ...f, fittingDate: e.target.value }))} className="mt-2 w-full border-b border-[#E2D7C7] bg-transparent py-2 text-[14px] text-[#2A211D] outline-none focus:border-[#2A211D]" /></label>
+                <label className="block"><MonoLabel>First fitting time</MonoLabel><input required type="time" value={form.fittingTime} onChange={(e) => setForm((f) => ({ ...f, fittingTime: e.target.value }))} className="mt-2 w-full border-b border-[#E2D7C7] bg-transparent py-2 text-[14px] text-[#2A211D] outline-none focus:border-[#2A211D]" /></label>
+              </div>}
+            </div>
+            
 
             <div className="flex items-center gap-3 pt-4">
               <button type="button" onClick={onClose} className="flex-1 px-4 py-3 rounded-lg border border-[#E2D7C7] text-[#766A62] text-[11px] font-semibold tracking-[0.14em] uppercase hover:bg-[#F2ECE1] transition-colors">
@@ -427,6 +550,9 @@ export function CreateOrderModal({
 
 /* ---------------------------------------------------------------
    Record payment modal
+   UPDATE: looks up the job card's total/paid-so-far so staff (and
+   the customer, on their own screen) can see the balance due
+   instead of typing an amount blind.
 ------------------------------------------------------------------ */
 interface NewPaymentForm {
   jobCardId: string;
@@ -434,15 +560,29 @@ interface NewPaymentForm {
   amount: string;
 }
 
+export interface JobCardRecord {
+  customer: string;
+  garment: string;
+  fabric: string;
+  fabricQuantity: string;
+  totalAmount: number;
+  amountPaid: number;
+}
+
 function RecordPaymentModal({
   onClose,
   onRecord,
+  jobCards,
 }: {
   onClose: () => void;
   onRecord: (form: NewPaymentForm) => void;
+  jobCards: Record<string, JobCardRecord>;
 }) {
   const [form, setForm] = useState<NewPaymentForm>({ jobCardId: '', paymentType: 'deposit', amount: '' });
   const [error, setError] = useState('');
+
+  const matchedCard = jobCards[form.jobCardId.trim().toUpperCase()];
+  const balanceDue = matchedCard ? Math.max(matchedCard.totalAmount - matchedCard.amountPaid, 0) : null;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -453,6 +593,10 @@ function RecordPaymentModal({
     }
     if (!form.amount.trim() || Number.isNaN(amountNum) || amountNum <= 0) {
       setError('Enter a valid payment amount.');
+      return;
+    }
+    if (matchedCard && balanceDue !== null && amountNum > balanceDue) {
+      setError(`Amount exceeds the balance due of ${formatPeso(balanceDue)} for this job card.`);
       return;
     }
     onRecord(form);
@@ -492,6 +636,42 @@ function RecordPaymentModal({
               </div>
             </div>
 
+            {form.jobCardId.trim() && (
+              matchedCard ? (
+                <div className="rounded-lg border border-[#E8DFD3] bg-[#FCFAF7] p-4 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13.5px] font-medium text-[#2A211D]">{matchedCard.customer}</span>
+                    <span className="text-[11px] text-[#766A62]">{matchedCard.garment}</span>
+                  </div>
+                  {matchedCard.fabric && (
+                    <div className="flex items-center gap-1.5 text-[12px] text-[#766A62]">
+                      <Scissors className="w-3.5 h-3.5 text-[#A3958B]" strokeWidth={1.6} />
+                      {matchedCard.fabric}{matchedCard.fabricQuantity ? ` — ${matchedCard.fabricQuantity}` : ''}
+                    </div>
+                  )}
+                  <div className="border-t border-dashed border-[#E2D7C7] pt-2.5 grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <MonoLabel>Total</MonoLabel>
+                      <div className="text-[13px] font-semibold text-[#2A211D] mt-0.5" style={{ fontFamily: "'Space Mono', monospace" }}>{formatPeso(matchedCard.totalAmount)}</div>
+                    </div>
+                    <div>
+                      <MonoLabel>Paid so far</MonoLabel>
+                      <div className="text-[13px] font-semibold text-[#4E7357] mt-0.5" style={{ fontFamily: "'Space Mono', monospace" }}>{formatPeso(matchedCard.amountPaid)}</div>
+                    </div>
+                    <div>
+                      <MonoLabel>Balance due</MonoLabel>
+                      <div className="text-[13px] font-semibold text-[#9E5B4B] mt-0.5" style={{ fontFamily: "'Space Mono', monospace" }}>{formatPeso(balanceDue ?? 0)}</div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 rounded-lg border border-[#E9DDB7] bg-[#FFFCF2] px-4 py-3 text-[12.5px] text-[#8C6F3E]">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} />
+                  No job card found with this ID yet — you can still record the payment manually.
+                </div>
+              )
+            )}
+
             <div>
               <label className="block mb-2"><MonoLabel>Payment type</MonoLabel></label>
               <div className="grid grid-cols-2 gap-3">
@@ -502,7 +682,7 @@ function RecordPaymentModal({
                   <button
                     key={t.key}
                     type="button"
-                    onClick={() => setForm((f) => ({ ...f, paymentType: t.key }))}
+                    onClick={() => setForm((f) => ({ ...f, paymentType: t.key, amount: t.key === 'final' && balanceDue ? String(balanceDue) : f.amount }))}
                     className={`px-3 py-3 rounded-lg border text-[11px] font-semibold tracking-[0.08em] uppercase transition-all ${
                       form.paymentType === t.key
                         ? 'bg-[#2A211D] border-[#2A211D] text-[#FAF7F2] shadow-sm'
@@ -688,6 +868,17 @@ const PICKUP_QUEUE = [
   { id: 'JC-3012', customer: 'Consuelo Reyes', garment: "Women's Coat", balance: '₱0 — paid in full' },
 ];
 
+/* UPDATE: job cards now carry fabric + pricing data so a payment
+   can be reconciled against a real total instead of a blind number. */
+const JOB_CARDS_INIT: Record<string, JobCardRecord> = {
+  'JC-3021': { customer: 'Reyna Fuentes', garment: 'Barong Tagalog', fabric: 'Jusi — Cream', fabricQuantity: '2.5 yards', totalAmount: 4800, amountPaid: 2400 },
+  'JC-3005': { customer: 'Delfin Ortega', garment: 'Two-piece Suit', fabric: 'Italian Wool — Charcoal', fabricQuantity: '4 yards', totalAmount: 12500, amountPaid: 12500 },
+  'JC-3010': { customer: 'Tomas Villareal', garment: 'School Uniform Set', fabric: 'Cotton Twill', fabricQuantity: '3 yards', totalAmount: 2800, amountPaid: 2800 },
+  'JC-3018': { customer: 'Tomas Villareal', garment: 'School Uniform Set', fabric: 'Cotton Twill', fabricQuantity: '3 yards', totalAmount: 2800, amountPaid: 2800 },
+  'JC-3007': { customer: 'Boyet Salcedo', garment: 'Barong Tagalog', fabric: 'Piña-Seda', fabricQuantity: '2 yards', totalAmount: 5200, amountPaid: 4000 },
+  'JC-3012': { customer: 'Consuelo Reyes', garment: "Women's Coat", fabric: 'Wool Blend — Camel', fabricQuantity: '3.5 yards', totalAmount: 7600, amountPaid: 7600 },
+};
+
 /* Illustrative chart data — purely presentational, doesn't touch app state or logic. */
 const WEEKLY_REVENUE = [
   { day: 'Mon', amount: 12400 },
@@ -841,6 +1032,7 @@ function DashboardView() {
   const [dayBook, setDayBook] = useState(DAY_BOOK);
   const [fittings, setFittings] = useState(FITTINGS_TODAY_INIT);
   const [stats, setStats] = useState(TODAY_STATS_INIT);
+  const [jobCards, setJobCards] = useState<Record<string, JobCardRecord>>(JOB_CARDS_INIT);
   const [activeModal, setActiveModal] = useState<null | 'customer' | 'order' | 'payment' | 'fitting'>(null);
   const [banner, setBanner] = useState('');
 
@@ -868,18 +1060,53 @@ function DashboardView() {
 
   function handleCreateOrder(form: NewOrderForm) {
     const jobCardId = `JC-${Math.floor(3000 + Math.random() * 900)}`;
-    setDayBook((prev) => [{ time: nowTime(), label: 'Order created', detail: `${jobCardId} — ${form.garment} for ${form.customer}`, kind: 'order' }, ...prev]);
+    const totalAmount = Number(form.totalAmount) || 0;
+    const depositAmount = form.collectDeposit ? Number(form.depositAmount) || 0 : 0;
+
+    setJobCards((prev) => ({
+      ...prev,
+      [jobCardId]: {
+        customer: form.customer,
+        garment: form.garment,
+        fabric: form.fabric,
+        fabricQuantity: form.fabricQuantity,
+        totalAmount,
+        amountPaid: depositAmount,
+      },
+    }));
+
+    setDayBook((prev) => [{ time: nowTime(), label: 'Order created', detail: `${jobCardId} — ${form.garment} for ${form.customer} · Total ${formatPeso(totalAmount)}`, kind: 'order' }, ...prev]);
+    if (depositAmount > 0) {
+      setDayBook((prev) => [{ time: nowTime(), label: 'Deposit received', detail: `${formatPeso(depositAmount)} — ${jobCardId}, cash`, kind: 'payment' }, ...prev]);
+      setStats((s) => ({ ...s, collected: s.collected + depositAmount }));
+    }
+    if (form.scheduleFitting) {
+      const time = new Date(`${form.fittingDate}T${form.fittingTime}`).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      setFittings((prev) => [...prev, { time, customer: form.customer, garment: form.garment, stage: 'First Fitting' }]);
+      setDayBook((prev) => [{ time: nowTime(), label: 'First fitting booked', detail: `${form.customer} — ${time}`, kind: 'appointment' }, ...prev]);
+      setStats((s) => ({ ...s, fittings: s.fittings + 1 }));
+    }
     setActiveModal(null);
-    announce(`${jobCardId} was opened for ${form.customer}.`);
+    announce(`${jobCardId} was opened for ${form.customer} — balance ${formatPeso(Math.max(totalAmount - depositAmount, 0))}.${form.scheduleFitting ? ' First fitting scheduled.' : ''}`);
   }
 
   function handleRecordPayment(form: NewPaymentForm) {
     const amountNum = Number(form.amount) || 0;
     const label = form.paymentType === 'deposit' ? 'Deposit received' : 'Final payment';
-    setDayBook((prev) => [{ time: nowTime(), label, detail: `₱${amountNum.toLocaleString()} — ${form.jobCardId}, cash`, kind: 'payment' }, ...prev]);
+    const cardId = form.jobCardId.trim().toUpperCase();
+
+    setJobCards((prev) => {
+      if (!prev[cardId]) return prev;
+      return { ...prev, [cardId]: { ...prev[cardId], amountPaid: prev[cardId].amountPaid + amountNum } };
+    });
+
+    const updatedCard = jobCards[cardId];
+    const newBalance = updatedCard ? Math.max(updatedCard.totalAmount - (updatedCard.amountPaid + amountNum), 0) : null;
+
+    setDayBook((prev) => [{ time: nowTime(), label, detail: `₱${amountNum.toLocaleString()} — ${form.jobCardId}, cash${newBalance !== null ? ` · Balance ${formatPeso(newBalance)}` : ''}`, kind: 'payment' }, ...prev]);
     setStats((s) => ({ ...s, collected: s.collected + amountNum }));
     setActiveModal(null);
-    announce(`₱${amountNum.toLocaleString()} recorded for ${form.jobCardId}.`);
+    announce(`₱${amountNum.toLocaleString()} recorded for ${form.jobCardId}.${newBalance !== null ? ` Balance due: ${formatPeso(newBalance)}.` : ''}`);
   }
 
   function handleScheduleFitting(form: NewFittingForm) {
@@ -1037,7 +1264,7 @@ function DashboardView() {
         <CreateOrderModal onClose={() => setActiveModal(null)} onCreate={handleCreateOrder} />
       )}
       {activeModal === 'payment' && (
-        <RecordPaymentModal onClose={() => setActiveModal(null)} onRecord={handleRecordPayment} />
+        <RecordPaymentModal onClose={() => setActiveModal(null)} onRecord={handleRecordPayment} jobCards={jobCards} />
       )}
       {activeModal === 'fitting' && (
         <ScheduleFittingModal onClose={() => setActiveModal(null)} onSchedule={handleScheduleFitting} />
@@ -1119,10 +1346,15 @@ function StatCard({
 
 export default function FrontDeskDashboard({ initialView = 'dashboard' }: { initialView?: ViewKey }) {
   const navigate = useNavigate();
-  const profile = currentUser();
+  const [profile, setProfile] = useState(() => currentUser());
   const [navOpen, setNavOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [view, setView] = useState<ViewKey>(initialView);
+  useEffect(() => {
+    fetch(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(); setProfile(data.user); const storage = localStorage.getItem('authToken') ? localStorage : sessionStorage; storage.setItem('currentUser', JSON.stringify(data.user)); })
+      .catch(() => {});
+  }, []);
   const signOut = () => {
     localStorage.removeItem('authToken'); localStorage.removeItem('currentUser');
     sessionStorage.removeItem('authToken'); sessionStorage.removeItem('currentUser');

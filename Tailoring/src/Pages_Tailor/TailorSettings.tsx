@@ -1,7 +1,8 @@
 // @ts-nocheck
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Bell, Check, Save, UserRound, Activity } from 'lucide-react';
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { PasswordChangePanel } from '../components/PasswordChangePanel';
 
 /* ===================================================================
    PRESS & TAILOR — Settings
@@ -21,6 +22,8 @@ const ALERT_ACTIVITY = [
   { day: 'Mon', count: 2 }, { day: 'Tue', count: 4 }, { day: 'Wed', count: 1 },
   { day: 'Thu', count: 5 }, { day: 'Fri', count: 3 }, { day: 'Sat', count: 6 }, { day: 'Sun', count: 2 },
 ];
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const authToken = () => localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '';
 
 function MonoLabel({ children, className = '' }) {
   return (
@@ -42,10 +45,13 @@ function LedgerTooltip({ active, payload, label }) {
 
 export function TailorSettingsView() {
   const [alerts, setAlerts] = useState({ fittings: true, dueDates: true, assignments: false });
+  const [profile, setProfile] = useState<any>(null);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
 
   const toggle = (key) => setAlerts((current) => ({ ...current, [key]: !current[key] }));
-  const save = () => { setSaved(true); window.setTimeout(() => setSaved(false), 3000); };
+  useEffect(() => { const headers = { Authorization: `Bearer ${authToken()}` }; Promise.all([fetch(`${API_URL}/auth/me`, { headers }), fetch(`${API_URL}/auth/user-settings`, { headers })]).then(async ([me, preferences]) => { const user = (await me.json()).user; const settings = (await preferences.json()).settings; setProfile(user); if (settings) setAlerts((current) => ({ ...current, ...settings })); }).catch(() => {}); }, []);
+  const save = async () => { setError(''); try { const response = await fetch(`${API_URL}/auth/user-settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ settings: alerts }) }); const data = await response.json(); if (!response.ok) throw new Error(data.message || 'Unable to save preferences.'); setSaved(true); window.setTimeout(() => setSaved(false), 3000); } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Unable to save preferences.'); } };
   const weekTotal = ALERT_ACTIVITY.reduce((s, d) => s + d.count, 0);
 
   return (
@@ -71,6 +77,7 @@ export function TailorSettingsView() {
           Preferences saved.
         </div>
       )}
+      {error && <div role="alert" className="border border-[#C0392B]/30 bg-[#F9E8E5] p-3 rounded-[3px] text-sm text-[#C0392B]">{error}</div>}
 
       <section className="dash-in border border-[#DCD8C7] bg-[#FBF9F2] p-6 sm:p-8 rounded-[3px]" style={{ boxShadow: '0 1px 2px rgba(38,36,32,0.05), 0 10px 28px -14px rgba(38,36,32,0.22)' }}>
         <div className="flex items-center gap-3">
@@ -83,9 +90,15 @@ export function TailorSettingsView() {
           </div>
         </div>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          <Field label="Full name" value="Delfin Ortega" />
-          <Field label="Position" value="Master Tailor" />
+          <Field label="Full name" value={profile?.full_name || 'Not recorded'} />
+          <Field label="Position" value={profile?.position || 'Master Tailor'} />
         </div>
+      </section>
+
+      <section className="dash-in border border-[#DCD8C7] bg-[#FBF9F2] p-6 sm:p-8 rounded-[3px]" style={{ boxShadow: '0 1px 2px rgba(38,36,32,0.05), 0 10px 28px -14px rgba(38,36,32,0.22)' }}>
+        <h2 className="text-xl font-semibold text-[#262420]" style={{ fontFamily: "'Fraunces', serif" }}>Account security</h2>
+        <p className="mt-1 text-sm text-[#6D6A60]">Keep your master tailor account secure.</p>
+        <div className="mt-5"><PasswordChangePanel buttonClassName="rounded-[2px] border border-[#DCD8C7] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#55503F] hover:bg-[#F4F1E6]" /></div>
       </section>
 
       <section className="dash-in border border-[#DCD8C7] bg-[#FBF9F2] p-6 sm:p-8 rounded-[3px]" style={{ boxShadow: '0 1px 2px rgba(38,36,32,0.05), 0 10px 28px -14px rgba(38,36,32,0.22)' }}>

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import {
   Check, X, Ban, RotateCcw, ChevronDown, Filter, Plus, User, Mail, Lock, Eye, EyeOff,
@@ -270,60 +270,73 @@ export function UserManagementView({ externalQuery = '' }: { externalQuery?: str
   const [operationError, setOperationError] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  function toggleExpanded(id: string) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
-
-  useEffect(() => {
+  const loadUsers = useCallback(async () => {
     const token = authToken();
     if (!token) {
       setOperationError('Please sign in as an admin to manage accounts.');
       setLoading(false);
       return;
     }
-    fetch(`${API_URL}/auth/users`, { headers: { Authorization: `Bearer ${authToken()}` } })
-      .then(async (response) => {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Unable to load accounts.');
-        setUsers(data.users.map((user: {
-          id: number; full_name: string | null; email: string; role: UserRole; status: AccountStatus;
-          created_at: string; updated_at: string | null;
-          contact_number: string | null; address: string | null;
-          date_of_birth: string | null; gender: string | null; civil_status: string | null; occupation: string | null;
-          position: string | null; date_hired: string | null;
-          activity_type?: 'profile_updated' | 'password_changed' | 'settings_updated' | null;
-          activity_details?: string | null; activity_at?: string | null;
-        }) => ({
-          dbId: user.id,
-          id: accountIdentifier(user),
-          fullName: user.full_name || user.email,
-          email: user.email,
-          role: user.role,
-          status: user.status,
-          requestedAt: user.created_at.slice(0, 10),
-          updatedAt: user.updated_at,
-          contactNumber: user.contact_number,
-          address: user.address,
-          dateOfBirth: user.date_of_birth,
-          gender: user.gender,
-          civilStatus: user.civil_status,
-          occupation: user.occupation,
-          position: user.position,
-          dateHired: user.date_hired,
-          activityType: user.activity_type,
-          activityDetails: user.activity_details,
-          activityAt: user.activity_at,
-        })));
-      })
-      .catch((requestError) => {
-        setOperationError(requestError instanceof Error ? requestError.message : 'Unable to load accounts.');
-      })
-      .finally(() => setLoading(false));
+
+    try {
+      const response = await fetch(`${API_URL}/auth/users`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Unable to load accounts.');
+      setUsers(data.users.map((user: {
+        id: number; full_name: string | null; email: string; role: UserRole; status: AccountStatus;
+        created_at: string; updated_at: string | null;
+        contact_number: string | null; address: string | null;
+        date_of_birth: string | null; gender: string | null; civil_status: string | null; occupation: string | null;
+        position: string | null; date_hired: string | null;
+        activity_type?: 'profile_updated' | 'password_changed' | 'settings_updated' | null;
+        activity_details?: string | null; activity_at?: string | null;
+      }) => ({
+        dbId: user.id,
+        id: accountIdentifier(user),
+        fullName: user.full_name || user.email,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        requestedAt: user.created_at.slice(0, 10),
+        updatedAt: user.updated_at,
+        contactNumber: user.contact_number,
+        address: user.address,
+        dateOfBirth: user.date_of_birth,
+        gender: user.gender,
+        civilStatus: user.civil_status,
+        occupation: user.occupation,
+        position: user.position,
+        dateHired: user.date_hired,
+        activityType: user.activity_type,
+        activityDetails: user.activity_details,
+        activityAt: user.activity_at,
+      })));
+    } catch (requestError) {
+      setOperationError(requestError instanceof Error ? requestError.message : 'Unable to load accounts.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  function toggleExpanded(id: string) {
+    const isOpening = !expandedIds.has(id);
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+    // A customer may edit their profile while this admin screen is open.
+    // Refresh before showing the detail panel so it never displays stale N/A values.
+    if (isOpening) void loadUsers();
+  }
+
+  useEffect(() => {
+    void loadUsers();
+  }, [loadUsers]);
 
   useEffect(() => {
     setQuery(externalQuery);

@@ -834,10 +834,15 @@ function StatCard({ label, value, icon, delay = 0, tone = 'default' }: { label: 
 
 export default function MasterTailorDashboard({ initialView = 'dashboard' }: { initialView?: ViewKey }) {
   const navigate = useNavigate();
-  const profile = currentUser();
+  const [profile, setProfile] = useState(() => currentUser());
   const [navOpen, setNavOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [view, setView] = useState<ViewKey>(initialView);
+  useEffect(() => {
+    fetch(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(); setProfile(data.user); const storage = localStorage.getItem('authToken') ? localStorage : sessionStorage; storage.setItem('currentUser', JSON.stringify(data.user)); })
+      .catch(() => {});
+  }, []);
 
   const signOut = () => {
     localStorage.removeItem('authToken'); localStorage.removeItem('currentUser');

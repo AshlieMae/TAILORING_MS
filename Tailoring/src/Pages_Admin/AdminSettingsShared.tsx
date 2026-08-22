@@ -1,7 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Bell, Building2, Check, LockKeyhole, Save, SlidersHorizontal } from 'lucide-react';
 import { COLORS, FONT_IMPORT, EyebrowLabel, PrimaryButton, Card } from './Theme';
+import { PasswordChangePanel } from '../components/PasswordChangePanel';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const authToken = () => localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '';
 
 function TagSection({ icon, title, description, delay = 0, children }: { icon: ReactNode; title: string; description: string; delay?: number; children: ReactNode }) {
   return (
@@ -52,9 +56,23 @@ function SwatchToggle({ label, detail, checked, onChange }: { label: string; det
 
 export function SettingsContent({ wide = false }: { wide?: boolean }) {
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
   const [settings, setSettings] = useState({ name: "Ashlie's Tailor", email: 'hello@ashliestailor.com', phone: '0917 555 0100', address: 'Tagbilaran City, Bohol', deposit: '50', lowStock: true, fitting: true, pickup: true });
   const update = (key: keyof typeof settings, value: string | boolean) => setSettings((current) => ({ ...current, [key]: value }));
-  const save = () => { setSaved(true); window.setTimeout(() => setSaved(false), 3000); };
+  useEffect(() => {
+    fetch(`${API_URL}/auth/shop-settings`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.message); return data; })
+      .then((data) => { if (data.settings && Object.keys(data.settings).length) setSettings((current) => ({ ...current, ...data.settings })); })
+      .catch(() => {});
+  }, []);
+  const save = async () => {
+    setError('');
+    try {
+      const response = await fetch(`${API_URL}/auth/shop-settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ settings }) });
+      const data = await response.json(); if (!response.ok) throw new Error(data.message || 'Unable to save settings.');
+      setSaved(true); window.setTimeout(() => setSaved(false), 3000);
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Unable to save settings.'); }
+  };
 
   return (
     <div className={`${wide ? 'w-full' : 'max-w-5xl'} space-y-6`} style={{ color: COLORS.ink }}>
@@ -71,6 +89,7 @@ export function SettingsContent({ wide = false }: { wide?: boolean }) {
           <Check className="h-4 w-4" /> Settings saved successfully.
         </div>
       )}
+      {error && <div role="alert" className="border px-4 py-3 text-sm" style={{ borderColor: COLORS.dangerBorder, background: COLORS.dangerBg, color: COLORS.danger, borderRadius: 8 }}>{error}</div>}
 
       <TagSection icon={<Building2 className="h-5 w-5" strokeWidth={1.75} />} title="Shop information" description="Details shown on receipts and customer communications." delay={0.05}>
         <div className="grid gap-5 sm:grid-cols-2">
@@ -94,9 +113,7 @@ export function SettingsContent({ wide = false }: { wide?: boolean }) {
       </TagSection>
 
       <TagSection icon={<LockKeyhole className="h-5 w-5" strokeWidth={1.75} />} title="Security" description="Manage account access under User Management." delay={0.2}>
-        <button className="border px-4 py-2.5 text-[12px] font-semibold transition-colors" style={{ borderColor: COLORS.border, color: COLORS.inkSoft, borderRadius: 8, background: COLORS.surface }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.navy; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; }}>
-          Change admin password
-        </button>
+        <PasswordChangePanel buttonClassName="border px-4 py-2.5 text-[12px] font-semibold transition-colors" />
       </TagSection>
 
       <div className="rise-in" style={{ animationDelay: '0.25s' }}>
