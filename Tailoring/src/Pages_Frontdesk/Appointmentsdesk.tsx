@@ -71,7 +71,9 @@ function AppointmentDetails({ appointment, onClose, onComplete }: { appointment:
         </div>
         <div className="mt-6 flex items-center justify-between border-t border-[#E8DFD3] pt-5">
           <StatusBadge status={appointment.status as AppointmentStatus} />
-          {appointment.status !== 'Completed' && appointment.status !== 'Cancelled' && (
+          {appointment.appointment_type === 'Final Fitting' &&
+            appointment.status !== 'Completed' &&
+            appointment.status !== 'Cancelled' && (
             <button onClick={onComplete} className="inline-flex items-center gap-2 rounded-lg bg-[#2A211D] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white shadow-sm hover:-translate-y-0.5 transition-transform">
               <Check className="h-4 w-4" /> Mark completed
             </button>
@@ -350,7 +352,7 @@ export function FrontDeskAppointmentsView() {
         </div>
 
         <div className="hidden grid-cols-[0.85fr_1.15fr_1fr_1.1fr_0.8fr_24px] gap-4 border-b border-[#E8DFD3] bg-[#FCFAF7] px-6 py-3 md:grid">
-          {['When', 'Customer', 'Garment', 'Fitting stage', 'Status', ''].map((label) => <Label key={label}>{label}</Label>)}
+          {['When', 'Customer', 'Job Card', 'Fitting stage', 'Status', ''].map((label) => <Label key={label}>{label}</Label>)}
         </div>
 
         {filtered.map((appointment) => (
@@ -360,7 +362,7 @@ export function FrontDeskAppointmentsView() {
               <span className="text-[11px] text-[#8C7E74]">{new Date(appointment.appointment_date).toLocaleDateString()}</span>
             </span>
             <span className="font-medium text-[#2A211D]">{appointment.customer_name}</span>
-            <span className="text-sm text-[#5E5048]">{appointment.appointment_type}</span>
+            <span className="text-sm text-[#5E5048]">{appointment.job_card_id}</span>
             <span className="text-sm text-[#5E5048]">{appointment.appointment_type}</span>
             <StatusBadge status={appointment.status as AppointmentStatus} />
             <ChevronRight className="hidden h-4 w-4 text-[#A46B48] md:block" />
