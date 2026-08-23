@@ -1,5 +1,5 @@
 // Pages/FrontDesk/FrontDeskDashboard.tsx
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FrontDeskCustomersExactView } from '../Pages_Frontdesk/CustomersdeskExact';
 import { FrontDeskOrdersView } from '../Pages_Frontdesk/Ordersdesk';
@@ -9,6 +9,8 @@ import { FrontDeskPaymentsView } from '../Pages_Frontdesk/Paymentsdesk';
 import { FrontDeskSettingsView } from '../Pages_Frontdesk/Settingsdesk';
 import frontDeskApi, { authToken, type Order, type Appointment, type Customer } from '../../services/frontDeskApi';
 import { RegisterCustomerModal, type NewCustomerForm } from '../pages/FrontDesk/FrontDeskModals';
+import { dedupeAppointments, stageBadgeStyle } from '../utils/appointmentDisplay';
+import { FITTING_JOURNEY, determineStageForJob, findActiveAppointmentForJob } from '../utils/appointmentWorkflow';
 import type { ReactNode } from 'react';
 import {
   LayoutDashboard,
@@ -37,8 +39,8 @@ import {
   Loader2,
   Scissors,
   User,
-  Calendar,
   DollarSign,
+  BarChart3,
 } from 'lucide-react';
 
 function LiveDateTime() {
@@ -128,19 +130,98 @@ interface CreateOrderFormData {
   assignedTailorId: string;
   depositAmount: string;
   collectDeposit: boolean;
+  referenceImage: string;
 }
 
 const GARMENT_TYPES = ['Barong Tagalog', 'Two-piece Suit', "Women's Coat", 'Evening Gown', 'School Uniform Set', 'Custom garment'];
 const UNIFORM_CATEGORIES = ['Regular University Uniform', 'Departmental Uniform', 'PE Uniform', 'Sports / Intramural Jersey', 'Custom/Bespoke Apparel', 'Not Applicable'];
 
+/** Hand-drawn style SVG illustration for each garment type — shown live in the order form. */
+function GarmentIllustration({ type, className }: { type: string; className?: string }) {
+  const line = { fill: 'none', stroke: '#8C6F3E', strokeWidth: 2.4, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  const body = (d: string, fill: string) => <path d={d} {...line} fill={fill} />;
+  switch (type) {
+    case 'Barong Tagalog':
+      return (
+        <svg viewBox="0 0 120 140" className={className} aria-label="Barong Tagalog illustration">
+          <rect x="6" y="6" width="108" height="128" rx="10" fill="#F8F3EB" />
+          {body('M38 34 L20 44 L24 96 L38 90', '#FAF7F2')}
+          {body('M82 34 L100 44 L96 96 L82 90', '#FAF7F2')}
+          {body('M38 34 Q60 26 82 34 L84 118 Q60 126 36 118 Z', '#FAF7F2')}
+          <path d="M48 30 Q60 40 72 30" {...line} />
+          <path d="M52 50 V110 M60 46 V114 M68 50 V110" stroke="#C9A15C" strokeWidth="1.6" strokeLinecap="round" />
+          <circle cx="60" cy="54" r="1.8" fill="#8C6F3E" /><circle cx="60" cy="68" r="1.8" fill="#8C6F3E" /><circle cx="60" cy="82" r="1.8" fill="#8C6F3E" />
+        </svg>
+      );
+    case 'Two-piece Suit':
+      return (
+        <svg viewBox="0 0 120 140" className={className} aria-label="Two-piece suit illustration">
+          <rect x="6" y="6" width="108" height="128" rx="10" fill="#F8F3EB" />
+          {body('M40 30 L60 40 L80 30 L86 100 L34 100 Z', '#E8DFD3')}
+          <path d="M40 30 L32 42 L36 96" {...line} />
+          <path d="M80 30 L88 42 L84 96" {...line} />
+          <path d="M52 32 L60 46 L68 32" stroke="#2A211D" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="60" cy="58" r="1.8" fill="#2A211D" /><circle cx="60" cy="72" r="1.8" fill="#2A211D" />
+          <path d="M44 104 L40 132 M76 104 L80 132" stroke="#2A211D" strokeWidth="2.4" strokeLinecap="round" />
+          <path d="M42 104 H78" stroke="#2A211D" strokeWidth="2.4" strokeLinecap="round" />
+        </svg>
+      );
+    case "Women's Coat":
+      return (
+        <svg viewBox="0 0 120 140" className={className} aria-label="Women's coat illustration">
+          <rect x="6" y="6" width="108" height="128" rx="10" fill="#F8F3EB" />
+          {body('M38 34 L20 44 L24 96 L38 90', '#FAF7F2')}
+          {body('M82 34 L100 44 L96 96 L82 90', '#FAF7F2')}
+          {body('M42 32 Q60 24 78 32 L84 118 Q60 126 36 118 Z', '#FAF7F2')}
+          <path d="M50 30 L60 54 L70 30" stroke="#A46B48" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          <rect x="38" y="72" width="44" height="6" rx="3" fill="#C9A15C" />
+          <circle cx="60" cy="88" r="1.8" fill="#A46B48" /><circle cx="60" cy="100" r="1.8" fill="#A46B48" />
+        </svg>
+      );
+    case 'Evening Gown':
+      return (
+        <svg viewBox="0 0 120 140" className={className} aria-label="Evening gown illustration">
+          <rect x="6" y="6" width="108" height="128" rx="10" fill="#F8F3EB" />
+          {body('M46 30 Q60 24 74 30 L78 70 Q92 110 84 128 Q60 136 36 128 Q28 110 42 70 Z', '#FDF0ED')}
+          <path d="M48 30 L46 20 M72 30 L74 20" stroke="#A46B48" strokeWidth="2" strokeLinecap="round" />
+          <path d="M44 68 Q60 74 76 68" stroke="#A46B48" strokeWidth="1.8" fill="none" />
+          <path d="M52 84 Q60 88 68 84 M48 100 Q60 106 72 100" stroke="#C9A15C" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+        </svg>
+      );
+    case 'School Uniform Set':
+      return (
+        <svg viewBox="0 0 120 140" className={className} aria-label="School uniform set illustration">
+          <rect x="6" y="6" width="108" height="128" rx="10" fill="#F8F3EB" />
+          {body('M40 30 L60 38 L80 30 L82 78 L38 78 Z', '#FAF7F2')}
+          <path d="M52 28 L60 40 L68 28" stroke="#4E7357" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M60 40 L56 48 L60 70 L64 48 Z" fill="#8A6618" />
+          {body('M40 82 L80 82 L86 118 L34 118 Z', '#E8DFD3')}
+          <path d="M50 84 V116 M60 84 V118 M70 84 V116" stroke="#4E7357" strokeWidth="1.2" />
+        </svg>
+      );
+    default:
+      return (
+        <svg viewBox="0 0 120 140" className={className} aria-label="Custom garment illustration">
+          <rect x="6" y="6" width="108" height="128" rx="10" fill="#F8F3EB" />
+          {body('M44 34 Q60 26 76 34 L80 70 Q76 92 60 94 Q44 92 40 70 Z', '#FAF7F2')}
+          <path d="M54 26 Q60 22 66 26" {...line} />
+          <path d="M60 94 V124 M46 128 H74" stroke="#8C6F3E" strokeWidth="2.4" strokeLinecap="round" />
+          <path d="M28 58 Q60 76 92 58" stroke="#C9A15C" strokeWidth="1.6" strokeDasharray="4 3" fill="none" strokeLinecap="round" />
+        </svg>
+      );
+  }
+}
+
 function CreateOrderModal({ 
   onClose, 
   onCreate, 
-  customers 
+  customers,
+  orders
 }: { 
   onClose: () => void; 
   onCreate: (data: CreateOrderFormData) => Promise<void>;
   customers: Customer[];
+  orders: Order[];
 }) {
   const [form, setForm] = useState<CreateOrderFormData>({
     customerId: '',
@@ -156,6 +237,7 @@ function CreateOrderModal({
     assignedTailorId: '',
     depositAmount: '',
     collectDeposit: true,
+    referenceImage: '',
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -171,6 +253,13 @@ function CreateOrderModal({
   const [calculating, setCalculating] = useState(false);
 
   const selectedCustomer = customers.find(c => c.customer_id === form.customerId);
+
+  // Business rule: settle previous job cards before opening a new one.
+  const unpaidOrders = useMemo(
+    () => orders.filter((o) => String(o.customer_id) === String(form.customerId) && Number(o.remaining_balance) > 0),
+    [orders, form.customerId]
+  );
+  const unsettledTotal = unpaidOrders.reduce((sum, o) => sum + Number(o.remaining_balance), 0);
 
   const calculatePrice = async () => {
     if (!form.garmentType) return;
@@ -219,6 +308,10 @@ function CreateOrderModal({
     e.preventDefault();
     if (!form.customerId) {
       setError('Please select a customer.');
+      return;
+    }
+    if (unpaidOrders.length) {
+      setError(`This customer still owes ${formatPeso(unsettledTotal)} on ${unpaidOrders.length} earlier job card${unpaidOrders.length === 1 ? '' : 's'}. Settle it in the Payments desk before creating a new order.`);
       return;
     }
     if (!form.garmentType) {
@@ -297,6 +390,22 @@ function CreateOrderModal({
               {selectedCustomer && (
                 <div className="mt-2 text-xs text-[#766A62]">
                   {selectedCustomer.email} · {selectedCustomer.contact_number}
+                </div>
+              )}
+              {unpaidOrders.length > 0 && (
+                <div className="mt-3 rounded-lg border border-[#ECD8A7] bg-[#FFF7E3] p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8A6618]">Unsettled balance — new order blocked</p>
+                  <ul className="mt-2 space-y-1">
+                    {unpaidOrders.map(o => (
+                      <li key={o.order_id} className="flex items-center justify-between gap-3 text-[12px] text-[#8A6618]">
+                        <span className="truncate">{o.job_card_id} · {o.garment_type}</span>
+                        <span className="flex-shrink-0 font-semibold" style={{ fontFamily: "'Space Mono', monospace" }}>₱{Number(o.remaining_balance).toLocaleString()}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-[11px] leading-relaxed text-[#8A6618]">
+                    Total outstanding: <span className="font-bold">₱{unsettledTotal.toLocaleString()}</span>. Settle it in the Payments desk before creating a new job card for this customer.
+                  </p>
                 </div>
               )}
             </div>
@@ -409,6 +518,23 @@ function CreateOrderModal({
               />
             </div>
 
+            {/* Garment preview — follows the selected type & category */}
+            <div>
+              <label className="block mb-1.5"><MonoLabel>Garment preview</MonoLabel></label>
+              <div className="flex items-center gap-4 rounded-xl border border-[#E2D7C7] bg-gradient-to-br from-[#F8F3EB] to-[#FFFCF8] p-4">
+                <div className="flex h-28 w-24 flex-shrink-0 items-center justify-center rounded-lg border border-[#E2D7C7] bg-white">
+                  <GarmentIllustration type={form.garmentType} className="h-24 w-20" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{form.garmentType}</p>
+                  <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#8C7E74]" style={{ fontFamily: "'Space Mono', monospace" }}>{form.uniformCategory}</p>
+                  <p className="mt-2 text-[11px] leading-relaxed text-[#766A62]">
+                    The illustration follows the garment type. The category records the order's purpose — a school uniform program vs a bespoke piece.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Price Breakdown */}
             {priceCalculation && (
               <div className="rounded-lg border border-[#E8DFD3] bg-[#FCFAF7] p-4 space-y-2">
@@ -474,10 +600,11 @@ function CreateOrderModal({
               </button>
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || unpaidOrders.length > 0}
+                title={unpaidOrders.length ? 'Settle the outstanding balance first' : undefined}
                 className="flex-1 px-4 py-3 rounded-lg bg-[#2A211D] text-[#FAF7F2] text-[11px] font-semibold tracking-[0.14em] uppercase hover:bg-[#3D312B] transition-colors shadow-md disabled:opacity-50"
               >
-                {saving ? 'Creating...' : 'Create Order'}
+                {unpaidOrders.length ? 'Balance must be settled first' : saving ? 'Creating...' : 'Create Order'}
               </button>
             </div>
           </form>
@@ -725,49 +852,87 @@ function RecordPaymentModal({
 // ============================================================
 // SCHEDULE FITTING MODAL
 // ============================================================
-interface ScheduleFittingFormData {
+interface ScheduleFittingPayload {
   customerId: string;
   orderId: string;
   appointmentDate: string;
   appointmentTime: string;
-  appointmentType: 'First Fitting' | 'Final Fitting' | 'Consultation' | 'Pickup';
+  appointmentType: string;
   notes: string;
 }
 
-function ScheduleFittingModal({ 
-  onClose, 
+function ScheduleFittingModal({
+  onClose,
   onSchedule,
   customers,
-  orders
-}: { 
-  onClose: () => void; 
-  onSchedule: (data: any) => Promise<void>;
+  orders,
+  appointments
+}: {
+  onClose: () => void;
+  onSchedule: (data: ScheduleFittingPayload) => Promise<void>;
   customers: Customer[];
   orders: Order[];
+  appointments: Appointment[];
 }) {
-  const [form, setForm] = useState<ScheduleFittingFormData>({
+  const [form, setForm] = useState({
     customerId: '',
     orderId: '',
-    appointmentDate: new Date().toISOString().split('T')[0],
+    appointmentDate: '',
     appointmentTime: '',
-    appointmentType: 'First Fitting',
     notes: '',
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const filteredOrders = orders.filter(o => o.customer_id === form.customerId && o.production_status !== 'Released');
+  // Job orders that already have a live visit booked are hidden from the
+  // selection — each job card keeps ONE live appointment, so its next stage is
+  // scheduled from that appointment's own details instead.
+  const filteredOrders = orders.filter(
+    (o) =>
+      o.customer_id === form.customerId &&
+      o.production_status !== 'Released' &&
+      !findActiveAppointmentForJob(appointments, o.job_card_id)
+  );
+  const selectedOrder = orders.find(o => o.order_id === form.orderId);
+
+  // The fitting stage is decided automatically — never by the user.
+  const activeVisit = useMemo(() => findActiveAppointmentForJob(appointments, form.orderId), [appointments, form.orderId]);
+  const plannedType = useMemo(() => {
+    // Fresh booking (no job order attached yet): the first visit on the
+    // journey is always a Consultation.
+    if (!form.orderId) return 'Consultation';
+    return determineStageForJob(appointments, form.orderId);
+  }, [appointments, form.orderId]);
+
+  // Appointment-type graph: every visit on record grouped by fitting stage.
+  const typeChart = useMemo(
+    () =>
+      FITTING_JOURNEY.map((type) => ({
+        type,
+        count: appointments.filter((a) => a.appointment_type === type && a.status !== 'Cancelled').length,
+      })),
+    [appointments]
+  );
+  const totalVisits = typeChart.reduce((sum, t) => sum + t.count, 0);
+
+  // Stepper progress: furthest stage that already has visits (or the one being scheduled).
+  const plannedIdx = Math.max(0, FITTING_JOURNEY.indexOf((plannedType || '') as (typeof FITTING_JOURNEY)[number]));
+  const furthestVisitedIdx = typeChart.reduce((acc, t, i) => (t.count > 0 ? i : acc), -1);
+  const journeyProgress = Math.max(furthestVisitedIdx, plannedIdx) / (FITTING_JOURNEY.length - 1);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.customerId || !form.orderId || !form.appointmentDate || !form.appointmentTime) {
-      setError('Customer, order, date, and time are required.');
+      setError('Customer, job order, date, and time are required.');
       return;
     }
     setSaving(true);
     setError('');
     try {
-      await onSchedule(form);
+      await onSchedule({
+        ...form,
+        appointmentType: plannedType || activeVisit?.appointment_type || 'Consultation',
+      });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to schedule appointment.');
@@ -778,141 +943,120 @@ function ScheduleFittingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#1F1916]/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-xl bg-[#FFFFFF] border border-[#E8DFD3] rounded-xl shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-7 sm:px-10 pt-8 pb-2">
-          <MonoLabel>Schedule fitting</MonoLabel>
-          <button onClick={onClose} className="text-[#A3958B] hover:text-[#2A211D] transition-colors p-1 rounded-full hover:bg-[#F2ECE1]">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+      <button onClick={onClose} className="absolute inset-0 bg-[#1F1916]/45 backdrop-blur-sm" />
+      <form onSubmit={handleSubmit} className="relative w-full max-w-xl rounded-xl border border-[#E2D7C7] bg-[#FFFCF8] p-7 shadow-2xl max-h-[92vh] overflow-y-auto">
+        <button type="button" onClick={onClose} className="absolute right-5 top-5 text-[#766A62]"><X className="h-5 w-5" /></button>
+        <MonoLabel>Fitting scheduler</MonoLabel>
+        <h2 className="mt-1 text-3xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Schedule appointment</h2>
 
-        <div className="px-7 sm:px-10 pb-9 pt-2">
-          <h2 className="text-3xl leading-tight mb-2 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>
-            Schedule Fitting
-          </h2>
-          <p className="text-[14px] text-[#766A62] font-light mb-6 leading-relaxed">
-            Book a fitting appointment for a customer.
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="border border-[#C86A58]/30 bg-[#FDF4F2] px-4 py-3 rounded-lg text-sm text-[#9A3B2A]">
-                {error}
-              </div>
+        {error && <div className="mt-4 border border-[#C86A58]/30 bg-[#FDF4F2] px-4 py-3 rounded-lg text-sm text-[#9A3B2A]">{error}</div>}
+        {selectedOrder && (
+          <p className="mt-4 rounded-lg border border-[#ECD8A7] bg-[#FFF7E3] px-4 py-2.5 text-[12px] leading-relaxed text-[#8A6618]">
+            {activeVisit ? (
+              <>
+                <span className="font-semibold uppercase tracking-[0.08em]">{selectedOrder.job_card_id}</span> already has a live{' '}
+                <span className="font-semibold uppercase tracking-[0.08em]">{activeVisit.appointment_type}</span> visit. Scheduling moves that same
+                appointment{plannedType && plannedType !== activeVisit.appointment_type ? <> to <span className="font-semibold uppercase tracking-[0.08em]">{plannedType}</span></> : null} — no duplicate is created.
+              </>
+            ) : (
+              <>
+                Next visit for <span className="font-semibold uppercase tracking-[0.08em]">{selectedOrder.job_card_id}</span> is booked automatically as{' '}
+                <span className="font-semibold uppercase tracking-[0.08em]">{plannedType || 'Consultation'}</span>. Just pick a date and time.
+              </>
             )}
+          </p>
+        )}
 
-            <div>
-              <label className="block mb-1.5"><MonoLabel>Customer</MonoLabel></label>
-              <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
-                <User className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                <select
-                  value={form.customerId}
-                  onChange={(e) => setForm(f => ({ ...f, customerId: e.target.value, orderId: '' }))}
-                  className="w-full bg-transparent text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
-                >
-                  <option value="">Select customer</option>
-                  {customers.map(c => (
-                    <option key={c.customer_id} value={c.customer_id}>{c.full_name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
+        <div className="mt-7 grid gap-4 sm:grid-cols-2">
+          <label className="block text-xs font-medium text-[#5E5048]">
+            Customer
+            <select value={form.customerId} onChange={(e) => setForm(f => ({ ...f, customerId: e.target.value, orderId: '' }))} className="mt-2 w-full rounded-lg border border-[#E2D7C7] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#A46B48]">
+              <option value="">Select customer</option>
+              {customers.map(c => <option key={c.customer_id} value={c.customer_id}>{c.full_name}</option>)}
+            </select>
+          </label>
 
-            <div>
-              <label className="block mb-1.5"><MonoLabel>Order (Job Card)</MonoLabel></label>
-              <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
-                <Package className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                <select
-                  value={form.orderId}
-                  onChange={(e) => setForm(f => ({ ...f, orderId: e.target.value }))}
-                  disabled={!form.customerId}
-                  className="w-full bg-transparent text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D] disabled:opacity-50"
-                >
-                  <option value="">Select order</option>
-                  {filteredOrders.map(o => (
-                    <option key={o.order_id} value={o.order_id}>
-                      {o.job_card_id} - {o.garment_type} ({o.production_status})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {filteredOrders.length === 0 && form.customerId && (
-                <p className="text-[11px] text-[#A3958B] mt-1">No active orders for this customer.</p>
+          <label className="block text-xs font-medium text-[#5E5048]">
+            Order (Job Card)
+            <select value={form.orderId} onChange={(e) => setForm(f => ({ ...f, orderId: e.target.value }))} disabled={!form.customerId} className="mt-2 w-full rounded-lg border border-[#E2D7C7] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#A46B48] disabled:bg-[#F8F3EB] disabled:text-[#766A62]">
+              {form.customerId && !filteredOrders.length ? (
+                <option value="">No order</option>
+              ) : (
+                <option value="">Select order</option>
               )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block mb-1.5"><MonoLabel>Date</MonoLabel></label>
-                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
-                  <Calendar className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                  <input
-                    type="date"
-                    value={form.appointmentDate}
-                    onChange={(e) => setForm(f => ({ ...f, appointmentDate: e.target.value }))}
-                    className="w-full bg-transparent text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block mb-1.5"><MonoLabel>Time</MonoLabel></label>
-                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
-                  <Clock className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                  <input
-                    type="time"
-                    value={form.appointmentTime}
-                    onChange={(e) => setForm(f => ({ ...f, appointmentTime: e.target.value }))}
-                    className="w-full bg-transparent text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block mb-1.5"><MonoLabel>Appointment type</MonoLabel></label>
-              <select
-                value={form.appointmentType}
-                onChange={(e) => setForm(f => ({ ...f, appointmentType: e.target.value as any }))}
-                className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-              >
-                <option value="First Fitting">First Fitting</option>
-                <option value="Final Fitting">Final Fitting</option>
-                <option value="Consultation">Consultation</option>
-                <option value="Pickup">Pickup</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block mb-1.5"><MonoLabel>Notes (optional)</MonoLabel></label>
-              <input
-                value={form.notes}
-                onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
-                placeholder="Special instructions for the fitting..."
-                className="w-full border-b border-[#E2D7C7] bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-              />
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={saving}
-                className="flex-1 px-4 py-3 rounded-lg border border-[#E2D7C7] text-[#766A62] text-[11px] font-semibold uppercase hover:bg-[#F2ECE1] disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex-1 px-4 py-3 rounded-lg bg-[#2A211D] text-[#FAF7F2] text-[11px] font-semibold uppercase hover:bg-[#3D312B] shadow-md disabled:opacity-50"
-              >
-                {saving ? 'Scheduling...' : 'Schedule Fitting'}
-              </button>
-            </div>
-          </form>
+              {filteredOrders.map(o => <option key={o.order_id} value={o.order_id}>{o.job_card_id} - {o.garment_type}</option>)}
+            </select>
+          </label>
+          {form.customerId && !filteredOrders.length && (
+            <p className="text-[10px] leading-relaxed text-[#A3958B] sm:col-span-2">
+              {orders.some(o => o.customer_id === form.customerId)
+                ? "Every job card for this customer already has a live visit scheduled — book their next stage from that appointment's details."
+                : "This customer has no job orders yet."}
+            </p>
+          )}
+          <label className="block text-xs font-medium text-[#5E5048]">
+            Date
+            <input type="date" value={form.appointmentDate} onChange={(e) => setForm(f => ({ ...f, appointmentDate: e.target.value }))} className="mt-2 w-full rounded-lg border border-[#E2D7C7] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#A46B48]" />
+          </label>
+          <label className="block text-xs font-medium text-[#5E5048]">
+            Time
+            <input type="time" value={form.appointmentTime} onChange={(e) => setForm(f => ({ ...f, appointmentTime: e.target.value }))} className="mt-2 w-full rounded-lg border border-[#E2D7C7] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#A46B48]" />
+          </label>
+          <label className="block text-xs font-medium text-[#5E5048] sm:col-span-2">
+            Notes (optional)
+            <input value={form.notes} onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Special instructions..." className="mt-2 w-full rounded-lg border border-[#E2D7C7] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#A46B48]" />
+          </label>
         </div>
-      </div>
+
+        {/* Appointment-type graph */}
+        <section className="mt-6 rounded-xl border border-[#E2D7C7] bg-white p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <MonoLabel>Appointment types</MonoLabel>
+              <p className="mt-0.5 text-[12px] text-[#8C7E74]">Every visit booked across the workshop, by fitting stage</p>
+            </div>
+            <span className="inline-flex flex-shrink-0 items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#B9DDD0] bg-[#E7F4EE] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#277257]">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#277257]" /> Live
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-[#ECD8A7] bg-[#FFF7E3] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#8A6618]">
+                <BarChart3 className="h-3 w-3" /> {totalVisits} total
+              </span>
+            </span>
+          </div>
+          {/* Journey stepper — same visual language as the live fitting tracker */}
+          <div className="relative mt-6 flex items-start justify-between px-1">
+            <div className="absolute left-3 right-3 top-[11px] h-[2px] bg-[#EFE7DB]" />
+            <div
+              className="absolute left-3 top-[11px] h-[2px] bg-[#8C6F3E] transition-all duration-700"
+              style={{ width: `calc((100% - 24px) * ${journeyProgress})` }}
+            />
+            {typeChart.map((entry) => {
+              const hasVisits = entry.count > 0;
+              const isPlanned = entry.type === plannedType;
+              return (
+                <div key={entry.type} className="relative z-10 flex w-[72px] flex-col items-center">
+                  <span
+                    title={`${entry.count} ${entry.type} visit${entry.count === 1 ? '' : 's'} booked`}
+                    className={`flex h-6 w-6 items-center justify-center rounded-full border-2 text-[10px] font-bold shadow-sm ${isPlanned ? 'animate-pulse border-[#8C6F3E] bg-white text-[#8C6F3E]' : hasVisits ? 'border-[#8C6F3E] bg-[#8C6F3E] text-white' : 'border-[#E2D7C7] bg-white text-[#A3958B]'}`}
+                  >
+                    {entry.count}
+                  </span>
+                  <span className={`mt-1.5 text-center text-[10px] leading-tight ${isPlanned ? 'font-semibold text-[#2A211D]' : hasVisits ? 'text-[#5E5048]' : 'text-[#A3958B]'}`}>{entry.type}</span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-2 px-1 text-[10px] text-[#A3958B]">Number in each node = visits booked at that stage · the pulsing node is the stage being scheduled now.</p>
+        </section>
+
+        <div className="mt-7 flex gap-3">
+          <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[#2A211D] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white disabled:opacity-50">
+            <CalendarPlus className="h-4 w-4" /> {saving ? 'Scheduling...' : 'Schedule'}
+          </button>
+          <button type="button" onClick={onClose} className="rounded-lg border border-[#E2D7C7] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048]">Cancel</button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -934,23 +1078,34 @@ function DashboardView() {
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [readyForPickup, setReadyForPickup] = useState<Order[]>([]);
   const [upcomingFittings, setUpcomingFittings] = useState<Appointment[]>([]);
+  const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<null | 'customer' | 'order' | 'payment' | 'fitting'>(null);
   const [banner, setBanner] = useState('');
+  // Same display rules as the Appointments page: merge duplicate records
+  // (same appointment ID) and keep only the latest active booking per
+  // job card + fitting stage.
+  const visibleFittings = useMemo(() => dedupeAppointments(upcomingFittings), [upcomingFittings]);
+
+  // Job orders that are already fully paid (zero remaining balance) have no
+  // outstanding amount, so they are NOT offered in the Record-payment picker.
+  // This matches the desk rule: hide a job card when it is Fully Paid / balance 0.
+  const payableOrders = useMemo(() => orders.filter((o) => Number(o.remaining_balance) > 0), [orders]);
 
   const loadDashboardData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [statsData, activityData, pickupData, fittingsData, customersData, ordersData] = await Promise.all([
+      const [statsData, activityData, pickupData, fittingsData, customersData, ordersData, appointmentsData] = await Promise.all([
         frontDeskApi.getDashboardStats(),
         frontDeskApi.getRecentActivity(),
         frontDeskApi.getReadyForPickup(),
         frontDeskApi.getUpcomingFittings(),
         frontDeskApi.searchCustomers(''),
         frontDeskApi.getAllOrders(),
+        frontDeskApi.getAppointments(),
       ]);
       setStats(statsData);
       setRecentActivity(activityData);
@@ -958,6 +1113,7 @@ function DashboardView() {
       setUpcomingFittings(fittingsData);
       setCustomers(customersData);
       setOrders(ordersData);
+      setAllAppointments(appointmentsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
     } finally {
@@ -1005,12 +1161,12 @@ function DashboardView() {
         fabric: data.fabric,
         fabricQuantity: parseFloat(data.fabricQuantity) || 0,
         quantity: data.quantity,
-        referenceImage: '',
         specialInstructions: data.specialInstructions,
         targetCompletionDate: data.targetCompletionDate,
         assignedTailorId: data.assignedTailorId,
         measurementSnapshotId: '',
         orderNotes: '',
+        referenceImage: data.referenceImage,
       });
 
       if (data.collectDeposit && data.depositAmount) {
@@ -1045,16 +1201,29 @@ function DashboardView() {
     setTimeout(() => setBanner(''), 5000);
   };
 
-  const handleScheduleFitting = async (data: ScheduleFittingFormData) => {
-    await frontDeskApi.createAppointment({
-      customerId: data.customerId,
-      orderId: data.orderId,
-      appointmentDate: data.appointmentDate,
-      appointmentTime: data.appointmentTime,
-      appointmentType: data.appointmentType,
-      notes: data.notes,
-    });
-    setBanner(`Fitting appointment scheduled successfully.`);
+  // Same rule as the Appointments page: if the job order already has a live
+  // appointment, that SAME record is updated in place (new date/time + next
+  // fitting stage) instead of creating a duplicate row.
+  const handleScheduleFitting = async (data: ScheduleFittingPayload) => {
+    const existing = findActiveAppointmentForJob(allAppointments, data.orderId);
+    if (existing) {
+      await frontDeskApi.rescheduleAppointment(existing.appointment_id, {
+        appointmentDate: data.appointmentDate,
+        appointmentTime: data.appointmentTime,
+        appointmentType: data.appointmentType,
+      });
+      setBanner(`${existing.customer_name || 'Customer'}'s ${existing.appointment_type} visit moved to ${data.appointmentType} — same appointment updated.`);
+    } else {
+      await frontDeskApi.createAppointment({
+        customerId: data.customerId,
+        orderId: data.orderId,
+        appointmentDate: data.appointmentDate,
+        appointmentTime: data.appointmentTime,
+        appointmentType: data.appointmentType,
+        notes: data.notes,
+      });
+      setBanner('Fitting appointment scheduled successfully.');
+    }
     loadDashboardData();
     setTimeout(() => setBanner(''), 5000);
   };
@@ -1155,10 +1324,10 @@ function DashboardView() {
             <MonoLabel>Fitting scheduler</MonoLabel>
             <h2 className="text-xl font-normal mt-0.5 mb-5 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Today's fittings</h2>
             <div className="space-y-4">
-              {upcomingFittings.length === 0 ? (
+              {visibleFittings.length === 0 ? (
                 <p className="text-center text-[#766A62] py-4">No fittings scheduled today.</p>
               ) : (
-                upcomingFittings.slice(0, 4).map((f) => (
+                visibleFittings.slice(0, 4).map((f) => (
                   <div key={f.appointment_id} className="flex items-center gap-3.5">
                     <div className="flex flex-col items-center flex-shrink-0 w-14">
                       <Clock className="w-3.5 h-3.5 text-[#B89255] mb-0.5" strokeWidth={1.8} />
@@ -1166,7 +1335,10 @@ function DashboardView() {
                     </div>
                     <div className="min-w-0 flex-1 border-l border-[#ECE3D8] pl-3.5">
                       <div className="text-[13.5px] text-[#2A211D] font-medium truncate">{f.customer_name}</div>
-                      <div className="text-[12px] text-[#766A62] truncate">{f.appointment_type}</div>
+                      <div className="inline-flex max-w-full items-center gap-1.5 text-[12px] text-[#766A62]">
+                        <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${stageBadgeStyle(f.appointment_type).dot}`} />
+                        <span className="truncate">{f.appointment_type}</span>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -1229,13 +1401,14 @@ function DashboardView() {
           onClose={() => setActiveModal(null)} 
           onCreate={handleCreateOrder}
           customers={customers}
+          orders={orders}
         />
       )}
       {activeModal === 'payment' && (
         <RecordPaymentModal 
           onClose={() => setActiveModal(null)} 
           onRecord={handleRecordPayment}
-          orders={orders}
+          orders={payableOrders}
         />
       )}
       {activeModal === 'fitting' && (
@@ -1244,6 +1417,7 @@ function DashboardView() {
           onSchedule={handleScheduleFitting}
           customers={customers}
           orders={orders}
+          appointments={allAppointments}
         />
       )}
     </div>

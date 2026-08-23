@@ -8,6 +8,7 @@ import Frontdeskdashboard from './dashboard/Frontdeskdashboard';
 import Customerdashboard from './dashboard/Customerdashboard';
 import Mastertailordashboard from './dashboard/Mastertailordashboard';
 import CompleteProfile from './pages/CompleteProfile';
+import { CustomerOrdersView } from './pages/CustomerOrders';
 import { FrontDeskCustomersExactView } from './Pages_Frontdesk/CustomersdeskExact';
 
 function currentUser() {
@@ -40,6 +41,7 @@ const App: React.FC = () => {
       <Route path="/frontdesk" element={<RequireCompleteStaffProfile role="front_desk"><Frontdeskdashboard /></RequireCompleteStaffProfile>} />
       <Route path="/complete-profile" element={<CompleteProfile />} />
       <Route path="/customer" element={<Customerdashboard />} />
+      <Route path="/my-orders" element={<CustomerOrdersView />} />
       <Route path="/customerdesk" element={<FrontDeskCustomersExactView />} />
       <Route path="/master" element={<RequireCompleteStaffProfile role="tailor"><Mastertailordashboard /></RequireCompleteStaffProfile>} />
       <Route path="/usermanagement" element={<AdminDashboard initialView="users" />} />

@@ -364,6 +364,21 @@ const frontDeskApi = {
     return handleResponse(response);
   },
 
+  // Move an EXISTING appointment to a new date/time/stage instead of creating
+  // a duplicate row for the same job order.
+  rescheduleAppointment: async (appointmentId: string, data: {
+    appointmentDate: string;
+    appointmentTime: string;
+    appointmentType?: string;
+  }): Promise<Appointment> => {
+    const response = await fetch(`${API_URL}/appointments/${appointmentId}/reschedule`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
   // Dashboard endpoints
   getDashboardStats: async (): Promise<{
     todayCustomers: number;

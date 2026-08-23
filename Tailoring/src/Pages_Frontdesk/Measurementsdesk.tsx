@@ -1,8 +1,8 @@
 // Pages_Frontdesk/Measurementsdesk.tsx
 import { useMemo, useState, useEffect, useCallback } from 'react';
-import { Check, ChevronRight, Ruler, Search, X, Loader2 } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import frontDeskApi, { type Customer, type Measurement } from '../../services/frontDeskApi';
+import { Check, ChevronDown, ChevronRight, Package, Ruler, Search, X, Loader2 } from 'lucide-react';
+import { ResponsiveContainer, PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
+import frontDeskApi, { type Customer, type Order } from '../../services/frontDeskApi';
 
 function Label({ children }: { children: React.ReactNode }) {
   return <span className="text-[10px] uppercase tracking-[0.2em] text-[#8C7E74]" style={{ fontFamily: "'Space Mono', monospace" }}>{children}</span>;
@@ -15,6 +15,37 @@ function Metric({ label, value, tone = 'default' }: { label: string; value: numb
 
 const MEASUREMENT_FIELDS = ['Chest', 'Waist', 'Hip', 'Shoulder', 'Sleeve', 'Neck', 'Inseam'];
 
+// The measurements table stores ONE ROW PER BODY PART: { label, value,
+// updated_at } — not wide columns like chest/waist or a measurement_date.
+interface MeasurementRow { id?: number | string; label: string; value: string; updated_at?: string; }
+
+function safeDate(value?: string): string {
+  if (!value) return 'Never';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? 'Never' : d.toLocaleDateString();
+}
+
+/** Convert label/value rows into { Chest: '36', Waist: '29', ... } */
+function rowsToValues(rows: MeasurementRow[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  rows.forEach((row) => {
+    const field = MEASUREMENT_FIELDS.find((f) => f.toLowerCase() === String(row.label).toLowerCase());
+    if (field && row.value !== null && row.value !== undefined && row.value !== '') map[field] = String(row.value);
+  });
+  return map;
+}
+
+function formatPeso(value: number | string): string {
+  const n = Number(value || 0);
+  return `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatDate(value?: string | null): string {
+  if (!value) return 'To be scheduled';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? 'To be scheduled' : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 function MeasurementEditor({ 
   customer, 
   existingMeasurements, 
@@ -22,22 +53,13 @@ function MeasurementEditor({
   onSave 
 }: { 
   customer: Customer; 
-  existingMeasurements: Measurement[];
+  existingMeasurements: MeasurementRow[];
   onClose: () => void; 
   onSave: (data: any) => Promise<void>;
 }) {
-  const latest = existingMeasurements.length > 0 ? existingMeasurements[0] : null;
-  const [values, setValues] = useState<Record<string, string>>(() => {
-    if (latest) {
-      const map: Record<string, string> = {};
-      MEASUREMENT_FIELDS.forEach(field => {
-        const key = field.toLowerCase() as keyof Measurement;
-        map[field] = latest[key] !== null && latest[key] !== undefined ? String(latest[key]) : '';
-      });
-      return map;
-    }
-    return Object.fromEntries(MEASUREMENT_FIELDS.map(f => [f, '']));
-  });
+  const [values, setValues] = useState<Record<string, string>>(
+    () => ({ ...Object.fromEntries(MEASUREMENT_FIELDS.map(f => [f, ''])), ...rowsToValues(existingMeasurements) })
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -116,49 +138,167 @@ function ProfileDetails({
   onEdit 
 }: { 
   customer: Customer; 
-  measurements: Measurement[];
+  measurements: MeasurementRow[];
   onClose: () => void; 
   onEdit: () => void;
 }) {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [openOrderId, setOpenOrderId] = useState<string | null>(null);
+  const [barsIn, setBarsIn] = useState(false);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        // This customer's real job orders — they share the SAME CUS-xxxxx id.
+        const all = await frontDeskApi.getAllOrders();
+        if (!cancelled) setOrders(all.filter((o) => String(o.customer_id) === String(customer.customer_id)));
+      } catch (err) {
+        console.error('Failed to load orders:', err);
+      } finally {
+        if (!cancelled) setLoadingOrders(false);
+      }
+    })();
+    const t = setTimeout(() => setBarsIn(true), 200);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [customer.customer_id]);
+
+  const values = rowsToValues(measurements);
   const latest = measurements.length > 0 ? measurements[0] : null;
+
+  // Radar graph: every saved measurement plotted around the silhouette.
+  const radarData = useMemo(
+    () => Object.entries(values).map(([label, v]) => ({ label, value: Number.parseFloat(v) || 0 })),
+    [values]
+  );
+  const maxValue = useMemo(() => Math.max(1, ...radarData.map((d) => d.value)), [radarData]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button onClick={onClose} className="absolute inset-0 bg-[#1F1916]/45 backdrop-blur-sm" />
-      <section className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-[#E2D7C7] bg-[#FFFCF8] p-7 shadow-2xl">
-        <button onClick={onClose} className="absolute right-5 top-5 text-[#766A62]"><X className="h-5 w-5" /></button>
-        <Label>Measurement profile</Label>
-        <h2 className="mt-1 text-3xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{customer.full_name}</h2>
-        <p className="mt-2 text-sm text-[#766A62]">{customer.customer_id} · {customer.contact_number}</p>
+      <style>{`@keyframes pdFade{from{opacity:0}to{opacity:1}}@keyframes pdPop{from{opacity:0;transform:translateY(16px) scale(.96)}to{opacity:1;transform:none}}.pd-fade{animation:pdFade .22s ease-out both}.pd-pop{animation:pdPop .42s cubic-bezier(.22,1,.36,1) both}`}</style>
+      <button onClick={onClose} className="pd-fade absolute inset-0 bg-[#1F1916]/45 backdrop-blur-sm" />
+      <section className="pd-pop relative max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-[#E2D7C7] bg-[#FFFCF8] shadow-2xl">
+        {/* Header */}
+        <header className="flex items-start justify-between gap-3 border-b border-[#E8DFD3] p-6">
+          <div className="flex items-center gap-4">
+            <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#A46B48] to-[#8C6F3E] text-lg font-semibold text-white shadow-md">
+              {customer.full_name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}
+            </span>
+            <div>
+              <Label>Measurement profile</Label>
+              <h2 className="mt-1 text-3xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{customer.full_name}</h2>
+              <p className="mt-1 text-xs text-[#8C7E74]">{customer.customer_id} · {customer.contact_number}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-[#766A62]"><X className="h-5 w-5" /></button>
+        </header>
 
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {latest ? (
-            MEASUREMENT_FIELDS.map((field) => {
-              const key = field.toLowerCase() as keyof Measurement;
-              const value = latest[key];
-              return (
-                <div key={field} className="rounded-lg border border-[#E2D7C7] bg-white p-3">
-                  <Label>{field}</Label>
-                  <div className="mt-1 text-sm text-[#2A211D]">{value !== null && value !== undefined ? `${value} in` : '—'}</div>
+        <div className="grid gap-6 p-6 lg:grid-cols-2">
+          {/* Radar graph + comparison bars */}
+          <div className="pd-pop rounded-xl border border-[#E2D7C7] bg-white p-4" style={{ animationDelay: '90ms' }}>
+            <div className="flex items-center gap-2">
+              <Ruler className="h-4 w-4 text-[#A46B48]" />
+              <h3 className="text-base text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Body profile</h3>
+            </div>
+            {radarData.length ? (
+              <>
+                <div className="mt-2 h-52">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart data={radarData} outerRadius="70%">
+                      <PolarGrid stroke="#ECE3D8" />
+                      <PolarAngleAxis dataKey="label" tick={{ fill: '#8C7E74', fontSize: 10, fontFamily: 'Space Mono, monospace' }} />
+                      <Radar dataKey="value" stroke="#A46B48" strokeWidth={2} fill="#A46B48" fillOpacity={0.32} animationDuration={900} />
+                    </RadarChart>
+                  </ResponsiveContainer>
                 </div>
-              );
-            })
-          ) : (
-            <p className="col-span-full rounded-lg border border-dashed border-[#D9C8B7] bg-[#FCFAF7] p-6 text-center text-sm text-[#766A62]">
-              No measurements have been recorded for this customer.
-            </p>
-          )}
+                <div className="space-y-2">
+                  {radarData.map((m, i) => (
+                    <div key={m.label} className="pd-pop" style={{ animationDelay: `${160 + i * 60}ms` }}>
+                      <div className="flex items-baseline justify-between text-[11px]">
+                        <span className="font-medium uppercase tracking-[0.08em] text-[#5E5048]">{m.label}</span>
+                        <span className="text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{m.value} in</span>
+                      </div>
+                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#EFE7DB]">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-[#C9A15C] to-[#8C6F3E] transition-all duration-700 ease-out"
+                          style={{ width: barsIn ? `${Math.min(100, (m.value / maxValue) * 100)}%` : '0%', transitionDelay: `${i * 60}ms` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="py-10 text-center text-sm text-[#766A62]">No measurements recorded yet.</p>
+            )}
+          </div>
+
+          {/* Value cards */}
+          <div className="grid grid-cols-2 content-start gap-3">
+            {MEASUREMENT_FIELDS.map((field, i) => (
+              <div key={field} className="pd-pop rounded-xl border border-[#E2D7C7] bg-white p-3.5" style={{ animationDelay: `${120 + i * 55}ms` }}>
+                <Label>{field}</Label>
+                <div className="mt-1 flex items-baseline gap-1">
+                  <span className={`text-xl ${values[field] ? 'text-[#2A211D]' : 'text-[#C9BBA6]'}`} style={{ fontFamily: "'DM Serif Display', serif" }}>{values[field] || '—'}</span>
+                  {values[field] && <span className="text-[10px] uppercase tracking-[0.08em] text-[#A3958B]">in</span>}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="mt-7 flex items-center justify-between border-t border-[#E8DFD3] pt-5">
-          <span className="text-xs text-[#8C7E74]">
-            Last updated: {latest ? new Date(latest.measurement_date).toLocaleDateString() : 'Never'}
-          </span>
-          <div className="flex gap-3">
-            <button onClick={onEdit} className="inline-flex items-center gap-2 rounded-lg bg-[#2A211D] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
-              <Ruler className="h-4 w-4" /> Update measurements
-            </button>
+        {/* Job orders — what kind of garments this customer has, clickable */}
+        <div className="border-t border-[#E8DFD3] px-6 pb-6 pt-5">
+          <div className="flex items-center gap-2">
+            <Package className="h-4 w-4 text-[#A46B48]" />
+            <h3 className="text-base text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Job orders ({orders.length})</h3>
+            <span className="text-[11px] text-[#A3958B]">— click one to see its details</span>
           </div>
+          <div className="mt-3 space-y-2">
+            {loadingOrders ? (
+              <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-[#8C6F3E]" /></div>
+            ) : orders.length ? (
+              orders.map((order, i) => {
+                const open = openOrderId === order.order_id;
+                return (
+                  <div key={order.order_id} className="pd-pop overflow-hidden rounded-lg border border-[#E2D7C7] bg-white" style={{ animationDelay: `${120 + i * 60}ms` }}>
+                    <button type="button" onClick={() => setOpenOrderId(open ? null : order.order_id)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#FCFAF7]">
+                      <span className="flex-shrink-0 text-[10px] text-[#A3958B]" style={{ fontFamily: "'Space Mono', monospace" }}>{order.job_card_id}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-[#2A211D]">{order.garment_type}</span>
+                      <span className="inline-block flex-shrink-0 rounded bg-[#FFF7E3] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em] text-[#8A6618]">{order.production_status}</span>
+                      <ChevronDown className={`h-4 w-4 flex-shrink-0 text-[#A3958B] transition-transform duration-300 ${open ? 'rotate-180' : ''}`} />
+                    </button>
+                    {open && (
+                      <div className="grid grid-cols-2 gap-3 border-t border-[#F0EAE2] bg-[#FCFAF7] px-4 py-3 sm:grid-cols-4">
+                        {([
+                          ['Fabric', order.fabric || 'Not specified'],
+                          ['Estimated ready', formatDate(order.target_completion_date)],
+                          ['Payment', order.payment_status],
+                          ['Balance', Number(order.remaining_balance) > 0 ? formatPeso(order.remaining_balance) : 'Paid in full'],
+                        ] as [string, string][]).map(([label, val]) => (
+                          <div key={label}>
+                            <Label>{label}</Label>
+                            <div className="mt-0.5 text-[12.5px] font-medium text-[#2A211D]">{val}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              <p className="rounded-lg border border-dashed border-[#D9C8B7] bg-[#FCFAF7] p-4 text-center text-sm text-[#766A62]">No job orders yet for this customer.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-[#E8DFD3] px-6 py-5">
+          <span className="text-xs text-[#8C7E74]">Last updated: {safeDate(latest?.updated_at)}</span>
+          <button onClick={onEdit} className="inline-flex items-center gap-2 rounded-lg bg-[#2A211D] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white transition-transform hover:-translate-y-0.5">
+            <Ruler className="h-4 w-4" /> Update measurements
+          </button>
         </div>
       </section>
     </div>
@@ -167,7 +307,7 @@ function ProfileDetails({
 
 export function FrontDeskMeasurementsView() {
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [measurements, setMeasurements] = useState<Record<string, Measurement[]>>({});
+  const [measurements, setMeasurements] = useState<Record<string, MeasurementRow[]>>({});
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Customer | null>(null);
   const [editing, setEditing] = useState<Customer | null>(null);
@@ -180,12 +320,12 @@ export function FrontDeskMeasurementsView() {
       setCustomers(customersData);
       
       // Load measurements for each customer
-      const measurementsMap: Record<string, Measurement[]> = {};
+      const measurementsMap: Record<string, MeasurementRow[]> = {};
       await Promise.all(
         customersData.map(async (c) => {
           try {
             const m = await frontDeskApi.getCustomerMeasurements(c.customer_id);
-            measurementsMap[c.customer_id] = m;
+            measurementsMap[c.customer_id] = Array.isArray(m) ? (m as unknown as MeasurementRow[]) : [];
           } catch {
             measurementsMap[c.customer_id] = [];
           }
@@ -224,10 +364,12 @@ export function FrontDeskMeasurementsView() {
   ], [complete, needsMeasuring]);
 
   const handleSaveMeasurements = async (data: any) => {
-    const newMeasurement = await frontDeskApi.createMeasurement(data);
+    // POST /api/measurements responds with the customer's FULL updated
+    // label/value row set — replace the cached list with it.
+    const updatedRows = await frontDeskApi.createMeasurement(data);
     setMeasurements(prev => ({
       ...prev,
-      [data.customerId]: [newMeasurement, ...(prev[data.customerId] || [])],
+      [data.customerId]: Array.isArray(updatedRows) ? (updatedRows as unknown as MeasurementRow[]) : (prev[data.customerId] || []),
     }));
     setEditing(null);
     setNotice(`Measurements saved for ${selected?.full_name || ''}.`);
@@ -310,7 +452,7 @@ export function FrontDeskMeasurementsView() {
         {filtered.map((customer) => {
           const customerMeasurements = measurements[customer.customer_id] || [];
           const hasMeasurements = customerMeasurements.length > 0;
-          const lastUpdated = hasMeasurements ? new Date(customerMeasurements[0].measurement_date).toLocaleDateString() : 'Not recorded';
+          const lastUpdated = hasMeasurements ? safeDate(customerMeasurements[0]?.updated_at) : 'Not recorded';
 
           return (
             <button key={customer.customer_id} onClick={() => setSelected(customer)} className="grid w-full grid-cols-1 gap-2 border-b border-[#F0EAE2] px-6 py-4 text-left transition-colors hover:bg-[#FCFAF7] md:grid-cols-[1.25fr_1fr_0.9fr_24px] md:items-center md:gap-4">

@@ -1,6 +1,6 @@
 // Pages_Frontdesk/Ordersdesk.tsx
 import { useMemo, useState, useEffect, useCallback } from 'react';
-import { ChevronRight, Search, TrendingUp, X, Loader2 } from 'lucide-react';
+import { Check, ChevronRight, Search, TrendingUp, X, Loader2 } from 'lucide-react';
 import {
   ResponsiveContainer,
   BarChart,
@@ -10,6 +10,8 @@ import {
   CartesianGrid,
   Tooltip,
   Cell,
+  PieChart,
+  Pie,
 } from 'recharts';
 import frontDeskApi, { type Order } from '../../services/frontDeskApi';
 
@@ -55,31 +57,128 @@ function ChartTooltip({ active, payload, label }: any) {
   );
 }
 
+const peso = (amount: number) => `₱${Number(amount || 0).toLocaleString()}`;
+
 function OrderDetails({ order, onClose }: { order: Order; onClose: () => void }) {
+  const [barsIn, setBarsIn] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setBarsIn(true), 200);
+    return () => clearTimeout(t);
+  }, [order.order_id]);
+
+  const total = Number(order.total_amount) || 0;
+  const paid = Number(order.deposit_paid) || 0;
+  const balance = Number(order.remaining_balance) || 0;
+  const paidPct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+  const stageIdx = STAGE_ORDER.indexOf(order.production_status);
+
+  const donutData = [
+    { name: 'Paid', value: paid || 0.0001, color: '#4E7357' },
+    { name: 'Balance', value: balance || 0.0001, color: '#ECD8A7' },
+  ];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button onClick={onClose} className="absolute inset-0 bg-[#1F1916]/40" />
-      <section className="relative w-full max-w-xl rounded-xl bg-white p-7 shadow-2xl">
-        <button onClick={onClose} className="absolute right-5 top-5 text-[#766A62]"><X className="h-5 w-5" /></button>
-        <Label>Job card details</Label>
-        <h2 className="mt-1 text-3xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{order.job_card_id}</h2>
-        <p className="mt-1 text-sm text-[#766A62]">{order.customer_name} · {order.garment_type}</p>
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          {[
-            ['Fabric', order.fabric || 'Not set'],
-            ['Quantity', `${order.quantity} pcs`],
-            ['Target completion', new Date(order.target_completion_date).toLocaleDateString()],
-            ['Production stage', order.production_status],
-            ['Payment status', order.payment_status],
-            ['Total amount', `₱${order.total_amount.toLocaleString()}`],
-            ['Paid', `₱${order.deposit_paid.toLocaleString()}`],
-            ['Balance', `₱${order.remaining_balance.toLocaleString()}`],
-          ].map(([label, value]) => (
-            <div key={label} className="rounded-lg border border-[#E2D7C7] p-3">
-              <Label>{label}</Label>
-              <div className="mt-1 text-sm text-[#2A211D]">{value}</div>
+      <style>{`@keyframes jdFade{from{opacity:0}to{opacity:1}}@keyframes jdPop{from{opacity:0;transform:translateY(16px) scale(.96)}to{opacity:1;transform:none}}.jd-fade{animation:jdFade .22s ease-out both}.jd-pop{animation:jdPop .42s cubic-bezier(.22,1,.36,1) both}`}</style>
+      <button onClick={onClose} className="jd-fade absolute inset-0 bg-[#1F1916]/45 backdrop-blur-sm" />
+      <section className="jd-pop relative max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-xl border border-[#E2D7C7] bg-[#FFFCF8] shadow-2xl">
+        {/* Header */}
+        <header className="flex items-start justify-between gap-3 border-b border-[#E8DFD3] p-6">
+          <div className="flex items-center gap-4">
+            <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#A46B48] to-[#8C6F3E] text-lg font-semibold text-white shadow-md">
+              {order.customer_name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}
+            </span>
+            <div>
+              <Label>Job card details</Label>
+              <h2 className="mt-1 text-3xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{order.job_card_id}</h2>
+              <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#8C7E74]">
+                <span>{order.customer_name} · {order.garment_type}</span>
+                <span className={`inline-block rounded-md border px-2 py-0.5 text-[9px] uppercase tracking-[0.08em] ${stageStyle[order.production_status] || 'border-[#D9C8B7] bg-[#F8F3EB] text-[#766A62]'}`}>{order.production_status}</span>
+              </p>
             </div>
-          ))}
+          </div>
+          <button onClick={onClose} className="text-[#766A62]"><X className="h-5 w-5" /></button>
+        </header>
+
+        <div className="p-6">
+          {/* Reference photo preference */}
+          {order.reference_image && (
+            <div className="mb-5">
+              <Label>Reference photo</Label>
+              <img src={order.reference_image} alt="Garment style reference" className="mt-2 max-h-56 w-full rounded-xl border border-[#E2D7C7] object-cover" />
+            </div>
+          )}
+
+          {/* Production journey stepper */}
+          <Label>Production journey</Label>
+          <div className="relative mt-4 flex items-start justify-between">
+            <div className="absolute left-3 right-3 top-[11px] h-[2px] bg-[#EFE7DB]" />
+            <div
+              className="absolute left-3 top-[11px] h-[2px] bg-[#8C6F3E] transition-all duration-700"
+              style={{ width: `calc((100% - 24px) * ${Math.max(0, stageIdx) / (STAGE_ORDER.length - 1)})` }}
+            />
+            {STAGE_ORDER.map((stage, i) => {
+              const done = i < stageIdx;
+              const current = i === stageIdx;
+              return (
+                <div key={stage} className="relative z-10 flex w-[58px] flex-col items-center">
+                  <span className={`flex h-6 w-6 items-center justify-center rounded-full border-2 shadow-sm ${done ? 'border-[#8C6F3E] bg-[#8C6F3E] text-white' : current ? 'border-[#8C6F3E] bg-white' : 'border-[#E2D7C7] bg-white'}`}>
+                    {done ? <Check className="h-3 w-3" /> : current ? <span className="h-2 w-2 animate-pulse rounded-full bg-[#8C6F3E]" /> : <span className="h-1.5 w-1.5 rounded-full bg-[#D9CFC2]" />}
+                  </span>
+                  <span className={`mt-1.5 text-center text-[8.5px] leading-tight ${current ? 'font-semibold text-[#2A211D]' : done ? 'text-[#5E5048]' : 'text-[#A3958B]'}`}>{stage.replace('Ready for ', '')}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Payment progress donut + bar */}
+          <div className="mt-6 grid items-center gap-4 rounded-xl border border-[#E2D7C7] bg-white p-4 sm:grid-cols-[auto_1fr]">
+            <div className="relative mx-auto h-28 w-28 flex-shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={donutData} dataKey="value" nameKey="name" innerRadius={34} outerRadius={52} paddingAngle={3} stroke="none" animationDuration={900}>
+                    {donutData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-lg text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{paidPct}%</span>
+                <span className="text-[8.5px] uppercase tracking-[0.12em] text-[#A3958B]">Paid</span>
+              </div>
+            </div>
+            <div>
+              <div className="flex items-baseline justify-between text-[11px]">
+                <span className="font-medium uppercase tracking-[0.08em] text-[#5E5048]">Payment progress</span>
+                <span className="text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(paid)} / {peso(total)}</span>
+              </div>
+              <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-[#EFE7DB]">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#C9A15C] to-[#4E7357] transition-all duration-700 ease-out"
+                  style={{ width: barsIn ? `${paidPct}%` : '0%' }}
+                />
+              </div>
+              <div className="mt-2 flex justify-between text-[11px]">
+                <span className="font-medium text-[#4E7357]">Paid {peso(paid)}</span>
+                <span className={`font-medium ${balance > 0 ? 'text-[#9E5B4B]' : 'text-[#4E7357]'}`}>{balance > 0 ? `Balance ${peso(balance)}` : 'Fully paid'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Detail cards */}
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            {([
+              ['Fabric', order.fabric || 'Not set'],
+              ['Quantity', `${order.quantity} pcs`],
+              ['Target completion', new Date(order.target_completion_date).toLocaleDateString()],
+              ['Payment status', order.payment_status],
+            ] as [string, string][]).map(([label, value], i) => (
+              <div key={label} className="jd-pop rounded-lg border border-[#E2D7C7] bg-white p-3" style={{ animationDelay: `${120 + i * 60}ms` }}>
+                <Label>{label}</Label>
+                <div className="mt-1 text-sm text-[#2A211D]">{value}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
     </div>

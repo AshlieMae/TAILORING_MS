@@ -1,4 +1,3 @@
-// Pages/FrontDesk/FrontDeskModals.tsx
 import { useState } from 'react';
 import { X, User, Mail, Phone, MapPin, Lock } from 'lucide-react';
 
