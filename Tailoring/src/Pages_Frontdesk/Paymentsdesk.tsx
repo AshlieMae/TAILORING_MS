@@ -18,7 +18,7 @@ function Badge({ status }: { status: string }) {
   );
 }
 
-function PaymentDetails({ payment, orders, onClose, onPay }: { payment: Payment; orders: Order[]; onClose: () => void; onPay: (data: any) => Promise<void> }) {
+function PaymentDetails({ payment, orders, onClose, onPay, onPrint }: { payment: Payment; orders: Order[]; onClose: () => void; onPay: (data: any) => Promise<void>; onPrint?: (p: Payment) => Promise<void> }) {
   // The job order behind this receipt — gives us the live balance.
   const order = orders.find((o) => o.job_card_id === payment.job_card_id);
   const balance = order ? Number(order.remaining_balance) : 0;
@@ -119,7 +119,7 @@ function PaymentDetails({ payment, orders, onClose, onPay }: { payment: Payment;
           <p className="mt-5 rounded-lg border border-[#B9DDD0] bg-[#E7F4EE] px-4 py-3 text-center text-sm font-medium text-[#277257]">This order is fully paid — no balance remains.</p>
         )}
 
-        <button className="mt-4 w-full flex items-center justify-center gap-2 rounded-lg border border-[#E2D7C7] py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048] hover:bg-[#F8F3EB]">
+        <button onClick={() => onPrint?.(payment)} className="mt-4 w-full flex items-center justify-center gap-2 rounded-lg border border-[#E2D7C7] py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048] hover:bg-[#F8F3EB]">
           <Printer className="h-4 w-4" /> Print receipt
         </button>
       </section>
@@ -478,6 +478,9 @@ export function FrontDeskPaymentsView() {
   const [recordOpen, setRecordOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
+  const [receiptErr, setReceiptErr] = useState('');
 
   const loadData = useCallback(async () => {
     try {
@@ -543,6 +546,19 @@ export function FrontDeskPaymentsView() {
     await loadData();
   };
 
+  // Fetch and display a printable receipt for a payment.
+  const handlePrintReceipt = async (payment: Payment) => {
+    setReceiptErr('');
+    setReceiptData(null);
+    try {
+      const receipt = await frontDeskApi.generateReceipt(payment.payment_id);
+      setReceiptOpen(true);
+      setReceiptData(receipt);
+    } catch (err) {
+      setReceiptErr(err instanceof Error ? err.message : 'Unable to generate receipt.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -603,7 +619,7 @@ export function FrontDeskPaymentsView() {
         {!orderRows.length && <p className="p-12 text-center text-sm text-[#766A62]">No orders match your search.</p>}
       </section>
 
-      {selected && <PaymentDetails payment={selected} orders={orders} onClose={() => setSelected(null)} onPay={handleQuickPay} />}
+      {selected && <PaymentDetails payment={selected} orders={orders} onClose={() => setSelected(null)} onPay={handleQuickPay} onPrint={handlePrintReceipt} />}
       {selectedOrder && (
         <OrderDetails
           order={selectedOrder}
@@ -614,6 +630,12 @@ export function FrontDeskPaymentsView() {
         />
       )}
       {recordOpen && <RecordPaymentModal onClose={() => setRecordOpen(false)} onRecord={handleRecordPayment} orders={orders.filter(o => Number(o.remaining_balance) > 0)} />}
+      {receiptOpen && receiptData && <ReceiptModal receipt={receiptData} onClose={() => setReceiptOpen(false)} />}
+      {receiptErr && (
+        <div className="fixed inset-x-0 top-4 z-[70] mx-auto w-fit rounded-lg border border-[#C86A58]/30 bg-[#FDF4F2] px-4 py-2 text-sm text-[#9A3B2A] shadow-xl">
+          {receiptErr}
+        </div>
+      )}
     </div>
   );
 }
@@ -621,6 +643,70 @@ export function FrontDeskPaymentsView() {
 function Metric({ label, value, tone = 'default' }: { label: string; value: string; tone?: 'default' | 'warn' }) {
   const toneClass = tone === 'warn' ? 'text-[#9E5B4B]' : 'text-[#2A211D]';
   return <div className="dash-card rounded-xl p-5"><div className={`text-2xl ${toneClass}`} style={{ fontFamily: "'DM Serif Display', serif" }}>{value}</div><Label>{label}</Label></div>;
+}
+
+// Printable receipt rendered from the payment record.
+function ReceiptModal({ receipt, onClose }: { receipt: { receiptNumber: string; receiptData: any }; onClose: () => void }) {
+  const d = receipt.receiptData || {};
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <button onClick={onClose} aria-label="Close receipt" className="absolute inset-0 bg-[#1F1916]/45 backdrop-blur-sm" />
+      <section className="relative w-full max-w-md rounded-xl border border-[#E2D7C7] bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[#E8DFD3] px-6 py-4">
+          <Label>Official receipt</Label>
+          <button onClick={onClose} className="text-[#766A62]"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="px-6 py-5" id="printable-receipt">
+          <div className="text-center">
+            <div className="font-serif text-xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{d.shopName || "Ashlie's Tailor"}</div>
+            <p className="text-[11px] text-[#8C7E74]">{d.address}{d.contact ? ` · ${d.contact}` : ''}</p>
+          </div>
+          <div className="mt-4 flex items-center justify-between text-[13px]">
+            <span className="text-[#5E5048]">Receipt no.</span>
+            <span className="mono text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{d.receiptNumber || receipt.receiptNumber}</span>
+          </div>
+          <div className="flex items-center justify-between text-[13px] mt-1">
+            <span className="text-[#5E5048]">Date</span>
+            <span className="text-[#2A211D]">{new Date(d.date).toLocaleString()}</span>
+          </div>
+          <div className="flex items-center justify-between text-[13px] mt-1">
+            <span className="text-[#5E5048]">Customer</span>
+            <span className="text-[#2A211D]">{d.customer}</span>
+          </div>
+          <div className="flex items-center justify-between text-[13px] mt-1">
+            <span className="text-[#5E5048]">Job card</span>
+            <span className="mono text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{d.jobCardId}</span>
+          </div>
+          <div className="mt-4 border-t-2 border-dashed border-[#E2D7C7] pt-4">
+            <div className="flex items-center justify-between text-[13px]">
+              <span className="text-[#5E5048]">{d.paymentType || 'Payment'}</span>
+              <span className="font-semibold text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{peso(Number(d.amount || 0))}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[13px]">
+              <span className="text-[#5E5048]">Total order</span>
+              <span className="text-[#2A211D]">{peso(Number(d.totalOrderAmount || 0))}</span>
+            </div>
+            <div className="flex items-center justify-between text-[13px] mt-1">
+              <span className="text-[#5E5048]">Balance</span>
+              <span className={`font-medium ${Number(d.remainingBalance) > 0 ? 'text-[#9E5B4B]' : 'text-[#4E7357]'}`}>{peso(Number(d.remainingBalance || 0))}</span>
+            </div>
+          </div>
+          <div className="mt-5 flex items-center justify-between border-t-2 border-dashed border-[#E2D7C7] pt-3 text-[12px] text-[#766A62]">
+            <span>Served by {d.staff || d.recorded_by_name || 'Front Desk'}</span>
+            <span>Method: {d.paymentMethod || 'Cash'}</span>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t border-[#E8DFD3] px-6 py-4">
+          <button onClick={onClose} className="rounded-lg border border-[#E2D7C7] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048]">Close</button>
+          <button
+            onClick={() => { const el = document.getElementById('printable-receipt'); if (el) { const w = window.open('', '_blank'); if (w) { w.document.write(`<html><head><title>Receipt ${d.receiptNumber || ''}</title><style>body{font-family:sans-serif;max-width:420px;margin:24px auto;padding:16px}table{width:100%;border-collapse:collapse}td{padding:6px 4px}h2{margin:0}.dashed{border-top:2px dashed #999;margin:10px 0}</style></head><body>${el.outerHTML}</body></html>`); w.document.close(); w.focus(); w.print(); } } }}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#2A211D] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
+            <Printer className="h-4 w-4" /> Print
+          </button>
+        </div>
+      </section>
+    </div>
+  );
 }
 
 export default FrontDeskPaymentsView;

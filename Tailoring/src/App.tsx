@@ -11,6 +11,9 @@ import CompleteProfile from './pages/CompleteProfile';
 import { CustomerOrdersView } from './pages/CustomerOrders';
 import { FrontDeskCustomersExactView } from './Pages_Frontdesk/CustomersdeskExact';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const authToken = () => localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '';
+
 function currentUser() {
   const stored = localStorage.getItem('currentUser') || sessionStorage.getItem('currentUser');
   try { return stored ? JSON.parse(stored) : null; } catch { return null; }
@@ -18,8 +21,32 @@ function currentUser() {
 
 function RequireCompleteStaffProfile({ children, role }: { children: React.ReactNode; role: 'front_desk' | 'tailor' }) {
   const user = currentUser();
+  const [verified, setVerified] = React.useState<null | { ok: boolean; profile_completed: boolean }>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${authToken()}` } });
+        const data = await res.json();
+        const pc = data?.user?.profile_completed ?? user?.profile_completed ?? false;
+        if (!cancelled) {
+          setVerified({ ok: res.ok, profile_completed: !!pc });
+          // Sync the cached session so the rest of the app agrees.
+          const storage = localStorage.getItem('authToken') ? localStorage : sessionStorage;
+          if (user) storage.setItem('currentUser', JSON.stringify({ ...user, profile_completed: !!pc }));
+        }
+      } catch {
+        if (!cancelled) setVerified({ ok: !!user, profile_completed: !!user?.profile_completed });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [role]); /* eslint-disable-line */
+
   if (!user || user.role !== role) return <Navigate to="/login" replace />;
-  if (!user.profile_completed) return <Navigate to="/complete-profile" replace />;
+  // While the authoritative check is in flight, trust the cached flag to avoid flashing.
+  if (verified === null) return user.profile_completed ? <>{children}</> : null;
+  if (!verified.profile_completed) return <Navigate to="/complete-profile" replace />;
   return <>{children}</>;
 }
 

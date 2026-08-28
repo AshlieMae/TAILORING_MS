@@ -67,6 +67,8 @@ export interface Order {
   target_completion_date: string;
   assigned_tailor_id: string;
   assigned_tailor_name: string;
+  pickup_status: 'Not Ready' | 'Ready for Pickup' | 'Released';
+  sent_to_production_at: string;
   labor_cost: number;
   fabric_cost: number;
   additional_charges: number;
@@ -167,6 +169,27 @@ const frontDeskApi = {
   }): Promise<Customer> => {
     const response = await fetch(`${API_URL}/auth/customers`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  // Update / edit an existing customer's personal details (Front Desk + Admin).
+  updateCustomer: async (id: string, data: {
+    firstName?: string;
+    middleName?: string;
+    lastName?: string;
+    suffix?: string;
+    contact?: string;
+    dateOfBirth?: string;
+    gender?: string;
+    civilStatus?: string;
+    occupation?: string;
+    address?: string;
+  }): Promise<Customer> => {
+    const response = await fetch(`${API_URL}/customers/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
       body: JSON.stringify(data),
     });
@@ -426,11 +449,35 @@ const frontDeskApi = {
     return handleResponse(response);
   },
 
-  // Release order
+    // Release order
   releaseOrder: async (orderId: string): Promise<Order> => {
     const response = await fetch(`${API_URL}/orders/${orderId}/release`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+    });
+    return handleResponse(response);
+  },
+
+  // Send a job card to production (Front Desk → Master Tailor handoff).
+  // Validates customer, measurements, garment, fabric, quantity, deadline,
+  // tailor assignment, and the initial-deposit requirement server-side, then
+  // sets the production status to 'Measuring' and notifies the assigned tailor.
+  // This is the single backend record the Master Tailor reads from their dashboard.
+  sendToProduction: async (orderId: string, assignedTailorId?: string): Promise<Order> => {
+    const response = await fetch(`${API_URL}/orders/${orderId}/send-to-production`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify(assignedTailorId ? { assignedTailorId } : {}),
+    });
+    return handleResponse(response);
+  },
+
+  // Add a production note / instruction for the Master Tailor on a job card.
+  addOrderInstruction: async (orderId: string, note: string): Promise<{ message: string }> => {
+    const response = await fetch(`${API_URL}/orders/${orderId}/instructions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify({ note }),
     });
     return handleResponse(response);
   },
@@ -461,6 +508,13 @@ const frontDeskApi = {
     });
     return handleResponse(response);
   },
+  getFabricCatalog: async (): Promise<{ fabrics: { id: number; fabricName: string; tone: string; unit: string }[] }> => {
+    const response = await fetch(`${API_URL}/auth/catalog/fabrics`, {
+      headers: { Authorization: `Bearer ${authToken()}` },
+    });
+    return handleResponse(response);
+  },
+
 };
 
 export default frontDeskApi;

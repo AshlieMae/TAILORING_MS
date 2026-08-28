@@ -46,7 +46,7 @@ function Tag({ children, className = '' }: { children: ReactNode; className?: st
       className={`inline-flex items-center gap-2 text-[10px] tracking-[0.28em] uppercase text-[#C9A66B] ${className}`}
       style={{ fontFamily: "'IBM Plex Mono', monospace" }}
     >
-      <span className="relative inline-block w-3 h-3 rounded-full border border-[#C9A66B]/60">
+      <span className="relative inline-block w-3 h-3 rounded-full border border-[#C9A66B]/60 shrink-0">
         <span className="absolute inset-[3px] rounded-full bg-[#C9A66B]/60" />
       </span>
       {children}
@@ -70,7 +70,7 @@ export default function LandingPage() {
 
   return (
     <div
-      className="min-h-screen bg-[#14120D] text-[#EFE7D8] antialiased selection:bg-[#C9A66B] selection:text-[#14120D]"
+      className="min-h-screen w-full overflow-x-hidden bg-[#14120D] text-[#EFE7D8] antialiased selection:bg-[#C9A66B] selection:text-[#14120D]"
       style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}
     >
       <style>{FONT_IMPORT}</style>
@@ -85,28 +85,30 @@ export default function LandingPage() {
       />
 
       {/* ---------------- NAVIGATION ---------------- */}
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-black/20 backdrop-blur-lg">
-        <div className="w-full px-6 sm:px-8 py-5 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-black/20 backdrop-blur-lg">
+        <div className="max-w-[1600px] mx-auto px-6 sm:px-8 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
             <button
-              className="p-1 hover:opacity-70 transition-opacity md:hidden"
+              className="p-1 hover:opacity-70 transition-opacity lg:hidden shrink-0"
               aria-label="Open menu"
               onClick={() => setMenuOpen((v) => !v)}
             >
               {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <div
-                className="w-9 h-9 rounded-sm border border-[#C9A66B]/70 flex items-center justify-center rotate-3"
+                className="w-9 h-9 shrink-0 rounded-sm border border-[#C9A66B]/70 flex items-center justify-center rotate-3"
                 style={{ fontFamily: "'IBM Plex Mono', monospace" }}
               >
                 <span className="text-[#C9A66B] text-xs">A&T</span>
               </div>
-              <div className="leading-tight" style={{ fontFamily: "'Newsreader', serif" }}>
-          <div className="text-2xl lg:text-4xl tracking-[0.08em]">Ashlie's Tailor</div>
+              <div className="leading-tight min-w-0" style={{ fontFamily: "'Newsreader', serif" }}>
+                <div className="text-lg sm:text-xl lg:text-2xl tracking-[0.05em] whitespace-nowrap">
+                  Ashlie&apos;s Tailor
+                </div>
                 <div
-                 className="text-xs lg:text-sm tracking-[0.35em] text-[#9C8F76] uppercase"
+                  className="text-[9px] lg:text-[10px] tracking-[0.32em] text-[#9C8F76] uppercase whitespace-nowrap"
                   style={{ fontFamily: "'IBM Plex Mono', monospace" }}
                 >
                   Garment Atelier
@@ -115,7 +117,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-        <nav className="hidden md:flex items-center gap-16 text-lg tracking-[0.25em] uppercase text-[#C7BDA8] font-medium">
+          <nav className="hidden lg:flex items-center gap-7 xl:gap-9 text-[11px] tracking-[0.2em] uppercase text-[#C7BDA8] font-medium whitespace-nowrap">
             <a href="#home" className="hover:text-[#EFE7D8] transition-colors">Home</a>
             <a href="#craft" className="hover:text-[#EFE7D8] transition-colors">Craft</a>
             <a href="#reviews" className="hover:text-[#EFE7D8] transition-colors">Reviews</a>
@@ -123,44 +125,56 @@ export default function LandingPage() {
             <a href="#contact-us" className="hover:text-[#EFE7D8] transition-colors">Contact</a>
           </nav>
 
-          <div className="flex items-center gap-6">
-            
+          <div className="flex items-center gap-4 shrink-0">
             <button
-  onClick={() => navigate('/login')}
-  className="px-7 py-3 rounded-full border border-[#C9A66B] bg-[#C9A66B]/10 backdrop-blur-md text-[#C9A66B] font-medium tracking-[0.2em] uppercase hover:bg-[#C9A66B] hover:text-[#14120D] transition-all duration-300"
->
-  Log In
-</button>
+              onClick={() => navigate('/login')}
+              className="px-5 py-2.5 rounded-full border border-[#C9A66B] bg-[#C9A66B]/10 backdrop-blur-md text-[#C9A66B] text-[10px] font-medium tracking-[0.18em] uppercase hover:bg-[#C9A66B] hover:text-[#14120D] transition-all duration-300 whitespace-nowrap"
+            >
+              Log In
+            </button>
           </div>
         </div>
 
         {menuOpen && (
-          <div className="md:hidden px-6 pb-5 flex flex-col gap-4 text-xs tracking-[0.2em] uppercase text-[#C7BDA8]">
-            <a href="#home">Home</a>
-            <a href="#craft">Craft</a>
-            <a href="#reviews">Reviews</a>
-            <a href="#services">Services</a>
-            <a href="#contact-us">Contact</a>
+          <div
+            className="lg:hidden border-t border-white/10 bg-[#0F0D09]"
+            style={{ animation: 'fadeSlideIn 250ms ease-out both' }}
+          >
+            <nav className="flex flex-col divide-y divide-white/10 px-6">
+              {[
+                { href: '#home', label: 'Home' },
+                { href: '#craft', label: 'Craft' },
+                { href: '#reviews', label: 'Reviews' },
+                { href: '#services', label: 'Services' },
+                { href: '#contact-us', label: 'Contact' },
+              ].map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center justify-between py-4 text-xs tracking-[0.22em] uppercase text-[#C7BDA8] hover:text-[#EFE7D8] transition-colors"
+                >
+                  {item.label}
+                  <ArrowRight className="w-3.5 h-3.5 text-[#C9A66B]/60" />
+                </a>
+              ))}
+            </nav>
           </div>
         )}
       </header>
 
       {/* ---------------- HERO ---------------- */}
-     <section id="home" className="relative max-w-[1600px] mx-auto px-8 lg:px-16 pt-24 pb-40 min-h-[90vh] grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+      <section id="home" className="relative max-w-[1600px] mx-auto px-6 sm:px-8 lg:px-16 pt-20 pb-32 lg:pb-40 min-h-[90vh] grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
         <div className="lg:col-span-6 space-y-8">
           <Tag>No. 048 — Established Care</Tag>
 
-          <h1
-         
-  className="text-[3rem] sm:text-6xl lg:text-[5rem] leading-[1] tracking-tight"
-
-          >
+          <h1 className="text-[2.75rem] sm:text-6xl lg:text-[5rem] leading-[1.02] tracking-tight">
             Every garment <br />
             <span className="italic text-[#C9A66B]">deserves a second</span>
             <br /> life, pressed well.
           </h1>
 
-        <p className="text-xl lg:text-2xl text-[#B8AC94] font-light max-w-xl leading-relaxed">
+          <p className="text-lg sm:text-xl lg:text-2xl text-[#B8AC94] font-light max-w-xl leading-relaxed">
             Precision dry cleaning and tailoring, done at the pace of your week — not
             the pace of a factory line.
           </p>
@@ -182,10 +196,8 @@ export default function LandingPage() {
           </div>
         </div>
 
-        <div className="lg:col-span-6 relative scale-110">
-          <div className="relative">
-            <MeasurementDiagram />
-          </div>
+        <div className="lg:col-span-6 relative lg:scale-105">
+          <MeasurementDiagram />
         </div>
       </section>
 
@@ -219,7 +231,7 @@ export default function LandingPage() {
 
       {/* ---------------- VIDEO BANNER ---------------- */}
       <section className="max-w-6xl mx-auto px-6 sm:px-8 py-14">
-        <div className="relative w-full h-[380px] sm:h-[480px] overflow-hidden rounded-sm group">
+        <div className="relative w-full h-[320px] sm:h-[420px] lg:h-[480px] overflow-hidden rounded-sm group">
           <img
             src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=1200&auto=format&fit=crop"
             alt="Boutique rack"
@@ -232,7 +244,12 @@ export default function LandingPage() {
             >
               Fall Collection Care Guide
             </span>
-            <button type="button" onClick={() => setIsCareGuideOpen(true)} aria-label="Play Fall Collection Care Guide" className="w-16 h-16 rounded-full border border-[#EFE7D8]/70 flex items-center justify-center hover:scale-105 hover:border-[#C9A66B] transition-all">
+            <button
+              type="button"
+              onClick={() => setIsCareGuideOpen(true)}
+              aria-label="Play Fall Collection Care Guide"
+              className="w-16 h-16 rounded-full border border-[#EFE7D8]/70 flex items-center justify-center hover:scale-105 hover:border-[#C9A66B] transition-all"
+            >
               <Play className="w-5 h-5 fill-current ml-1" />
             </button>
           </div>
@@ -241,11 +258,34 @@ export default function LandingPage() {
 
       {isCareGuideOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button type="button" aria-label="Close video" onClick={() => setIsCareGuideOpen(false)} className="absolute inset-0 bg-black/75 backdrop-blur-sm" />
-          <section role="dialog" aria-modal="true" aria-label="Fall Collection Care Guide video" className="relative w-full max-w-4xl overflow-hidden rounded-sm border border-[#C9A66B]/60 bg-[#14120D] shadow-2xl">
-            <button type="button" onClick={() => setIsCareGuideOpen(false)} className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-[#EFE7D8] hover:bg-black" aria-label="Close video"><X className="h-5 w-5" /></button>
+          <button
+            type="button"
+            aria-label="Close video"
+            onClick={() => setIsCareGuideOpen(false)}
+            className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+          />
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="Fall Collection Care Guide video"
+            className="relative w-full max-w-4xl overflow-hidden rounded-sm border border-[#C9A66B]/60 bg-[#14120D] shadow-2xl"
+          >
+            <button
+              type="button"
+              onClick={() => setIsCareGuideOpen(false)}
+              className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-[#EFE7D8] hover:bg-black"
+              aria-label="Close video"
+            >
+              <X className="h-5 w-5" />
+            </button>
             <div className="aspect-video">
-              <iframe className="h-full w-full" src="https://www.youtube-nocookie.com/embed/aqz-KE-bpKQ?autoplay=1&rel=0" title="Fall Collection Care Guide" allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+              <iframe
+                className="h-full w-full"
+                src="https://www.youtube-nocookie.com/embed/aqz-KE-bpKQ?autoplay=1&rel=0"
+                title="Fall Collection Care Guide"
+                allow="autoplay; encrypted-media; picture-in-picture"
+                allowFullScreen
+              />
             </div>
           </section>
         </div>
@@ -273,29 +313,28 @@ export default function LandingPage() {
             </div>
 
             <blockquote className="text-xl lg:text-2xl text-[#C7BDA8] leading-relaxed font-light max-w-2xl">
-  After retiring, I wanted my wardrobe kept in the same order as everything
-  else in my life. Ashlie's Tailor team walked me through exactly what
-  each piece needed, and nothing has come back the wrong shape since.
-</blockquote>
+              After retiring, I wanted my wardrobe kept in the same order as everything
+              else in my life. Ashlie&apos;s Tailor team walked me through exactly what
+              each piece needed, and nothing has come back the wrong shape since.
+            </blockquote>
 
-<div
-  className="text-lg lg:text-xl tracking-[0.15em] uppercase text-[#EFE7D8]"
-  style={{ fontFamily: "'IBM Plex Mono', monospace" }}
->
-  Barbara Gordon
-</div>
+            <div
+              className="text-base lg:text-lg tracking-[0.15em] uppercase text-[#EFE7D8]"
+              style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+            >
+              Barbara Gordon
+            </div>
 
-<a href="#reviews" className="pt-4 inline-flex items-center gap-3 group">
-  <span className="text-sm lg:text-base uppercase tracking-[0.22em] text-[#C7BDA8] group-hover:text-[#EFE7D8]">
-    More reviews
-  </span>
-
-  <ArrowRight className="w-4 h-4 text-[#C9A66B] transition-transform group-hover:translate-x-1" />
-</a>
+            <a href="#reviews" className="pt-4 inline-flex items-center gap-3 group">
+              <span className="text-xs lg:text-sm uppercase tracking-[0.22em] text-[#C7BDA8] group-hover:text-[#EFE7D8]">
+                More reviews
+              </span>
+              <ArrowRight className="w-4 h-4 text-[#C9A66B] transition-transform group-hover:translate-x-1" />
+            </a>
           </div>
 
           <div className="lg:col-span-6">
-            <div className="w-full h-[380px] sm:h-[460px] overflow-hidden rounded-sm">
+            <div className="w-full h-[340px] sm:h-[420px] lg:h-[460px] overflow-hidden rounded-sm">
               <img
                 src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=800&auto=format&fit=crop"
                 alt="Client portrait"
@@ -309,15 +348,13 @@ export default function LandingPage() {
       {/* ---------------- SERVICES ---------------- */}
       <section id="services" className="max-w-7xl mx-auto px-6 sm:px-8 py-20 border-t border-[#3A3226]/70">
         <div className="mb-14 max-w-4xl">
-          <Tag className="mb-4 text-base">
-  Our Services
-</Tag>
+          <Tag className="mb-4">Our Services</Tag>
           <h2
-  className="text-4xl sm:text-5xl lg:text-6xl leading-[1.08]"
-  style={{ fontFamily: "'Newsreader', serif", fontWeight: 500 }}
->
-  Crafted with Precision, <span className="italic text-[#C9A66B]">Tailored for You</span>
-</h2>
+            className="text-4xl sm:text-5xl lg:text-6xl leading-[1.08]"
+            style={{ fontFamily: "'Newsreader', serif", fontWeight: 500 }}
+          >
+            Crafted with Precision, <span className="italic text-[#C9A66B]">Tailored for You</span>
+          </h2>
           <p className="mt-5 max-w-2xl text-base sm:text-lg leading-relaxed font-light text-[#B8AC94]">
             From a perfect first fitting to every final stitch, our services keep your wardrobe and orders in expert hands.
           </p>
@@ -371,10 +408,10 @@ export default function LandingPage() {
             className="text-3xl sm:text-5xl leading-tight"
             style={{ fontFamily: "'Newsreader', serif", fontWeight: 500 }}
           >
-            Bring us the piece, we'll take it from there
+            Bring us the piece, we&apos;ll take it from there
           </h2>
           <p className="mt-5 max-w-xl text-base sm:text-lg leading-relaxed font-light text-[#B8AC94]">
-            Questions about an order, a fitting, or a fabric you're not sure about? Send a note or stop by the atelier.
+            Questions about an order, a fitting, or a fabric you&apos;re not sure about? Send a note or stop by the atelier.
           </p>
         </div>
 
@@ -523,7 +560,7 @@ export default function LandingPage() {
                     className="text-[11px] tracking-[0.2em] uppercase text-[#9C8F76]"
                     style={{ fontFamily: "'IBM Plex Mono', monospace" }}
                   >
-                    Received — we'll reply shortly
+                    Received — we&apos;ll reply shortly
                   </span>
                 )}
               </div>
@@ -532,40 +569,39 @@ export default function LandingPage() {
         </div>
       </section>
 
-
       {/* ---------------- FOOTER — styled like a care label ---------------- */}
       <footer className="bg-[#0F0D09] text-[#C7BDA8] pt-16 pb-10 px-6 sm:px-8 border-t border-[#3A3226]/70">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-12 pb-14 border-b border-[#3A3226]/70">
           <div className="md:col-span-4 space-y-6">
             <div className="flex items-center gap-3">
               <div
-                className="w-9 h-9 rounded-sm border border-[#C9A66B]/70 flex items-center justify-center -rotate-3"
+                className="w-9 h-9 shrink-0 rounded-sm border border-[#C9A66B]/70 flex items-center justify-center -rotate-3"
                 style={{ fontFamily: "'IBM Plex Mono', monospace" }}
               >
                 <span className="text-[#C9A66B] text-xs">A&T</span>
               </div>
               <div
-  style={{ fontFamily: "'Newsreader', serif" }}
-  className="text-3xl lg:text-4xl text-[#EFE7D8] tracking-[0.1em]"
->
-  Ashlie's Tailor
-</div>
+                style={{ fontFamily: "'Newsreader', serif" }}
+                className="text-2xl lg:text-3xl text-[#EFE7D8] tracking-[0.06em]"
+              >
+                Ashlie&apos;s Tailor
+              </div>
             </div>
             <p
-             className="text-sm lg:text-base tracking-[0.15em] text-[#8E8067] uppercase max-w-[220px]"
+              className="text-xs lg:text-sm tracking-[0.15em] text-[#8E8067] uppercase max-w-[220px]"
               style={{ fontFamily: "'IBM Plex Mono', monospace" }}
             >
               Handle with care — dry clean only — do not wring
             </p>
-            <div className="flex space-x-3 pt-1">
+            <div className="flex flex-wrap gap-3 pt-1">
               {['f', '▶', '◎', '𝕏', 'in'].map((label) => (
                 <a
                   key={label}
                   href="#social"
-                  className="w-12 h-12 rounded-sm border border-[#3A3226] flex items-center justify-center text-[#9C8F76] hover:border-[#C9A66B] hover:text-[#C9A66B] transition-colors"
+                  className="w-11 h-11 rounded-sm border border-[#3A3226] flex items-center justify-center text-[#9C8F76] hover:border-[#C9A66B] hover:text-[#C9A66B] transition-colors"
                   aria-label={`Visit us on ${label}`}
                 >
-                 <span className="text-base font-semibold leading-none">{label}</span>
+                  <span className="text-base font-semibold leading-none">{label}</span>
                 </a>
               ))}
             </div>
@@ -589,7 +625,7 @@ export default function LandingPage() {
                 onChange={(e) => setEmailSub(e.target.value)}
                 className="bg-transparent text-xs text-[#EFE7D8] px-3 py-2.5 focus:outline-none w-full placeholder-[#6E6452]"
               />
-              <button className="bg-[#C9A66B] text-[#14120D] text-[10px] tracking-[0.2em] uppercase px-4 py-2.5 font-semibold rounded-sm hover:bg-[#dcbb85] transition-colors">
+              <button className="bg-[#C9A66B] text-[#14120D] text-[10px] tracking-[0.2em] uppercase px-4 py-2.5 font-semibold rounded-sm hover:bg-[#dcbb85] transition-colors shrink-0">
                 Subscribe
               </button>
             </div>
@@ -600,7 +636,7 @@ export default function LandingPage() {
           className="max-w-7xl mx-auto pt-8 flex justify-center text-[10px] text-[#6E6452] tracking-[0.25em] uppercase"
           style={{ fontFamily: "'IBM Plex Mono', monospace" }}
         >
-          All rights reserved · ©2026 Ashlie's Tailor
+          All rights reserved · ©2026 Ashlie&apos;s Tailor
         </div>
       </footer>
     </div>
@@ -609,11 +645,11 @@ export default function LandingPage() {
 
 function MeasurementDiagram() {
   return (
-   <div className="group relative aspect-[2/1] w-full max-w-[1100px] mx-auto overflow-hidden rounded-sm border border-[#3A3226] bg-[#AAA59E] lg:aspect-[16/9]">
+    <div className="group relative aspect-[2/1] w-full max-w-[1100px] mx-auto overflow-hidden rounded-sm border border-[#3A3226] bg-[#AAA59E] lg:aspect-[16/9]">
       <img
         src="/school-uniforms.png"
         alt="Male and female school uniforms"
-        className="h-full w-full scale-[1.12] object-cover transition-transform duration-700 ease-out group-hover:scale-[1.16]"
+        className="h-full w-full object-cover object-top transition-transform duration-700 ease-out group-hover:scale-[1.05]"
         style={{ animation: 'fadeSlideIn 700ms ease-out both' }}
       />
       <div className="pointer-events-none absolute inset-2 border border-white/40" />
@@ -654,9 +690,9 @@ interface SplitFeatureProps {
 
 function SplitFeature({ tag, title, body, img, alt, reverse = false }: SplitFeatureProps) {
   return (
-  <div className="grid grid-cols-1 lg:grid-cols-12 gap-20 items-center py-32 min-h-screen">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-20 items-center py-20 lg:py-32">
       <div className={`lg:col-span-6 ${reverse ? 'lg:order-2' : ''}`}>
-       <div className="relative w-full h-[500px] sm:h-[600px] lg:h-[700px] overflow-hidden rounded-sm">
+        <div className="relative w-full h-[360px] sm:h-[480px] lg:h-[620px] overflow-hidden rounded-sm">
           <img src={img} alt={alt} className="w-full h-full object-cover grayscale-[10%]" />
         </div>
       </div>
@@ -664,13 +700,12 @@ function SplitFeature({ tag, title, body, img, alt, reverse = false }: SplitFeat
       <div className={`lg:col-span-6 space-y-5 ${reverse ? 'lg:order-1' : ''} ${reverse ? 'lg:pr-8' : 'lg:pl-8'}`}>
         <Tag>{tag}</Tag>
         <h2
-         
-  className="text-5xl sm:text-6xl lg:text-7xl leading-tight"
+          className="text-4xl sm:text-5xl lg:text-6xl leading-tight"
           style={{ fontFamily: "'Newsreader', serif", fontWeight: 500 }}
         >
           {title}
         </h2>
-       <p className="text-lg lg:text-xl text-[#B8AC94] font-light leading-relaxed max-w-xl">{body}</p>
+        <p className="text-base lg:text-lg text-[#B8AC94] font-light leading-relaxed max-w-xl">{body}</p>
       </div>
     </div>
   );
@@ -703,7 +738,7 @@ function ServiceCard({ title, body, image, alt }: ServiceCardProps) {
   return (
     <div
       ref={cardRef}
-      className={`group relative isolate min-h-[440px] overflow-hidden rounded-2xl border border-white/15 bg-[#1D1912] shadow-[0_18px_55px_rgba(0,0,0,0.28)] transition-all duration-700 hover:-translate-y-1 hover:border-[#C9A66B]/60 hover:shadow-[0_24px_65px_rgba(0,0,0,0.42)] ${
+      className={`group relative isolate min-h-[400px] overflow-hidden rounded-2xl border border-white/15 bg-[#1D1912] shadow-[0_18px_55px_rgba(0,0,0,0.28)] transition-all duration-700 hover:-translate-y-1 hover:border-[#C9A66B]/60 hover:shadow-[0_24px_65px_rgba(0,0,0,0.42)] ${
         isVisible ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'
       }`}
     >
@@ -714,11 +749,11 @@ function ServiceCard({ title, body, image, alt }: ServiceCardProps) {
         loading="lazy"
       />
       <div className="absolute inset-0 -z-10 bg-gradient-to-t from-[#100e09] via-[#100e09]/75 to-[#100e09]/10" />
-      <div className="relative flex min-h-[440px] flex-col justify-end p-6 sm:p-7">
+      <div className="relative flex min-h-[400px] flex-col justify-end p-6 sm:p-7">
         <div className="mb-4 inline-flex w-fit items-center gap-2 rounded-full border border-[#E9D6AD]/35 bg-[#16130f]/45 px-3 py-1.5 text-[9px] font-medium uppercase tracking-[0.22em] text-[#F1DEB7] backdrop-blur-md">
           Atelier Service
         </div>
-        <h3 className="max-w-[16ch] text-3xl leading-tight text-[#F8F1E3]" style={{ fontFamily: "'Newsreader', serif", fontWeight: 500 }}>
+        <h3 className="max-w-[16ch] text-2xl lg:text-3xl leading-tight text-[#F8F1E3]" style={{ fontFamily: "'Newsreader', serif", fontWeight: 500 }}>
           {title}
         </h3>
         <p className="mt-3 max-w-md text-sm leading-relaxed text-[#E8DECA]/85">{body}</p>

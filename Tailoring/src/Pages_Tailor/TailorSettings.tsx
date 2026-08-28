@@ -48,11 +48,35 @@ export function TailorSettingsView() {
   const [profile, setProfile] = useState<any>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  const [activity, setActivity] = useState(ALERT_ACTIVITY);
+  const [weekTotal, setWeekTotal] = useState(ALERT_ACTIVITY.reduce((s, d) => s + d.count, 0));
+  const [counts, setCounts] = useState<Record<string, number>>({ fittings: 0, dueDates: 0, assignments: 0 });
 
   const toggle = (key) => setAlerts((current) => ({ ...current, [key]: !current[key] }));
-  useEffect(() => { const headers = { Authorization: `Bearer ${authToken()}` }; Promise.all([fetch(`${API_URL}/auth/me`, { headers }), fetch(`${API_URL}/auth/user-settings`, { headers })]).then(async ([me, preferences]) => { const user = (await me.json()).user; const settings = (await preferences.json()).settings; setProfile(user); if (settings) setAlerts((current) => ({ ...current, ...settings })); }).catch(() => {}); }, []);
+  useEffect(() => {
+    const headers = { Authorization: `Bearer ${authToken()}` };
+    Promise.all([fetch(`${API_URL}/auth/me`, { headers }), fetch(`${API_URL}/auth/user-settings`, { headers })])
+      .then(async ([me, preferences]) => {
+        const user = (await me.json()).user;
+        const settings = (await preferences.json()).settings;
+        setProfile(user);
+        if (settings) setAlerts((current) => ({ ...current, ...settings }));
+      })
+      .catch(() => {});
+    // Pull the real weekly alert totals + sparkline from the server.
+    fetch(`${API_URL}/tailor/alerts`, { headers })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.daily?.length) {
+          setActivity(data.daily);
+          setWeekTotal(data.weekTotal || 0);
+          setCounts(data.counts || {});
+        }
+      })
+      .catch(() => { /* keep demo fallback */ });
+  }, []);
   const save = async () => { setError(''); try { const response = await fetch(`${API_URL}/auth/user-settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` }, body: JSON.stringify({ settings: alerts }) }); const data = await response.json(); if (!response.ok) throw new Error(data.message || 'Unable to save preferences.'); setSaved(true); window.setTimeout(() => setSaved(false), 3000); } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Unable to save preferences.'); } };
-  const weekTotal = ALERT_ACTIVITY.reduce((s, d) => s + d.count, 0);
 
   return (
     <div className="w-full space-y-6">
@@ -121,7 +145,7 @@ export function TailorSettingsView() {
         {/* ---------------- alert activity sparkline ---------------- */}
         <div className="mt-5 h-[80px]">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={ALERT_ACTIVITY} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+            <AreaChart data={activity} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
               <defs>
                 <linearGradient id="alertFill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={TOKENS.brassLight} stopOpacity={0.4} />
@@ -143,7 +167,11 @@ export function TailorSettingsView() {
           ].map(([key, title, detail]) => (
             <div key={key} className="flex items-center justify-between gap-5 py-4">
               <div>
-                <p className="text-sm font-medium text-[#262420]">{title}</p>
+                <p className="text-sm font-medium text-[#262420]">{title}
+                  <span className="ml-2 inline-flex items-center rounded-[2px] px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: TOKENS.paperDim, color: TOKENS.muted, fontFamily: "'JetBrains Mono', monospace" }}>
+                    {counts[key] ?? 0}
+                  </span>
+                </p>
                 <p className="mt-1 text-xs text-[#6D6A60]">{detail}</p>
               </div>
               <button

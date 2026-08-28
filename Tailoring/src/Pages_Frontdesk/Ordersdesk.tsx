@@ -14,6 +14,7 @@ import {
   Pie,
 } from 'recharts';
 import frontDeskApi, { type Order } from '../../services/frontDeskApi';
+import { Scissors } from 'lucide-react';
 
 function Label({ children }: { children: React.ReactNode }) {
   return <span className="text-[10px] uppercase tracking-[0.2em] text-[#8C7E74]" style={{ fontFamily: "'Space Mono', monospace" }}>{children}</span>;
@@ -59,8 +60,10 @@ function ChartTooltip({ active, payload, label }: any) {
 
 const peso = (amount: number) => `₱${Number(amount || 0).toLocaleString()}`;
 
-function OrderDetails({ order, onClose }: { order: Order; onClose: () => void }) {
+function OrderDetails({ order, onClose, onHandoff }: { order: Order; onClose: () => void; onHandoff?: () => void }) {
   const [barsIn, setBarsIn] = useState(false);
+  const [handoffLoading, setHandoffLoading] = useState(false);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setBarsIn(true), 200);
@@ -177,9 +180,46 @@ function OrderDetails({ order, onClose }: { order: Order; onClose: () => void })
                 <Label>{label}</Label>
                 <div className="mt-1 text-sm text-[#2A211D]">{value}</div>
               </div>
-            ))}
+                                    ))}
           </div>
-        </div>
+
+          {/* Front Desk → Master Tailor handoff (single source of truth: the shared
+              job card). The backend validates completeness + the deposit rule and
+              notifies the assigned tailor; both roles then read the same record. */}
+          {order.production_status !== 'Released' && order.production_status !== 'Ready for Pickup' && (
+            <div className="mt-6 border-t border-[#E2D7C7] pt-5">
+              {handoffError && (
+                <div className="mb-3 rounded-lg border border-[#C86A58]/30 bg-[#FDF4F2] px-3 py-2.5 text-xs text-[#9A3B2A]">{handoffError}</div>
+              )}
+              <button
+                type="button"
+                disabled={handoffLoading}
+                onClick={async () => {
+                  setHandoffLoading(true);
+                  setHandoffError(null);
+                  try {
+                    await frontDeskApi.sendToProduction(order.order_id, order.assigned_tailor_id || undefined);
+                    onHandoff?.();
+                    onClose();
+                  } catch (err) {
+                    setHandoffError(
+                      err instanceof Error
+                        ? err.message
+                        : 'Unable to send this job card to production.'
+                    );
+                  } finally {
+                    setHandoffLoading(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2D7C7] bg-[#2A211D] px-4 py-2.5 text-[10px] font-semibold tracking-[0.1em] uppercase text-white hover:bg-[#3D312B] transition-colors disabled:opacity-60"
+              >
+                <Scissors className="w-3.5 h-3.5" />
+                {handoffLoading ? 'Sending…' : 'Send to Production'}
+              </button>
+                                                        <p className="mt-1.5 text-[11px] text-[#8C7E74]">Hand the job card to your Master Tailor. The system validates that the customer, measurements, garment, fabric, deadline, tailor, and deposit are all complete before moving the job into production.</p>
+                        </div>
+          )}
+      </div>
       </section>
     </div>
   );
@@ -315,7 +355,7 @@ export function FrontDeskOrdersView() {
         {!filtered.length && <p className="p-12 text-center text-sm text-[#766A62]">No order matches your search.</p>}
       </section>
 
-      {selected && <OrderDetails order={selected} onClose={() => setSelected(null)} />}
+            {selected && <OrderDetails order={selected} onClose={() => setSelected(null)} onHandoff={loadOrders} />}
     </div>
   );
 }

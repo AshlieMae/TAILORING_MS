@@ -1,6 +1,6 @@
 // Pages_Frontdesk/CustomersdeskExact.tsx
 import { useMemo, useState, useEffect, useCallback } from 'react';
-import { ChevronRight, Mail, MapPin, Phone, Ruler, Search, UserPlus, X, Loader2 } from 'lucide-react';
+import { ChevronRight, Mail, MapPin, Phone, Ruler, Search, UserPlus, X, Loader2, Pencil, Check } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
 import frontDeskApi, { type Customer } from '../../services/frontDeskApi';
 // Pages_Frontdesk/CustomersdeskExact.tsx
@@ -73,11 +73,12 @@ function OrderPhotoModal({
   );
 }
 
-function CustomerDetails({ customer, onClose }: { customer: Customer; onClose: () => void }) {
+function CustomerDetails({ customer, onClose, onUpdated }: { customer: Customer; onClose: () => void; onUpdated?: (c: Customer) => void }) {
   const [measurements, setMeasurements] = useState<MeasurementRow[]>([]);
   const [recentOrders, setRecentOrders] = useState<{ id: string; garment: string; stage: string; image?: string }[]>([]);
   const [barsIn, setBarsIn] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
   const [viewingOrder, setViewingOrder] = useState<{ id: string; garment: string; stage: string; image?: string } | null>(null);
 
   useEffect(() => {
@@ -136,7 +137,12 @@ function CustomerDetails({ customer, onClose }: { customer: Customer; onClose: (
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-[#766A62]"><X className="h-5 w-5" /></button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setEditing(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-[#A46B48]/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#A46B48] transition-colors hover:bg-[#A46B48]/10">
+              <Pencil className="h-3.5 w-3.5" /> Edit
+            </button>
+            <button onClick={onClose} className="text-[#766A62]"><X className="h-5 w-5" /></button>
+          </div>
         </header>
 
         <div className="grid gap-7 p-6 sm:grid-cols-[0.85fr_1.15fr]">
@@ -218,9 +224,105 @@ function CustomerDetails({ customer, onClose }: { customer: Customer; onClose: (
         </div>
       </section>
 
+      {editing && (
+        <EditCustomer
+          customer={customer}
+          onClose={() => setEditing(false)}
+          onSaved={(updated) => { setEditing(false); onUpdated?.(updated); }}
+        />
+      )}
       {viewingOrder && (
         <OrderPhotoModal order={viewingOrder} onClose={() => setViewingOrder(null)} />
       )}
+    </div>
+  );
+}
+
+function Input({ label, value, onChange, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+  return (
+    <label className="block text-xs font-medium text-[#5E5048]">
+      {label}
+      <input type={type} value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-lg border border-[#E2D7C7] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#A46B48]" />
+    </label>
+  );
+}
+
+function EditCustomer({ customer, onClose, onSaved }: { customer: Customer; onClose: () => void; onSaved: (c: Customer) => void }) {
+  const [form, setForm] = useState({
+    firstName: customer.first_name || '',
+    middleName: customer.middle_name || '',
+    lastName: customer.last_name || '',
+    suffix: customer.suffix || '',
+    contact: customer.contact_number || '',
+    email: customer.email || '',
+    address: customer.address || '',
+    dateOfBirth: customer.date_of_birth ? String(customer.date_of_birth).slice(0, 10) : '',
+    gender: customer.gender || '',
+    civilStatus: customer.civil_status || '',
+    occupation: customer.occupation || '',
+  });
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const update = (field: keyof typeof form, value: string) => setForm((c) => ({ ...c, [field]: value }));
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const res = await frontDeskApi.updateCustomer(customer.customer_id, {
+        firstName: form.firstName,
+        middleName: form.middleName,
+        lastName: form.lastName,
+        suffix: form.suffix,
+        contact: form.contact,
+        dateOfBirth: form.dateOfBirth || undefined,
+        gender: form.gender || undefined,
+        civilStatus: form.civilStatus || undefined,
+        occupation: form.occupation || undefined,
+        address: form.address,
+      });
+      const updated = res as unknown as { customer?: Customer } & Customer;
+      onSaved(updated.customer || updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to update customer.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="cd-fade fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <button onClick={onClose} aria-label="Close edit form" className="absolute inset-0 bg-[#1F1916]/45 backdrop-blur-sm" />
+      <form onSubmit={submit} className="cd-pop relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-[#E2D7C7] bg-[#FFFCF8] p-6 shadow-2xl">
+        <div className="flex items-center justify-between">
+          <div>
+            <MonoLabel>Edit customer</MonoLabel>
+            <h2 className="mt-1 text-3xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{customer.full_name}</h2>
+          </div>
+          <button type="button" onClick={onClose} className="text-[#766A62]"><X className="h-5 w-5" /></button>
+        </div>
+        {error && <p className="mt-4 rounded-lg border border-[#C86A58]/30 bg-[#FDF4F2] px-3 py-2 text-sm text-[#9A3B2A]">{error}</p>}
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <Input label="First name" value={form.firstName} onChange={(v) => update('firstName', v)} />
+          <Input label="Middle name" value={form.middleName} onChange={(v) => update('middleName', v)} />
+          <Input label="Last name" value={form.lastName} onChange={(v) => update('lastName', v)} />
+          <Input label="Suffix" value={form.suffix} onChange={(v) => update('suffix', v)} />
+          <Input label="Contact number" value={form.contact} onChange={(v) => update('contact', v)} />
+          <Input label="Email" type="email" value={form.email} onChange={(v) => update('email', v)} />
+          <Input label="Birth date" type="date" value={form.dateOfBirth} onChange={(v) => update('dateOfBirth', v)} />
+          <Input label="Gender" value={form.gender} onChange={(v) => update('gender', v)} />
+          <Input label="Civil status" value={form.civilStatus} onChange={(v) => update('civilStatus', v)} />
+          <Input label="Occupation" value={form.occupation} onChange={(v) => update('occupation', v)} />
+          <div className="sm:col-span-2"><Input label="Address" value={form.address} onChange={(v) => update('address', v)} /></div>
+        </div>
+        <div className="mt-6 flex gap-3">
+          <button disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[#2A211D] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white disabled:opacity-60">
+            <Check className="h-4 w-4" /> {saving ? 'Saving...' : 'Save changes'}
+          </button>
+          <button type="button" onClick={onClose} className="rounded-lg border border-[#E2D7C7] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048]">Cancel</button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -439,7 +541,16 @@ export function FrontDeskCustomersExactView() {
       {registerOpen && (
         <RegisterCustomerModal onClose={() => setRegisterOpen(false)} onRegister={registerCustomer} />
       )}
-      {selected && <CustomerDetails customer={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <CustomerDetails
+          customer={selected}
+          onClose={() => setSelected(null)}
+          onUpdated={(updated) => {
+            setCustomers((prev) => prev.map((c) => (c.customer_id === updated.customer_id ? updated : c)));
+            setSelected(updated);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { FrontDeskSettingsView } from '../Pages_Frontdesk/Settingsdesk';
 import frontDeskApi, { authToken, type Order, type Appointment, type Customer } from '../../services/frontDeskApi';
 import { RegisterCustomerModal, type NewCustomerForm } from '../pages/FrontDesk/FrontDeskModals';
 import { dedupeAppointments, stageBadgeStyle } from '../utils/appointmentDisplay';
+import NotificationBell from '../components/NotificationBell';
 import { FITTING_JOURNEY, determineStageForJob, findActiveAppointmentForJob } from '../utils/appointmentWorkflow';
 import type { ReactNode } from 'react';
 import {
@@ -20,7 +21,6 @@ import {
   CalendarClock,
   Wallet,
   Settings,
-  Bell,
   Search,
   Menu,
   X,
@@ -135,6 +135,7 @@ interface CreateOrderFormData {
 
 const GARMENT_TYPES = ['Barong Tagalog', 'Two-piece Suit', "Women's Coat", 'Evening Gown', 'School Uniform Set', 'Custom garment'];
 const UNIFORM_CATEGORIES = ['Regular University Uniform', 'Departmental Uniform', 'PE Uniform', 'Sports / Intramural Jersey', 'Custom/Bespoke Apparel', 'Not Applicable'];
+const STYLE_DESIGNS = ['Classic', 'Modern', 'Embroidered', 'Minimalist', 'Traditional', 'Ruffled', 'Fitted', 'Loose fit'];
 
 /** Hand-drawn style SVG illustration for each garment type — shown live in the order form. */
 function GarmentIllustration({ type, className }: { type: string; className?: string }) {
@@ -241,6 +242,7 @@ function CreateOrderModal({
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [fabricOptions, setFabricOptions] = useState<{ id: number; fabricName: string; tone: string; unit: string }[]>([]);
   const [priceCalculation, setPriceCalculation] = useState<{
     laborCost: number;
     fabricCost: number;
@@ -303,6 +305,14 @@ function CreateOrderModal({
       calculatePrice();
     }
   }, [form.garmentType, form.quantity, form.fabricQuantity]);
+
+  // Load the fabric catalogue from the shared inventory so the Front Desk picks
+  // fabric that actually exists on the shelf.
+  useEffect(() => {
+    frontDeskApi.getFabricCatalog()
+      .then((data) => setFabricOptions(data.fabrics || []))
+      .catch(() => setFabricOptions([]));
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -437,21 +447,27 @@ function CreateOrderModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
               <div>
                 <label className="block mb-1.5"><MonoLabel>Style/Design</MonoLabel></label>
-                <input
+                <select
                   value={form.styleDesign}
                   onChange={(e) => setForm(f => ({ ...f, styleDesign: e.target.value }))}
-                  placeholder="e.g. Classic, Modern, Embroidered"
-                  className="w-full border-b border-[#E2D7C7] bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-                />
+                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+                >
+                  <option value="">Select a style</option>
+                  {STYLE_DESIGNS.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
               </div>
               <div>
                 <label className="block mb-1.5"><MonoLabel>Fabric</MonoLabel></label>
-                <input
+                <select
                   value={form.fabric}
                   onChange={(e) => setForm(f => ({ ...f, fabric: e.target.value }))}
-                  placeholder="e.g. Italian Wool, Cotton, Silk"
-                  className="w-full border-b border-[#E2D7C7] bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-                />
+                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+                >
+                  <option value="">Select a fabric</option>
+                  {fabricOptions.map((f) => (
+                    <option key={f.id} value={f.fabricName}>{f.fabricName}{f.tone ? ` — ${f.tone}` : ''} ({f.unit})</option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -1094,9 +1110,8 @@ function DashboardView() {
   // This matches the desk rule: hide a job card when it is Fully Paid / balance 0.
   const payableOrders = useMemo(() => orders.filter((o) => Number(o.remaining_balance) > 0), [orders]);
 
-  const loadDashboardData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const loadDashboardData = useCallback(async (silent = false) => {
+    if (!silent) { setLoading(true); setError(null); }
     try {
       const [statsData, activityData, pickupData, fittingsData, customersData, ordersData, appointmentsData] = await Promise.all([
         frontDeskApi.getDashboardStats(),
@@ -1115,14 +1130,18 @@ function DashboardView() {
       setOrders(ordersData);
       setAllAppointments(appointmentsData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
+      if (!silent) setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     loadDashboardData();
+    // Reuse the existing API refetch so the Front Desk sees the tailor's
+    // production/pickup updates automatically (no separate status record).
+    const timer = setInterval(() => loadDashboardData(true), 15000);
+    return () => clearInterval(timer);
   }, [loadDashboardData]);
 
   const handleRegisterCustomer = async (form: NewCustomerForm) => {
@@ -1623,10 +1642,7 @@ export default function FrontDeskDashboard({ initialView = 'dashboard' }: { init
               <Printer className="w-4 h-4" strokeWidth={1.5} />
               <MonoLabel className="text-[#766A62]">Print</MonoLabel>
             </button>
-            <button className="relative text-[#766A62] hover:text-[#2A211D] transition-colors p-1" aria-label="Notifications">
-              <Bell className="w-5 h-5" strokeWidth={1.5} />
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#9E5B4B] ring-2 ring-[#FAF7F2]" />
-            </button>
+            <NotificationBell endpoint="/frontdesk/notifications" />
             <div className="h-5 w-px bg-[#E8DFD3] hidden sm:block" />
             <LiveDateTime />
           </div>

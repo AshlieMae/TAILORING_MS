@@ -4,6 +4,7 @@ import { TailorJobCardsView } from '../Pages_Tailor/TailorJobCards';
 import { TailorMeasurementsView } from '../Pages_Tailor/TailorMeasurements';
 import { TailorInventoryView } from '../Pages_Tailor/TailorInventory';
 import { TailorSettingsView } from '../Pages_Tailor/TailorSettings';
+import NotificationBell from '../components/NotificationBell';
 import type { ReactNode } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer } from 'recharts';
 import {
@@ -12,7 +13,6 @@ import {
   Ruler,
   Boxes,
   Settings,
-  Bell,
   Search,
   ChevronRight,
   Menu,
@@ -83,6 +83,10 @@ const FONT_IMPORT = `
 @keyframes shimmerOnce {
   0% { background-position: -120% 0; }
   60%, 100% { background-position: 220% 0; }
+}
+@keyframes jcPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
 }
 .dash-in { opacity: 0; animation: riseIn 0.55s cubic-bezier(0.22,1,0.36,1) forwards; }
 .brass-shimmer {
@@ -200,8 +204,8 @@ function currentUser() {
   try { return stored ? JSON.parse(stored) : null; } catch { return null; }
 }
 
-const STAGES = ['Measuring', 'Pattern Cutting', 'Initial Assembly', 'First Fitting', 'Final Alterations', 'Completed', 'Ready for Pickup'];
-const STAGE_SHORT = ['Measure', 'Cut', 'Assembly', '1st Fit', 'Alter', 'Done', 'Pickup'];
+const STAGES = ['Measuring', 'Pattern Cutting', 'Initial Assembly', 'First Fitting', 'Final Alterations', 'Quality Review', 'Completed', 'Ready for Pickup'];
+const STAGE_SHORT = ['Measure', 'Cut', 'Assembly', '1st Fit', 'Alter', 'QC', 'Done', 'Pickup'];
 
 interface JobCard {
   id: string;
@@ -239,6 +243,25 @@ function ProductionFlowChart({ cards }: { cards: JobCard[] }) {
   const maxCount = Math.max(0, ...data.map((d) => d.count));
   const hasData = maxCount > 0;
 
+  // Live pipeline reading derived from the SAME assigned job cards the tailor
+  // sees: overall progress % across completed stages, and the single busiest
+  // stage right now. No separate record — it's all from the shared job cards.
+  const { totalStages, reachedStages } = useMemo(() => {
+    if (!cards.length) return { totalStages: 0, reachedStages: 0 };
+    const reached = new Array(STAGES.length).fill(false);
+    cards.forEach((c) => {
+      for (let i = 0; i <= c.stageIndex; i++) reached[i] = true;
+    });
+    return {
+      totalStages: STAGES.length,
+      reachedStages: reached.filter(Boolean).length,
+    };
+  }, [cards]);
+  const overallPct = totalStages ? Math.round((reachedStages / totalStages) * 100) : 0;
+  const busiestStage = data.reduce((a, b) => (b.count > a.count ? b : a), data[0]);
+  const currentStageName = busiestStage?.count ? busiestStage.fullStage : null;
+  const inProgressCount = cards.filter((c) => c.stageIndex < STAGES.length - 1).length;
+
   function CustomTooltip({ active, payload }: any) {
     if (!active || !payload?.length) return null;
     const d = payload[0].payload;
@@ -269,11 +292,22 @@ function ProductionFlowChart({ cards }: { cards: JobCard[] }) {
         <div>
           <div className="flex items-center gap-2.5 mb-2">
             <StitchLine className="w-8" />
-            <MonoLabel>Cutting table overview</MonoLabel>
+            <MonoLabel>Workshop pipeline</MonoLabel>
           </div>
           <h2 className="text-xl text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>
             Production flow
           </h2>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--ink-soft)]">
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--brass-deep)' }}>{overallPct}% of stages</span>
+            {currentStageName ? (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--pin-soft)', animation: 'jcPulse 1.8s ease-in-out infinite' }} />
+                Garment{inProgressCount === 1 ? ' is currently at' : 's currently at'} {currentStageName}
+              </span>
+            ) : (
+              <span>No garments in the pipeline yet.</span>
+            )}
+          </div>
         </div>
         {hasData && (
           <div className="flex items-center gap-4 text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
@@ -336,9 +370,23 @@ function UpdateStageModal({
 }: {
   card: JobCard;
   onClose: () => void;
-  onUpdate: (id: string, stageIndex: number) => void;
+  onUpdate: (id: string, stageIndex: number) => Promise<void> | void;
 }) {
   const [stageIndex, setStageIndex] = useState(card.stageIndex);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSave = async () => {
+    setError('');
+    setSaving(true);
+    try {
+      await onUpdate(card.id, stageIndex);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to advance stage. Please verify the required steps.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -358,7 +406,7 @@ function UpdateStageModal({
           <h2 className="text-3xl leading-tight mb-2 text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>
             Update production stage
           </h2>
-          <p className="text-[14px] text-[var(--ink-soft)] font-light mb-8 leading-relaxed">
+                                        <p className="text-[14px] text-[var(--ink-soft)] font-light mb-8 leading-relaxed">
             {card.garment} for {card.customer}
           </p>
 
@@ -368,6 +416,7 @@ function UpdateStageModal({
                 key={s}
                 type="button"
                 onClick={() => setStageIndex(i)}
+                disabled={saving}
                 className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-[3px] border text-left transition-all duration-150 ${
                   i === stageIndex
                     ? 'bg-[var(--graphite)] border-[var(--graphite)] text-[#EDEAE2] shadow-[0_6px_16px_-8px_rgba(33,31,28,0.5)]'
@@ -386,20 +435,28 @@ function UpdateStageModal({
             ))}
           </div>
 
+          {error && (
+            <div role="alert" className="mt-4 border border-[var(--pin-soft)]/30 bg-[var(--pin-soft)]/10 px-3 py-2 text-sm text-[#96291E] rounded-[2px]">
+              {error}
+            </div>
+          )}
+
           <div className="flex items-center gap-3 pt-8">
             <button
               type="button"
               onClick={onClose}
+              disabled={saving}
               className="flex-1 px-4 py-3 rounded-[3px] border border-[var(--line)] text-[var(--ink-soft)] text-[11px] font-medium tracking-[0.14em] uppercase hover:border-[var(--muted-2)] hover:bg-[var(--paper-dim)] transition-colors"
             >
               Cancel
             </button>
             <button
               type="button"
-              onClick={() => onUpdate(card.id, stageIndex)}
-              className="flex-1 px-4 py-3 rounded-[3px] bg-[var(--graphite)] text-[#EDEAE2] text-[11px] font-medium tracking-[0.14em] uppercase hover:bg-[var(--graphite-2)] transition-colors shadow-[0_10px_24px_-12px_rgba(33,31,28,0.55)]"
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 px-4 py-3 rounded-[3px] bg-[var(--graphite)] text-[#EDEAE2] text-[11px] font-medium tracking-[0.14em] uppercase hover:bg-[var(--graphite-2)] transition-colors shadow-[0_10px_24px_-12px_rgba(33,31,28,0.55)] disabled:opacity-60 disabled:cursor-wait"
             >
-              Save stage
+              {saving ? 'Saving…' : 'Save stage'}
             </button>
           </div>
         </div>
@@ -418,19 +475,48 @@ function RecordFabricModal({
 }: {
   card: JobCard;
   onClose: () => void;
-  onRecord: (id: string, meters: string) => void;
+  onRecord: (id: string, payload: { quantityUsed: string; unit?: string; fabricId?: number | string; fabricName?: string }) => void;
 }) {
   const [meters, setMeters] = useState('');
+  const [unit, setUnit] = useState('meters');
+  const [fabricId, setFabricId] = useState('');
+  const [stock, setStock] = useState<null | number>(null);
   const [error, setError] = useState('');
+
+  // Connect this modal to the shared inventory so the right bolt + unit is
+  // used and the available stock is shown before deducting.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_URL}/tailor/inventory`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = await response.json();
+        if (cancelled) return;
+        const list = data.inventory || [];
+        const match = list.find((f: any) => String(f.fabricName).toLowerCase() === String(card.fabric || '').toLowerCase());
+        const chosen = match || list[0];
+        if (chosen) {
+          setFabricId(String(chosen.id));
+          setUnit(chosen.unit || 'meters');
+          setStock(Number(chosen.stockQuantity));
+        }
+      })
+      .catch(() => { /* leave defaults */ });
+    return () => { cancelled = true; };
+  }, [card.fabric]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const num = Number(meters);
     if (!meters.trim() || Number.isNaN(num) || num <= 0) {
-      setError('Enter a valid fabric length in meters.');
+      setError('Enter a valid fabric length.');
       return;
     }
-    onRecord(card.id, `${num} m logged`);
+    if (stock !== null && stock <= 0) {
+      setError('This fabric has no stock on hand. Add stock in Fabric Inventory first, then record usage.');
+      return;
+    }
+    onRecord(card.id, { quantityUsed: String(num), unit, fabricId: fabricId || undefined, fabricName: card.fabric || 'Fabric' });
   }
 
   return (
@@ -454,7 +540,12 @@ function RecordFabricModal({
           <p className="text-[14px] text-[var(--ink-soft)] font-light mb-8 leading-relaxed">
             {card.garment} — {card.fabric}
           </p>
-
+          {stock !== null && (
+            <div className={`mb-4 flex items-center gap-2 border px-3 py-2 rounded-[2px] text-[12px] ${stock <= 0 ? 'border-[var(--pin-soft)]/40 bg-[var(--pin-soft)]/10 text-[#96291E]' : 'border-[#8FAE85]/60 bg-[#E4E9DB] text-[#3F6633]'}`}>
+              Available: <span className="font-semibold" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{stock} {unit}</span>
+              {stock <= 0 ? ' — add stock first in Fabric Inventory.' : ' on hand for this bolt.'}
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
               <div role="alert" className="border border-[var(--pin-soft)]/30 bg-[var(--pin-soft)]/10 px-3 py-2 text-sm text-[#96291E] rounded-[2px]">
@@ -462,7 +553,7 @@ function RecordFabricModal({
               </div>
             )}
             <div>
-              <label htmlFor="fabricMeters" className="block mb-2"><MonoLabel>Fabric used (meters)</MonoLabel></label>
+              <label htmlFor="fabricMeters" className="block mb-2"><MonoLabel>Fabric used ({unit})</MonoLabel></label>
               <div className="border-b border-[var(--line)] focus-within:border-[var(--pin-soft)] transition-colors">
                 <input
                   id="fabricMeters"
@@ -487,7 +578,8 @@ function RecordFabricModal({
               </button>
               <button
                 type="submit"
-                className="flex-1 px-4 py-3 rounded-[3px] bg-[var(--graphite)] text-[#EDEAE2] text-[11px] font-medium tracking-[0.14em] uppercase hover:bg-[var(--graphite-2)] transition-colors shadow-[0_10px_24px_-12px_rgba(33,31,28,0.55)]"
+                disabled={stock !== null && stock <= 0}
+                className="flex-1 px-4 py-3 rounded-[3px] bg-[var(--graphite)] text-[#EDEAE2] text-[11px] font-medium tracking-[0.14em] uppercase hover:bg-[var(--graphite-2)] transition-colors shadow-[0_10px_24px_-12px_rgba(33,31,28,0.55)] disabled:opacity-50"
               >
                 Record usage
               </button>
@@ -521,24 +613,55 @@ function DashboardView() {
   const [banner, setBanner] = useState('');
   const [loadError, setLoadError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState<any>(null);
+  const [fittingsToday, setFittingsToday] = useState(FITTINGS_TODAY);
+  const [usageSummary, setUsageSummary] = useState<any[]>([]);
+  const [monthlyProductivity, setMonthlyProductivity] = useState<any[]>([]);
 
   useEffect(() => {
-    async function loadDashboard() {
+    let cancelled = false;
+    async function loadCards() {
       try {
         const response = await fetch(`${API_URL}/auth/tailor/dashboard`, {
           headers: { Authorization: `Bearer ${authToken()}` },
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'Unable to load assigned job cards.');
+        if (cancelled) return;
         setCards(data.orders || []);
-        setExpanded(data.orders?.[0]?.id ?? null);
+        setExpanded((cur) => cur ?? data.orders?.[0]?.id ?? null);
       } catch (error) {
-        setLoadError(error instanceof Error ? error.message : 'Unable to load assigned job cards.');
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Unable to load assigned job cards.');
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     }
-    loadDashboard();
+    async function loadStats() {
+      try {
+        const response = await fetch(`${API_URL}/tailor/dashboard`, { headers: { Authorization: `Bearer ${authToken()}` } });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'stats unavailable');
+        if (cancelled) return;
+        setStats(data.stats || data);
+        setUsageSummary(data.fabricSummary || []);
+        setMonthlyProductivity(data.monthlyProductivity || []);
+        const upcoming = data.upcomingFittings || [];
+        if (upcoming.length) {
+          setFittingsToday(upcoming.map((f: any) => ({
+            time: new Date(f.appointment_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+            customer: f.customer_name || 'Customer',
+            garment: (f.job_card_number || 'Job card'),
+            jobCardId: f.job_card_number || '',
+          })));
+        }
+      } catch { /* non-fatal */ }
+    }
+    loadCards();
+    loadStats();
+    // Reuse the existing API refetch mechanism so the tailor sees updated
+    // production/assignment state without manual reloads.
+    const timer = setInterval(() => { loadCards(); loadStats(); }, 15000);
+    return () => { cancelled = true; clearInterval(timer); };
   }, []);
 
   function announce(message: string) {
@@ -546,33 +669,32 @@ function DashboardView() {
     setTimeout(() => setBanner(''), 4000);
   }
 
-  async function handleUpdateStage(id: string, stageIndex: number) {
-    try {
-      const response = await fetch(`${API_URL}/auth/tailor/orders/${encodeURIComponent(id)}/stage`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
-        body: JSON.stringify({ stage: STAGES[stageIndex] }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Unable to update the production stage.');
-      setCards((prev) => prev.map((c) => (c.id === id ? { ...c, stageIndex } : c)));
-      setStageModalCard(null);
-      announce(`${id} moved to "${STAGES[stageIndex]}".`);
-    } catch (error) {
-      announce(error instanceof Error ? error.message : 'Unable to update the production stage.');
-    }
+        async function handleUpdateStage(id: string, stageIndex: number) {
+    const response = await fetch(`${API_URL}/tailor/job-cards/${encodeURIComponent(id)}/stage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify({ stage: STAGES[stageIndex], notes: '' }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Unable to update the production stage.');
+    setCards((prev) => prev.map((c) => (c.id === id ? { ...c, stageIndex, stage: STAGES[stageIndex] } : c)));
+    setStageModalCard(null);
+    announce(`${id} moved to "${STAGES[stageIndex]}".`);
   }
 
-  async function handleRecordFabric(id: string, fabricUsed: string) {
+  async function handleRecordFabric(id: string, payload: { quantityUsed: string; unit?: string; fabricId?: number | string; fabricName?: string }) {
     try {
-      const response = await fetch(`${API_URL}/auth/tailor/orders/${encodeURIComponent(id)}/fabric`, {
-        method: 'PATCH',
+      const body: any = { quantityUsed: payload.quantityUsed, unit: payload.unit || 'meters', notes: '' };
+      if (payload.fabricId) body.fabricId = Number(payload.fabricId);
+      if (payload.fabricName) body.fabricName = payload.fabricName;
+      const response = await fetch(`${API_URL}/tailor/job-cards/${encodeURIComponent(id)}/fabric-usage`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
-        body: JSON.stringify({ fabricUsed }),
+        body: JSON.stringify(body),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Unable to record fabric usage.');
-      setCards((prev) => prev.map((c) => (c.id === id ? { ...c, fabricUsed } : c)));
+      setCards((prev) => prev.map((c) => (c.id === id ? { ...c, fabricUsed: `${data.quantityUsed} ${data.unit} ${data.fabricName || ''}`.trim() } : c)));
       setFabricModalCard(null);
       announce(`Fabric usage recorded for ${id}.`);
     } catch (error) {
@@ -612,11 +734,65 @@ function DashboardView() {
 
       {/* ---------------- STATS ---------------- */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard delay={0.04} label="Assigned job cards" value={`${cards.length}`} icon={<Shirt className="w-4 h-4" strokeWidth={1.6} />} />
-        <StatCard delay={0.08} label="In production" value={`${inProgress}`} icon={<Scissors className="w-4 h-4" strokeWidth={1.6} />} />
-        <StatCard delay={0.12} label="Fittings today" value={`${FITTINGS_TODAY.length}`} icon={<Clock className="w-4 h-4" strokeWidth={1.6} />} />
-        <StatCard delay={0.16} label="Due within 2 days" value={`${dueSoon}`} icon={<PackageCheck className="w-4 h-4" strokeWidth={1.6} />} tone="warn" />
+        <StatCard delay={0.04} label="Assigned job cards" value={`${stats?.assignedJobs ?? cards.length}`} icon={<Shirt className="w-4 h-4" strokeWidth={1.6} />} />
+        <StatCard delay={0.08} label="In production" value={`${stats?.activeJobs ?? inProgress}`} icon={<Scissors className="w-4 h-4" strokeWidth={1.6} />} />
+        <StatCard delay={0.12} label="Fittings today" value={`${fittingsToday.length}`} icon={<Clock className="w-4 h-4" strokeWidth={1.6} />} />
+        <StatCard delay={0.16} label="Due today / late" value={`${stats ? `${stats.dueToday}/${stats.lateOrders}` : dueSoon}`} icon={<PackageCheck className="w-4 h-4" strokeWidth={1.6} />} tone="warn" />
       </div>
+
+      {stats && (
+        <div className="dash-in flex flex-wrap items-center gap-3 text-[11px] text-[#6D6A60]">
+          <span className="px-2.5 py-1 rounded-[2px] border border-[#8FAE85]/60 bg-[#E4E9DB] text-[#3F6633]">Completed garments: {stats.completedJobs}</span>
+          <span className="px-2.5 py-1 rounded-[2px] border border-[#C9A227]/50 bg-[#F7E9D8] text-[#8A5A12]">Ready for pickup: {stats.readyForPickup}</span>
+          <span className="px-2.5 py-1 rounded-[2px] border border-[#DCD8C7] bg-white text-[#6D6A60]">Avg completion: {stats.averageCompletionDays || 0} days</span>
+          <span className="px-2.5 py-1 rounded-[2px] border border-[#DCD8C7] bg-white text-[#6D6A60]">Stage updates logged: {stats.totalStageUpdates}</span>
+        </div>
+      )}
+
+      {/* ---------------- PERFORMANCE: FABRIC USAGE + MONTHLY PRODUCTIVITY ---------------- */}
+      {(usageSummary.length > 0 || monthlyProductivity.length > 0) && (
+        <div className="dash-in grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {usageSummary.length > 0 && (
+            <section className="border p-5 rounded-[3px]" style={{ background: 'var(--paper)', borderColor: 'var(--line)', boxShadow: 'var(--shadow-1)' }}>
+              <MonoLabel>Fabric usage summary</MonoLabel>
+              <h2 className="mt-1 text-lg font-semibold" style={{ fontFamily: "'Fraunces', serif", color: 'var(--ink)' }}>Cloth off the shelf</h2>
+              <div className="mt-4 space-y-2.5">
+                {usageSummary.map((f) => {
+                  const total = Math.max(1, f.stock + f.used);
+                  return (
+                    <div key={f.name}>
+                      <div className="flex items-center justify-between text-[12px]">
+                        <span className="text-[#262420] font-medium">{f.name}</span>
+                        <span className="text-[#8A846F]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{f.used} used · {f.stock} {f.unit} left</span>
+                      </div>
+                      <div className="mt-1 h-1.5 w-full bg-[#E8E3D2] overflow-hidden">
+                        <div className="h-full" style={{ width: `${Math.min(100, (f.used / total) * 100)}%`, background: 'linear-gradient(90deg, #B4842A, #E4C25E)' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+          {monthlyProductivity.length > 0 && (
+            <section className="border p-5 rounded-[3px]" style={{ background: 'var(--paper)', borderColor: 'var(--line)', boxShadow: 'var(--shadow-1)' }}>
+              <MonoLabel>Monthly productivity</MonoLabel>
+              <h2 className="mt-1 mb-2 text-lg font-semibold" style={{ fontFamily: "'Fraunces', serif", color: 'var(--ink)' }}>Garments completed</h2>
+              <div className="h-[150px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={monthlyProductivity} margin={{ top: 6, right: 8, left: -22, bottom: 0 }} barCategoryGap="35%">
+                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#8A846F', fontFamily: "'JetBrains Mono', monospace" }} axisLine={{ stroke: '#DBD6C2' }} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: '#8A846F' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Bar dataKey="completed" name="Completed" radius={[3, 3, 0, 0]} maxBarSize={38}>
+                      {monthlyProductivity.map((m) => <Cell key={m.month} fill="#C9A227" />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </section>
+          )}
+        </div>
+      )}
 
       {/* ---------------- PRODUCTION FLOW CHART ---------------- */}
       <ProductionFlowChart cards={cards} />
@@ -678,6 +854,7 @@ function DashboardView() {
                   <Notch className="-top-px -left-px" />
                   <Notch className="-top-px -right-px rotate-90" />
                   <button
+                    type="button"
                     onClick={() => setExpanded(isOpen ? null : card.id)}
                     className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left hover:bg-[var(--paper-dim)]/80 transition-colors"
                   >
@@ -750,7 +927,7 @@ function DashboardView() {
           <MonoLabel>Today's calendar</MonoLabel>
           <h2 className="text-xl mt-1 mb-5 text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>Fittings &amp; alterations</h2>
           <div className="space-y-4">
-            {FITTINGS_TODAY.map((f) => (
+            {fittingsToday.map((f) => (
               <div key={`${f.time}-${f.customer}`} className="flex items-center gap-3">
                 <div className="flex flex-col items-center flex-shrink-0 w-14">
                   <Clock className="w-3 h-3 text-[var(--brass)] mb-0.5" strokeWidth={1.8} />
@@ -983,10 +1160,7 @@ export default function MasterTailorDashboard({ initialView = 'dashboard' }: { i
                 /
               </kbd>
             </div>
-            <button className="relative text-[var(--ink-soft)] hover:text-[var(--ink)] transition-colors" aria-label="Notifications">
-              <Bell className="w-5 h-5" strokeWidth={1.5} />
-              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[var(--pin-soft)] ring-2 ring-[var(--paper-dim)]" />
-            </button>
+            <NotificationBell endpoint="/tailor/notifications" />
             <div className="h-6 w-px bg-[var(--line)] hidden sm:block" />
             <LiveDateTime />
           </div>
