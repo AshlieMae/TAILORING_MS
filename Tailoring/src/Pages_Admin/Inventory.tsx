@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Boxes, PackagePlus } from 'lucide-react';
 import {
   COLORS, FONT_IMPORT, PageHeader, StatCard, SearchField, FilterPill, Card, TableHeadRow, EmptyState,
@@ -19,8 +19,24 @@ export function AdminInventoryView() {
   const [query, setQuery] = useState('');
   const [lowOnly, setLowOnly] = useState(false);
   const [selected, setSelected] = useState<Fabric | null>(null);
-  const fabrics = useMemo(() => FABRICS.filter((fabric) => `${fabric.name} ${fabric.color} ${fabric.category} ${fabric.supplier}`.toLowerCase().includes(query.toLowerCase()) && (!lowOnly || fabric.stock <= fabric.reorderAt)), [query, lowOnly]);
-  const lowStock = FABRICS.filter((fabric) => fabric.stock <= fabric.reorderAt);
+  const [rows, setRows] = useState<Fabric[]>(FABRICS);
+  const [loadError, setLoadError] = useState('');
+  useEffect(() => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const authToken = () => localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '';
+    fetch(`${API_URL}/admin/inventory`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.message || 'Unable to load inventory.'); return d; })
+      .then((d) => {
+        const mapped: Fabric[] = (d.fabrics || []).map((f: any) => ({
+          id: f.id, name: f.name, color: f.color, category: f.category, supplier: f.supplier,
+          stock: f.stock, reorderAt: f.reorderAt, unitCost: f.unitCost, lastUpdated: f.lastUpdated, usage: f.usage || [],
+        }));
+        setRows(mapped);
+      })
+      .catch((e) => setLoadError(e.message));
+  }, []);
+  const fabrics = useMemo(() => rows.filter((fabric) => `${fabric.name} ${fabric.color} ${fabric.category} ${fabric.supplier}`.toLowerCase().includes(query.toLowerCase()) && (!lowOnly || fabric.stock <= fabric.reorderAt)), [query, lowOnly, rows]);
+  const lowStock = rows.filter((fabric) => fabric.stock <= fabric.reorderAt);
 
   return (
     <div className="space-y-7" style={{ color: COLORS.ink }}>
@@ -34,9 +50,10 @@ export function AdminInventoryView() {
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard delay={0.05} icon={<Boxes />} label="Fabric types" value={FABRICS.length} tone="neutral" />
+        <StatCard delay={0.05} icon={<Boxes />} label="Fabric types" value={rows.length} tone="neutral" />
         <StatCard delay={0.09} icon={<AlertTriangle />} label="Low-stock alerts" value={lowStock.length} tone="danger" />
-        <StatCard delay={0.13} icon={<Boxes />} label="Total stock on hand" value={`${FABRICS.reduce((sum, fabric) => sum + fabric.stock, 0)} m`} tone="brass" />
+        <StatCard delay={0.13} icon={<Boxes />} label="Total stock on hand" value={`${rows.reduce((sum, fabric) => sum + fabric.stock, 0)} m`} tone="brass" />
+        {loadError && <p className="text-sm sm:col-span-3" style={{ color: COLORS.danger }}>{loadError}</p>}
       </div>
 
       {lowStock.length > 0 && (

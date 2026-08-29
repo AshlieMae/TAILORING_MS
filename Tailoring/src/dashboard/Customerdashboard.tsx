@@ -78,6 +78,7 @@ function StatusPill({ status }) {
     Completed: { bg: 'rgba(75,120,86,0.12)', fg: 'var(--success)' },
     'In progress': { bg: 'var(--brass-wash)', fg: 'var(--brass)' },
     'Ready for pickup': { bg: 'rgba(160,82,45,0.10)', fg: 'var(--rust)' },
+    Released: { bg: 'rgba(75,120,86,0.12)', fg: 'var(--success)' },
   };
   const s = map[status] || { bg: 'var(--brass-wash)', fg: 'var(--brass)' };
   return (
@@ -254,19 +255,74 @@ function PageHeader({ eyebrow, title, sub, icon: Icon }) {
 /* ============================================================
    DASHBOARD VIEW
 ============================================================= */
-function DashboardView({ onBrowseGarments, catalog }) {
-  const [selected, setSelected] = useState(ORDERS[0].id);
-  const activeOrders = ORDERS.filter((o) => o.status === 'In progress');
-  const order = ORDERS.find((o) => o.id === selected) ?? ORDERS[0];
-  const radarData = MEASUREMENTS.map((m) => ({ subject: m.label, value: Math.round((m.value / m.max) * 100), cm: m.value }));
-  const lifetime = PAYMENTS.reduce((sum, p) => sum + p.amount, 0);
+function DashboardView({ onBrowseGarments, catalog, payments = [], onViewPayments, customerName = '', orders = [], measurements = [], appointments = [] }) {
+  const realOrders = orders || [];
+  const [selected, setSelected] = useState(null);
+  const activeOrders = realOrders.filter((o) => ((o.pickup_status || o.status || '') !== 'Released'));
+  const order = realOrders.find((o) => o.id === selected) ?? activeOrders[0] ?? realOrders[0] ?? null;
+  const lifetime = (payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+  // Real notifications for "Stay ahead" — reads the shared notifications table.
+  const [notifs, setNotifs] = useState([]);
+  useEffect(() => {
+    fetch(`${API_URL}/auth/customer/notifications`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.message || 'Unable to load notifications.'); return d; })
+      .then((d) => setNotifs((d.notifications || []).slice(0, 4)))
+      .catch(() => {});
+  }, []);
+
+  // Spotlight order helpers (works with both raw server rows and mapped rows)
+  const stageName = order ? (order.stage || '') : '';
+  const CANON_STAGES = ['Measuring', 'Pattern Cutting', 'Initial Assembly', 'First Fitting', 'Final Alterations', 'Quality Review', 'Completed', 'Ready for Pickup'];
+  const stepIdx = (() => {
+    if (typeof order?.stageIndex === 'number' && order.stageIndex >= 0) return Math.min(order.stageIndex, STAGES.length - 1);
+    const i = CANON_STAGES.indexOf(stageName);
+    if (i < 0) return 0;
+    return [0, 1, 2, 3, 4, 5, 6, 6][i];
+  })();
+  const stageLabel = stageName || STAGES[Math.min(stepIdx, STAGES.length - 1)] || 'Measuring';
+  const swatch = (() => {
+    const s = String(order?.fabric || order?.garment || 'atelier');
+    const h = [...s].reduce((a, c) => a + c.charCodeAt(0), 0);
+    return [`hsl(${h % 360} 34% 40%)`, `hsl(${(h * 7 + 40) % 360} 46% 64%)`];
+  })();
+  const swatchA = order?.swatchA || swatch[0];
+  const swatchB = order?.swatchB || swatch[1];
+  const readyLabel = order?.due ? (/^[A-Za-z]{3}/.test(String(order.due)) ? order.due : (Number.isNaN(new Date(order.due).getTime()) ? 'Not scheduled' : new Date(order.due).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }))) : 'Not scheduled';
+  const orderBalance = order ? Number(order.balance) || 0 : 0;
+  const orderTotal = order ? Number(order.total ?? ((Number(order.paid) || 0) + orderBalance)) || 0 : 0;
+
+  // Real measurements radar (from customer_measurements via the server)
+  const realMeasurements = measurements || [];
+  const radarData = realMeasurements.map((m) => ({ subject: m.label, value: Math.max(5, Math.min(100, Math.round(((Number(m.value) || 0) / 120) * 100))), cm: Math.round((Number(m.value) || 0) * 10) / 10 }));
+  const verifiedAt = realMeasurements.map((m) => m.updated_at).filter(Boolean).sort().pop();
+  const verifiedLabel = verifiedAt && !Number.isNaN(new Date(verifiedAt).getTime()) ? new Date(verifiedAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase() : null;
+
+  // Real spend trend computed from the customer's payments (last 6 months)
+  const spendNow = new Date();
+  const spendTrend = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(spendNow.getFullYear(), spendNow.getMonth() - i, 1);
+    spendTrend.push({ month: d.toLocaleString('en-US', { month: 'short' }), amount: 0 });
+  }
+  (payments || []).forEach((p) => {
+    const d = new Date(p.paid_at || p.date);
+    if (Number.isNaN(d.getTime())) return;
+    const bucket = spendTrend.find((x) => x.month === d.toLocaleString('en-US', { month: 'short' }));
+    if (bucket) bucket.amount += Number(p.amount) || 0;
+  });
+  const thisYearTotal = (payments || []).filter((p) => { const d = new Date(p.paid_at || p.date); return !Number.isNaN(d.getTime()) && d.getFullYear() === spendNow.getFullYear(); }).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+  const nextAppt = (appointments || [])[0] || null;
+  const nextApptDate = nextAppt ? new Date(nextAppt.appointment_at) : null;
+  const nextApptValid = nextApptDate && !Number.isNaN(nextApptDate.getTime());
 
   return (
     <div className="space-y-7">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <Kpi icon={Shirt} tone="var(--navy)" label="Active orders" value={String(activeOrders.length)} sub="Currently in production" delay="0s" />
-        <Kpi icon={TrendingUp} tone="var(--brass)" label="Lifetime investment" value={formatPeso(lifetime)} sub="Since 2024" delay="0.06s" />
-        <Kpi icon={CalendarClock} tone="var(--success)" label="Next appointment" value="Aug 12" sub="First fitting · 3:30 PM" delay="0.12s" />
+        <Kpi icon={Shirt} tone="var(--navy)" label="Active orders" value={String(activeOrders.length)} sub={activeOrders.length ? 'Currently in production' : 'No orders yet'} delay="0s" />
+        <Kpi icon={TrendingUp} tone="var(--brass)" label="Lifetime investment" value={formatPeso(lifetime)} sub={`${(payments || []).length} receipt${(payments || []).length === 1 ? '' : 's'} on file`} delay="0.06s" />
+        <Kpi icon={CalendarClock} tone="var(--success)" label="Next appointment" value={nextApptValid ? nextApptDate.toLocaleDateString('en-US', { month: 'short', day: '2-digit' }) : '—'} sub={nextAppt ? `${nextAppt.appointment_type || 'Appointment'}${nextApptValid ? ` · ${nextApptDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : ''}` : 'No appointments yet'} delay="0.12s" />
       </div>
 
       <section className="rise atelier-card overflow-hidden" style={{ animationDelay: '0.15s' }}>
@@ -284,12 +340,13 @@ function DashboardView({ onBrowseGarments, catalog }) {
       </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1.35fr_1fr] gap-6">
+        {order ? (
         <div className="rise atelier-card p-7" style={{ animationDelay: '0.18s' }}>
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <Eyebrow>Order in progress</Eyebrow>
               <Display as="h2" className="text-[26px] mt-1" style={{ color: 'var(--ink)', fontWeight: 600 }}>{order.garment}</Display>
-              <p className="text-[13px] mt-1" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>{order.fabric}</p>
+              <p className="text-[13px] mt-1" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>{order.fabric || 'Fabric not specified'}</p>
             </div>
             {activeOrders.length > 1 && (
               <div className="flex items-center gap-1.5">
@@ -300,9 +357,9 @@ function DashboardView({ onBrowseGarments, catalog }) {
                     className="px-3 py-1.5 text-[10px] tracking-[0.12em] uppercase rounded-full transition-colors"
                     style={{
                       fontFamily: "'IBM Plex Mono', monospace",
-                      background: o.id === selected ? 'var(--ink)' : 'transparent',
-                      color: o.id === selected ? '#fff' : 'var(--muted)',
-                      border: `1px solid ${o.id === selected ? 'var(--ink)' : 'var(--line)'}`,
+                      background: o.id === order.id ? 'var(--ink)' : 'transparent',
+                      color: o.id === order.id ? '#fff' : 'var(--muted)',
+                      border: `1px solid ${o.id === order.id ? 'var(--ink)' : 'var(--line)'}`,
                     }}
                   >
                     {o.id}
@@ -313,36 +370,44 @@ function DashboardView({ onBrowseGarments, catalog }) {
           </div>
 
           <div className="flex items-center gap-4 mt-6">
-            <div className="swatch w-16 h-16 rounded-lg flex-shrink-0" style={{ '--swatch-a': order.swatchA, '--swatch-b': order.swatchB }} />
+            <div className="swatch w-16 h-16 rounded-lg flex-shrink-0" style={{ '--swatch-a': swatchA, '--swatch-b': swatchB }} />
             <div className="flex-1 min-w-0">
               <Eyebrow>Fabric swatch on file</Eyebrow>
-              <div className="text-[13px] mt-1" style={{ color: 'var(--ink)', fontFamily: "'Inter', sans-serif", fontWeight: 500 }}>{order.fabric}</div>
+              <div className="text-[13px] mt-1" style={{ color: 'var(--ink)', fontFamily: "'Inter', sans-serif", fontWeight: 500 }}>{order.fabric || 'Fabric not specified'}</div>
             </div>
           </div>
 
           <div className="mt-8">
             <div className="flex justify-between items-center mb-3">
               <Eyebrow>Production stage</Eyebrow>
-              <Eyebrow tone="var(--navy)">{STAGES[order.stageIndex]}</Eyebrow>
+              <Eyebrow tone="var(--navy)">{stageLabel}</Eyebrow>
             </div>
-            <Stepper stageIndex={order.stageIndex} />
+            <Stepper stageIndex={stepIdx} />
           </div>
 
           <div className="mt-7 pt-6 flex flex-wrap gap-8" style={{ borderTop: '1px solid var(--line)' }}>
             <div>
               <Eyebrow>Estimated ready</Eyebrow>
-              <Display as="div" className="text-lg mt-1" style={{ color: 'var(--ink)', fontWeight: 600 }}>{order.due}</Display>
+              <Display as="div" className="text-lg mt-1" style={{ color: 'var(--ink)', fontWeight: 600 }}>{readyLabel}</Display>
             </div>
             <div>
               <Eyebrow>Balance on release</Eyebrow>
-              <div className="text-lg mt-1" style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--rust)', fontWeight: 600 }}>{formatPeso(order.balance)}</div>
+              <div className="text-lg mt-1" style={{ fontFamily: "'IBM Plex Mono', monospace", color: orderBalance > 0 ? 'var(--rust)' : 'var(--success)', fontWeight: 600 }}>{formatPeso(orderBalance)}</div>
             </div>
             <div>
               <Eyebrow>Order total</Eyebrow>
-              <div className="text-lg mt-1" style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink)', fontWeight: 600 }}>{formatPeso(order.total)}</div>
+              <div className="text-lg mt-1" style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink)', fontWeight: 600 }}>{formatPeso(orderTotal)}</div>
             </div>
           </div>
         </div>
+        ) : (
+        <div className="rise atelier-card p-7 flex flex-col items-center justify-center text-center py-14" style={{ animationDelay: '0.18s' }}>
+          <Shirt className="w-8 h-8" style={{ color: 'var(--muted)' }} strokeWidth={1.4} />
+          <Display as="h2" className="text-xl mt-3" style={{ color: 'var(--ink)', fontWeight: 600 }}>No orders in progress</Display>
+          <p className="text-[13px] mt-1 max-w-xs" style={{ color: 'var(--muted)' }}>When you request a garment, it will appear here with its live production stage.</p>
+          <button onClick={onBrowseGarments} className="mt-5 inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white" style={{ background: 'var(--navy)' }}><ShoppingBag className="h-4 w-4" /> Browse garments</button>
+        </div>
+        )}
 
         <div className="rise atelier-card p-7" style={{ animationDelay: '0.24s' }}>
           <div className="flex items-center justify-between mb-1">
@@ -361,7 +426,11 @@ function DashboardView({ onBrowseGarments, catalog }) {
               </RadarChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-[11px] mt-1" style={{ color: 'var(--muted)', fontFamily: "'IBM Plex Mono', monospace" }}>LAST VERIFIED {MEASUREMENTS_UPDATED.toUpperCase()}</p>
+          {realMeasurements.length === 0 ? (
+            <p className="text-[11px] mt-1" style={{ color: 'var(--muted)', fontFamily: "'IBM Plex Mono', monospace" }}>NO MEASUREMENTS ON FILE — VISIT THE FRONT DESK TO BE MEASURED</p>
+          ) : (
+            <p className="text-[11px] mt-1" style={{ color: 'var(--muted)', fontFamily: "'IBM Plex Mono', monospace" }}>LAST VERIFIED {verifiedLabel || '—'}</p>
+          )}
         </div>
       </div>
 
@@ -374,12 +443,12 @@ function DashboardView({ onBrowseGarments, catalog }) {
             </div>
             <div className="text-right">
               <Eyebrow>This year</Eyebrow>
-              <div className="text-lg mt-1" style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink)', fontWeight: 600 }}>{formatPeso(19250)}</div>
+              <div className="text-lg mt-1" style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink)', fontWeight: 600 }}>{formatPeso(thisYearTotal)}</div>
             </div>
           </div>
           <div className="h-[200px] mt-3 -ml-3">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={SPEND_TREND} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+              <AreaChart data={spendTrend} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="brassFill" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="var(--brass)" stopOpacity={0.35} />
@@ -400,20 +469,25 @@ function DashboardView({ onBrowseGarments, catalog }) {
           <Eyebrow>Stay ahead</Eyebrow>
           <Display as="h2" className="text-lg mt-1" style={{ color: 'var(--ink)', fontWeight: 600 }}>Notifications</Display>
           <div className="mt-5 space-y-4">
-            {NOTIFICATIONS.map((n, i) => {
-              const meta = NOTIF_META[n.kind];
+            {notifs.length === 0 ? (
+              <p className="text-[12.5px]" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>You're all caught up — no new updates yet.</p>
+            ) : notifs.map((n) => {
+              const kind = n.type === 'payment' ? 'reminder' : n.type === 'appointment' ? 'fitting' : 'pickup';
+              const meta = NOTIF_META[kind];
               const Icon = meta.icon;
+              const nd = new Date(n.created_at);
+              const when = Number.isNaN(nd.getTime()) ? '' : nd.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
               return (
-                <div key={i} className="flex items-start gap-3">
+                <div key={n.id} className="flex items-start gap-3">
                   <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: `${meta.tone}14`, color: meta.tone }}>
                     <Icon className="w-4 h-4" strokeWidth={1.8} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
-                      <span className="text-[13px] font-medium" style={{ color: 'var(--ink)', fontFamily: "'Inter', sans-serif" }}>{n.label}</span>
-                      <span className="text-[10px] flex-shrink-0" style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--muted)' }}>{n.time}</span>
+                      <span className="text-[13px] font-medium" style={{ color: 'var(--ink)', fontFamily: "'Inter', sans-serif" }}>{n.title}</span>
+                      <span className="text-[10px] flex-shrink-0" style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--muted)' }}>{when}</span>
                     </div>
-                    <p className="text-[12.5px] mt-0.5" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>{n.detail}</p>
+                    <p className="text-[12.5px] mt-0.5" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>{n.message}</p>
                   </div>
                 </div>
               );
@@ -422,7 +496,7 @@ function DashboardView({ onBrowseGarments, catalog }) {
         </div>
       </div>
 
-      <PaymentLedger payments={PAYMENTS.slice(0, 3)} title="Payment history" showViewAll />
+      <PaymentLedger payments={payments.slice(0, 3)} title="Payment history" showViewAll onViewAll={onViewPayments} customerName={customerName} />
     </div>
   );
 }
@@ -451,7 +525,45 @@ function Stepper({ stageIndex }) {
   );
 }
 
-function PaymentLedger({ payments, title, showViewAll }) {
+function PaymentLedger({ payments, title, showViewAll, onViewAll, customerName = '' }) {
+  const [receipt, setReceipt] = useState<any>(null);
+  const rows = (payments || []).map((p) => ({
+    id: p.id || p.receipt || '',
+    job: p.job || p.jobCardNumber || '—',
+    label: p.label || p.description || p.payment_type || 'Payment',
+    amount: Number(p.amount || 0),
+    date: p.date || p.paid_at || '',
+  }));
+
+  const printReceipt = (row) => {
+    const dateStr = row.date ? new Date(row.date).toLocaleString('en-PH', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
+    const win = window.open('', '_blank', 'width=480,height=640');
+    if (!win) return;
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Receipt ${row.id}</title><style>
+      body{font-family:'Courier New',monospace;color:#111;background:#fff;margin:0;padding:32px;}
+      .r{max-width:380px;margin:0 auto;border:2px solid #111;padding:24px;}
+      h1{font-size:20px;text-align:center;margin:0 0 2px;}
+      .sub{text-align:center;font-size:11px;margin-bottom:18px;}
+      .row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px dashed #ccc;}
+      .amt{font-size:18px;font-weight:bold;text-align:center;margin:14px 0;}
+      .foot{text-align:center;font-size:11px;margin-top:18px;}
+      button{position:fixed;top:12px;right:12px;background:#111;color:#fff;border:0;padding:8px 14px;font-size:12px;cursor:pointer;}
+    </style></head><body><button onclick="window.print()">Print</button>
+    <div class="r">
+      <h1>ASHLIE'S TAILOR</h1>
+      <div class="sub">Official Receipt</div>
+      <div class="row"><span>Receipt No.</span><span>${row.id}</span></div>
+      <div class="row"><span>Job Card</span><span>${row.job}</span></div>
+      <div class="row"><span>Description</span><span>${row.label}</span></div>
+      <div class="row"><span>Customer</span><span>${customerName || '—'}</span></div>
+      <div class="row"><span>Date</span><span>${dateStr}</span></div>
+      <div class="amt">₱${row.amount.toLocaleString('en-PH')}</div>
+      <div class="foot">Thank you for your business!</div>
+    </div>
+    </body></html>`);
+    win.document.close();
+  };
+
   return (
     <div className="rise atelier-card overflow-hidden" style={{ animationDelay: '0.42s' }}>
       <div className="flex items-center justify-between px-7 py-6" style={{ borderBottom: '1px solid var(--line)' }}>
@@ -460,26 +572,33 @@ function PaymentLedger({ payments, title, showViewAll }) {
           <Display as="h2" className="text-lg mt-1" style={{ color: 'var(--ink)', fontWeight: 600 }}>{title}</Display>
         </div>
         {showViewAll && (
-          <span className="flex items-center gap-1 text-[11px] tracking-[0.1em] uppercase" style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--brass)' }}>
+          <button onClick={onViewAll} className="flex items-center gap-1 text-[11px] tracking-[0.1em] uppercase hover:gap-2 transition-all" style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--brass)' }}>
             View all <ChevronRight className="w-3.5 h-3.5" />
-          </span>
+          </button>
         )}
       </div>
       <div className="hidden md:grid grid-cols-[1fr_1fr_1.4fr_0.9fr_0.9fr_0.7fr] gap-4 px-7 py-2.5" style={{ borderBottom: '1px solid var(--line)', background: 'var(--brass-wash)' }}>
         {['Receipt', 'Job card', 'Description', 'Amount', 'Date', ''].map((h) => <Eyebrow key={h}>{h}</Eyebrow>)}
       </div>
-      {payments.map((p, i) => (
-        <div key={p.id} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1.4fr_0.9fr_0.9fr_0.7fr] gap-2 md:gap-4 px-7 py-4 items-center" style={{ borderBottom: i !== payments.length - 1 ? '1px solid var(--line)' : 'none' }}>
-          <span className="text-[12px]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--muted)' }}>{p.id}</span>
-          <span className="text-[13px] font-medium" style={{ color: 'var(--ink)', fontFamily: "'Inter', sans-serif" }}>{p.job}</span>
-          <span className="text-[13px]" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>{p.label}</span>
-          <span className="text-[13px] font-semibold" style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink)' }}>{formatPeso(p.amount)}</span>
-          <span className="text-[12px]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--muted)' }}>{p.date}</span>
-          <button className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.08em]" style={{ color: 'var(--muted)' }}>
-            <Download className="w-3.5 h-3.5" strokeWidth={1.6} /> Receipt
-          </button>
+      {rows.length === 0 ? (
+        <div className="px-7 py-10 text-center">
+          <Wallet className="h-8 w-8 mx-auto" style={{ color: 'var(--muted)' }} />
+          <p className="mt-3 text-[13px]" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>No payments recorded yet. When you make a payment, your receipt will appear here.</p>
         </div>
-      ))}
+      ) : (
+        rows.map((p, i) => (
+          <div key={p.id} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1.4fr_0.9fr_0.9fr_0.7fr] gap-2 md:gap-4 px-7 py-4 items-center" style={{ borderBottom: i !== rows.length - 1 ? '1px solid var(--line)' : 'none' }}>
+            <span className="text-[12px]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--muted)' }}>{p.id}</span>
+            <span className="text-[13px] font-medium" style={{ color: 'var(--ink)', fontFamily: "'Inter', sans-serif" }}>{p.job}</span>
+            <span className="text-[13px]" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>{p.label}</span>
+            <span className="text-[13px] font-semibold" style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink)' }}>{formatPeso(p.amount)}</span>
+            <span className="text-[12px]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--muted)' }}>{p.date ? (typeof p.date === 'string' && /^[A-Za-z]{3}/.test(p.date) ? p.date : new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })) : '—'}</span>
+            <button onClick={() => printReceipt(p)} className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.08em] hover:text-[#A9824F] transition-colors" style={{ color: 'var(--muted)' }}>
+              <Download className="w-3.5 h-3.5" strokeWidth={1.6} /> Receipt
+            </button>
+          </div>
+        ))
+      )}
     </div>
   );
 }
@@ -514,11 +633,12 @@ function FormLabel({ children }) {
   return <label className="block mb-1.5"><Eyebrow>{children}</Eyebrow></label>;
 }
 
-function CatalogView({ catalog }) {
+function CatalogView({ catalog, onOrderPlaced }) {
   const [selected, setSelected] = useState(null);
   const [notice, setNotice] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(null);
   const [fabrics, setFabrics] = useState([]);
   const [requestForm, setRequestForm] = useState({
     garmentType: '',
@@ -529,6 +649,7 @@ function CatalogView({ catalog }) {
     quantity: 1,
     specialInstructions: '',
     targetCompletionDate: '',
+    measuringVisitDate: '',
   });
   const item = catalog.find((garment) => garment.name === selected);
 
@@ -541,12 +662,19 @@ function CatalogView({ catalog }) {
       .catch(() => setFabrics([]));
   }, []);
 
+  // Fabric chips on every card come from the real shelf inventory
+  // (fabric_inventory), so the card matches what the customer can actually
+  // order. Falls back to the stored catalog fabrics if inventory is unavailable.
+  const shelfChips = fabrics.map((f) => `${f.fabricName}${f.tone ? ` — ${f.tone}` : ''}`);
+  const chipLimit = 3;
+
   const openRequest = (garment) => {
     setSubmitError('');
+    setSubmitted(null);
     setRequestForm((current) => ({
       ...current,
       garmentType: garment.name,
-      fabric: current.fabric || (garment.fabrics && garment.fabrics.length ? garment.fabrics[0] : ''),
+      fabric: current.fabric || (garment.fabrics && garment.fabrics.length ? garment.fabrics[0] : (fabrics.length ? fabrics[0].fabricName : '')),
     }));
     setSelected(garment.name);
   };
@@ -565,6 +693,7 @@ function CatalogView({ catalog }) {
     event.preventDefault();
     if (!requestForm.garmentType) { setSubmitError('Please select a garment type.'); return; }
     if (!requestForm.targetCompletionDate) { setSubmitError('Please set a target completion date.'); return; }
+    if (!requestForm.measuringVisitDate) { setSubmitError('Please choose the date you will visit the shop for measuring.'); return; }
     const payload = {
       garmentType: requestForm.garmentType,
       uniformCategory: requestForm.uniformCategory,
@@ -574,6 +703,7 @@ function CatalogView({ catalog }) {
       quantity: qty,
       specialInstructions: requestForm.specialInstructions,
       targetCompletionDate: requestForm.targetCompletionDate,
+      measuringVisitDate: requestForm.measuringVisitDate,
     };
     setSubmitError('');
     setSubmitting(true);
@@ -588,9 +718,13 @@ function CatalogView({ catalog }) {
         setSubmitError(data.message || 'Unable to place your order. Please try again.');
         return;
       }
-      setSelected(null);
-      setNotice(`Order ${data.job_card_id || payload.garmentType} submitted — a deposit of ${formatPeso(data.deposit_required ?? depositRequired)} is due, payable at the Front Desk, and a tailor has been assigned.`);
-      window.setTimeout(() => setNotice(''), 6000);
+      const jobLabel = data.job_card_id || payload.garmentType;
+      const visitLabel = requestForm.measuringVisitDate ? new Date(`${requestForm.measuringVisitDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : null;
+      setSubmitted({ job: jobLabel, deposit: Number(data.deposit_required ?? depositRequired) || depositRequired, visitLabel });
+      setNotice(`Order ${jobLabel} submitted — a tailor has been assigned and a deposit of ${formatPeso(data.deposit_required ?? depositRequired)} (50%) is due. Please visit our shop so the Front Desk can record your measurements and collect the deposit before production begins.`);
+      window.setTimeout(() => setNotice(''), 8000);
+      // Refresh the customer's live data so My Orders / Dashboard show the new job card immediately.
+      if (onOrderPlaced) onOrderPlaced();
     } catch (e) {
       setSubmitError('Unable to reach the server. Please check your connection and try again.');
     } finally {
@@ -612,7 +746,10 @@ function CatalogView({ catalog }) {
             <div className="p-6">
               <div className="flex items-start justify-between gap-3"><h2 className="text-xl font-semibold" style={{ fontFamily: "'Fraunces', serif" }}>{garment.name}</h2><span className="text-sm font-semibold whitespace-nowrap" style={{ color: 'var(--brass)' }}>{garment.price}</span></div>
               <p className="mt-3 text-[13px] leading-relaxed" style={{ color: 'var(--muted)' }}>{garment.description}</p>
-              <div className="mt-4 flex flex-wrap gap-2">{garment.fabrics.map((fabric) => <span key={fabric} className="rounded-full px-2.5 py-1 text-[10px]" style={{ color: 'var(--muted)', background: 'var(--paper)', border: '1px solid var(--line)' }}>{fabric}</span>)}</div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {(garment.fabrics && garment.fabrics.length ? garment.fabrics : shelfChips).slice(0, chipLimit).map((fabric) => <span key={fabric} className="rounded-full px-2.5 py-1 text-[10px]" style={{ color: 'var(--muted)', background: 'var(--paper)', border: '1px solid var(--line)' }}>{fabric}</span>)}
+                {(garment.fabrics && garment.fabrics.length ? garment.fabrics : shelfChips).length > chipLimit && <span className="rounded-full px-2.5 py-1 text-[10px]" style={{ color: 'var(--brass)', background: 'var(--paper)', border: '1px solid var(--line)' }}>+{(garment.fabrics && garment.fabrics.length ? garment.fabrics : shelfChips).length - chipLimit} more available</span>}
+              </div>
               <button onClick={() => openRequest(garment)} className="mt-6 inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.13em] text-white" style={{ background: 'var(--navy)' }}><ShoppingBag className="h-4 w-4" /> Request custom order</button>
             </div>
           </article>
@@ -626,8 +763,32 @@ function CatalogView({ catalog }) {
             <button type="button" onClick={() => setSelected(null)} className="p-1 rounded-full" style={{ color: 'var(--muted)' }}><X className="h-5 w-5" /></button>
           </div>
           <div className="px-7 sm:px-9 pb-9 pt-2">
+            {submitted ? (
+              <div className="text-center py-6">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full" style={{ background: 'rgba(75,120,86,0.12)', color: 'var(--success)' }}>
+                  <Check className="h-7 w-7" strokeWidth={2} />
+                </div>
+                <h3 className="mt-4 text-2xl" style={{ fontFamily: "'Fraunces', serif", color: 'var(--ink)' }}>Order submitted</h3>
+                <p className="mt-1 text-[13px]" style={{ color: 'var(--muted)' }}>
+                  Job card <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink)' }}>{submitted.job}</span> has been created and a tailor has been assigned.
+                </p>
+                <div className="mt-6 flex items-start gap-3 rounded-xl px-4 py-3.5 text-left" style={{ background: 'var(--brass-wash)', border: '1px solid rgba(169,130,79,0.28)' }}>
+                  <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full" style={{ background: 'var(--brass)', color: '#fff' }}>
+                    <Ruler className="h-3.5 w-3.5" />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>Please visit the shop{submitted.visitLabel ? ` on ${submitted.visitLabel}` : ''} so we can measure you</p>
+                    <p className="mt-1 text-[12.5px] leading-relaxed" style={{ color: 'var(--muted)' }}>
+                      Your measurements must be recorded at the Front Desk before a tailor can begin. When you drop by on your chosen date, we'll take your measurements and collect the <strong style={{ color: 'var(--ink)' }}>50% deposit ({formatPeso(submitted.deposit)})</strong> to start production.
+                    </p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => { setSubmitted(null); setSelected(null); }} className="mt-7 inline-flex items-center gap-2 rounded-md px-6 py-3 text-[10px] font-semibold uppercase tracking-[0.13em] text-white" style={{ background: 'var(--navy)' }}>Done</button>
+              </div>
+            ) : (
+            <>
             <h2 className="text-3xl leading-tight mb-2" style={{ fontFamily: "'Fraunces', serif", color: 'var(--ink)' }}>Create Custom Order</h2>
-            <p className="text-[14px] font-light mb-6 leading-relaxed" style={{ color: 'var(--muted)' }}>
+            <p className="text-[14px] font-light mb-4 leading-relaxed" style={{ color: 'var(--muted)' }}>
               Your request becomes a job card that Front Desk reviews, a tailor is assigned, and a 50% deposit is collected at the Front Desk.
             </p>
 
@@ -682,6 +843,10 @@ function CatalogView({ catalog }) {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
                 <div>
+                  <FormLabel>When will you visit for measuring?</FormLabel>
+                  <input type="date" min={new Date().toISOString().slice(0, 10)} value={requestForm.measuringVisitDate} onChange={(e) => setForm({ measuringVisitDate: e.target.value })} className="input-field" />
+                </div>
+                <div>
                   <FormLabel>Preferred completion date</FormLabel>
                   <input required type="date" value={requestForm.targetCompletionDate} onChange={(e) => setForm({ targetCompletionDate: e.target.value })} className="input-field" />
                 </div>
@@ -717,6 +882,8 @@ function CatalogView({ catalog }) {
                 </button>
               </div>
             </div>
+            </>
+            )}
           </div>
         </form>
       </div>}
@@ -727,15 +894,57 @@ function CatalogView({ catalog }) {
 /* ============================================================
    ORDERS VIEW
 ============================================================= */
-function OrdersView() {
+/* Maps a real order row from the backend into the card shape this view renders. */
+function stageIndexForCustomer(stage) {
+  const map = { Measuring: 0, 'Pattern Cutting': 1, 'Initial Assembly': 2, 'First Fitting': 3, 'Final Alterations': 4, 'Quality Review': 4, Completed: 5, 'Ready for Pickup': 6, Released: 6 };
+  return map[stage] ?? 0;
+}
+function swatchForFabric(fabric) {
+  const name = String(fabric || '').trim();
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) % 360;
+  const hue = name ? hash : 42;
+  return { swatchA: `hsl(${hue}, 32%, 74%)`, swatchB: `hsl(${hue}, 42%, 42%)` };
+}
+function customerOrderFromRow(row) {
+  const paid = Number(row.paid || 0);
+  const balance = Number(row.balance || 0);
+  const status = row.status === 'Released' ? 'Released' : row.status === 'Ready for Pickup' ? 'Ready for pickup' : 'In progress';
+  return {
+    id: row.id,
+    garment: row.garment || 'Custom garment',
+    fabric: row.fabric || 'Fabric to be selected',
+    stage: row.stage || '',
+    ...swatchForFabric(row.fabric),
+    stageIndex: stageIndexForCustomer(row.stage),
+    measuringVisit: row.measuringVisit ? new Date(`${String(row.measuringVisit).slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null,
+    due: row.due ? new Date(row.due).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'To be scheduled',
+    balance,
+    total: paid + balance,
+    status,
+    notes: row.notes || 'No special instructions recorded for this order.',
+  };
+}
+
+function OrdersView({ orders = [], onBrowseGarments }) {
   const [openId, setOpenId] = useState(null);
-  const open = ORDERS.find((o) => o.id === openId);
+  const open = orders.find((o) => o.id === openId);
 
   return (
     <div className="space-y-6">
       <PageHeader eyebrow="Order studio" title="My Orders" sub="Follow each garment from the first measurement to final pickup." icon={Shirt} />
+      {orders.length === 0 ? (
+        <div className="atelier-card p-10 text-center">
+          <Shirt className="w-8 h-8 mx-auto" style={{ color: 'var(--brass)' }} />
+          <Display as="h3" className="text-lg mt-3" style={{ color: 'var(--ink)', fontWeight: 600 }}>No orders yet</Display>
+          <p className="text-[13px] mt-1" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>When you request a garment it will appear here so you can follow it from measurement to pickup.</p>
+          {onBrowseGarments && (
+            <button onClick={onBrowseGarments} className="mt-5 px-5 py-2.5 rounded-full text-[12px] tracking-[0.08em] uppercase" style={{ background: 'var(--brass)', color: '#fff', fontFamily: "'IBM Plex Mono', monospace" }}>Browse garments</button>
+          )}
+        </div>
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {ORDERS.map((o, i) => (
+        {orders.map((o, i) => (
           <button key={o.id} onClick={() => setOpenId(o.id)} className="rise atelier-card p-6 text-left transition-transform hover:-translate-y-0.5" style={{ animationDelay: `${i * 0.06}s` }}>
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-4">
@@ -748,16 +957,22 @@ function OrdersView() {
               <StatusPill status={o.status} />
             </div>
             <p className="text-[13px] mt-3" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>{o.fabric}</p>
+            {o.measuringVisit && o.stage === 'Measuring' && (
+              <div className="mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px]" style={{ background: 'var(--brass-wash)', color: 'var(--brass)', border: '1px solid rgba(169,130,79,0.28)' }}>
+                <CalendarClock className="w-3 h-3" /> Measuring visit: {o.measuringVisit}
+              </div>
+            )}
             <div className="mt-5 pt-4 flex items-center justify-between" style={{ borderTop: '1px solid var(--line)' }}>
               <div>
                 <Eyebrow>Stage</Eyebrow>
-                <p className="text-[13px] font-medium mt-0.5" style={{ color: 'var(--ink)' }}>{STAGES[o.stageIndex]}</p>
+                <p className="text-[13px] font-medium mt-0.5" style={{ color: 'var(--ink)' }}>{o.stage || STAGES[o.stageIndex]}</p>
               </div>
               <ChevronRight className="w-5 h-5" style={{ color: 'var(--brass)' }} />
             </div>
           </button>
         ))}
       </div>
+      )}
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -885,36 +1100,165 @@ function MeasurementsView() {
    APPOINTMENTS VIEW
 ============================================================= */
 function AppointmentsView() {
-  const [appointments, setAppointments] = useState(APPOINTMENTS);
-  const confirm = (id) => setAppointments((cur) => cur.map((a) => (a.id === id ? { ...a, status: 'Confirmed' } : a)));
+  const [appointments, setAppointments] = useState([]);
+  const [schedulable, setSchedulable] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [actionMsg, setActionMsg] = useState('');
+  const [schedJob, setSchedJob] = useState(null);
+  const [form, setForm] = useState({ date: '', time: '', type: 'First Fitting' });
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  const loadAppointments = async () => {
+    try {
+      const res = await fetch(`${API_URL}/auth/customer/my-appointments`, { headers: { Authorization: `Bearer ${authToken()}` } });
+      const data = await res.json();
+      if (!res.ok) { if (res.status === 401) { setError('Your session has expired. Please sign in again.'); return; } throw new Error(data.message || 'Unable to load appointments.'); }
+      setAppointments(data.appointments || []);
+      setSchedulable(data.schedulable || []);
+      setError('');
+    } catch (e) {
+      setError(e.message || 'Unable to load appointments.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { loadAppointments(); }, []);
+
+  const fmt = (iso) => {
+    if (!iso) return { date: '—', time: '—', day: '', month: '' };
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return { date: '—', time: '—', day: '', month: '' };
+    return {
+      date: d.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
+      time: d.toLocaleTime(['en-US'], { hour: '2-digit', minute: '2-digit' }),
+      day: d.getDate().toString().padStart(2, '0'),
+      month: d.toLocaleDateString('en-PH', { month: 'short' }).toUpperCase(),
+    };
+  };
+
+  const openSchedule = (job) => { setSchedJob(job); setForm({ date: '', time: '', type: job.stage === 'Final Alterations' ? 'Final Fitting' : 'First Fitting' }); setFormError(''); setActionMsg(''); };
+  const closeSchedule = () => { setSchedJob(null); setSubmitting(false); setFormError(''); };
+
+  const submitSchedule = async (e) => {
+    e.preventDefault();
+    if (!form.date || !form.time) { setFormError('Pick a date and time for the fitting.'); return; }
+    setSubmitting(true);
+    setFormError('');
+    try {
+      const res = await fetch(`${API_URL}/auth/customer/my-appointments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+        body: JSON.stringify({ jobCardNumber: schedJob.id, appointmentDate: form.date, appointmentTime: form.time, appointmentType: form.type }),
+      });
+      const data = await res.json();
+      if (!res.ok) { if (res.status === 401) { setFormError('Your session expired. Please sign in again.'); return; } throw new Error(data.message || 'Unable to schedule the fitting.'); }
+      setActionMsg(data.message || 'Fitting scheduled. You can confirm it below when you arrive.');
+      closeSchedule();
+      await loadAppointments();
+    } catch (err) {
+      setFormError(err.message || 'Unable to schedule the fitting.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const confirmAttendance = async (id) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/customer/my-appointments/${id}/confirm`, { method: 'POST', headers: { Authorization: `Bearer ${authToken()}` } });
+      const data = await res.json();
+      if (!res.ok) { if (res.status === 401) { setError('Your session expired. Please sign in again.'); return; } throw new Error(data.message || 'Unable to confirm.'); }
+      await loadAppointments();
+    } catch (err) {
+      setActionMsg(err.message || 'Unable to confirm attendance.');
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Fitting calendar" title="Appointments" sub="Your upcoming tailoring appointments at the atelier." icon={CalendarClock} />
-      <div className="rise atelier-card divide-y" style={{ animationDelay: '0.06s', borderColor: 'var(--line)' }}>
-        {appointments.map((a, i) => (
-          <div key={a.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-6" style={{ borderBottom: i !== appointments.length - 1 ? '1px solid var(--line)' : 'none' }}>
-            <div className="flex gap-5">
-              <div className="text-center pr-5" style={{ borderRight: '1px solid var(--line)' }}>
-                <Display as="span" className="block text-2xl" style={{ color: 'var(--ink)', fontWeight: 600 }}>{a.day}</Display>
-                <Eyebrow>{a.month}</Eyebrow>
+      <PageHeader eyebrow="Fitting calendar" title="Appointments" sub="Schedule and confirm your fitting appointments so the tailor knows when you will be in." icon={CalendarClock} />
+      {error && <div className="px-4 py-3 rounded-lg text-[13px]" style={{ background: 'rgba(160,82,45,0.08)', color: 'var(--rust)', border: '1px solid rgba(160,82,45,0.25)' }}>{error}</div>}
+      {schedulable.length > 0 && (
+        <div className="rise atelier-card p-6" style={{ animationDelay: '0.04s', borderColor: 'var(--line)' }}>
+          <Eyebrow tone="var(--brass)">Ready for a fitting</Eyebrow>
+          <Display as="h2" className="text-lg mt-1" style={{ color: 'var(--ink)', fontWeight: 600 }}>Schedule a fitting</Display>
+          <div className="space-y-3 mt-3">
+            {schedulable.map((job) => (
+              <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-lg" style={{ border: '1px solid var(--line)', background: 'var(--paper)' }}>
+                <div>
+                  <div className="flex items-center gap-2"><Eyebrow>{job.id}</Eyebrow><StatusPill status={job.stage} /></div>
+                  <Display as="div" className="text-[15px] mt-0.5" style={{ color: 'var(--ink)', fontWeight: 600 }}>{job.garment}</Display>
+                  <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{job.fabric}</p>
+                </div>
+                <button onClick={() => openSchedule(job)} className="px-4 py-2 rounded-md text-[10px] font-semibold uppercase tracking-[0.12em] text-white" style={{ background: 'var(--ink)' }}>Schedule fitting</button>
               </div>
-              <div>
-                <Eyebrow>{a.job}</Eyebrow>
-                <Display as="h2" className="text-lg mt-0.5" style={{ color: 'var(--ink)', fontWeight: 600 }}>{a.type}</Display>
-                <p className="text-[13px] mt-0.5" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>{a.date} · {a.time}</p>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="rise atelier-card divide-y" style={{ animationDelay: '0.08s', borderColor: 'var(--line)' }}>
+        {loading && <div className="p-6 text-[13px]" style={{ color: 'var(--muted)' }}>Loading…</div>}
+        {!loading && appointments.length === 0 && <div className="p-6 text-[13px]" style={{ color: 'var(--muted)' }}>No appointments yet. Schedule one above once a garment is ready.</div>}
+        {appointments.map((a, i) => {
+          const fd = fmt(a.appointment_at);
+          const canConfirm = a.status === 'Scheduled' || a.status === 'Rescheduled';
+          return (
+            <div key={a.id ?? i} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-6" style={{ borderBottom: i !== appointments.length - 1 ? '1px solid var(--line)' : 'none' }}>
+              <div className="flex gap-5">
+                <div className="text-center pr-5" style={{ borderRight: '1px solid var(--line)' }}>
+                  <Display as="span" className="block text-2xl" style={{ color: 'var(--ink)', fontWeight: 600 }}>{fd.day}</Display><Eyebrow>{fd.month}</Eyebrow>
+                </div>
+                <div>
+                  <Eyebrow>{a.job_card_number}</Eyebrow>
+                  <Display as="h2" className="text-lg mt-0.5" style={{ color: 'var(--ink)', fontWeight: 600 }}>{a.appointment_type}</Display>
+                  <p className="text-[13px] mt-0.5" style={{ color: 'var(--muted)' }}>{fd.date} · {fd.time}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <StatusPill status={a.status} />
+                {canConfirm ? (
+                  <button onClick={() => confirmAttendance(a.id)} className="px-4 py-2 rounded-md text-[10px] font-semibold uppercase tracking-[0.12em] text-white" style={{ background: 'var(--ink)' }}>Confirm</button>
+                ) : a.status === 'Confirmed' ? (
+                  <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: 'var(--success)' }}><Check className="w-4 h-4" /> Confirmed</span>
+                ) : null}
               </div>
             </div>
-            {a.status === 'Confirmed' ? (
-              <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: 'var(--success)' }}><Check className="w-4 h-4" /> Confirmed</span>
-            ) : (
-              <button onClick={() => confirm(a.id)} className="px-4 py-2.5 rounded-md text-[10px] font-semibold uppercase tracking-[0.12em] text-white" style={{ background: 'var(--ink)', fontFamily: "'IBM Plex Mono', monospace" }}>
-                Confirm attendance
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
+      {schedJob && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(20,23,31,0.5)' }} onClick={closeSchedule}>
+          <div className="w-full max-w-md atelier-card p-6" style={{ background: 'var(--card)' }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <Eyebrow tone="var(--brass)">Fitting for {schedJob.id}</Eyebrow>
+                <Display as="h2" className="text-lg mt-1" style={{ color: 'var(--ink)', fontWeight: 600 }}>{schedJob.garment}</Display>
+                <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{schedJob.fabric} · {schedJob.stage}</p>
+              </div>
+              <button onClick={closeSchedule} aria-label="Close" style={{ color: 'var(--muted)' }}><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={submitSchedule} className="mt-5 space-y-4">
+              <label className="block">
+                <Eyebrow>Appointment type</Eyebrow>
+                <select className="input-field mt-1.5" value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}>
+                  <option value="First Fitting">First Fitting</option>
+                  <option value="Final Fitting">Final Fitting</option>
+                </select>
+              </label>
+              <div className="grid grid-cols-2 gap-4">
+                <label className="block"><Eyebrow>Date</Eyebrow><input type="date" className="input-field mt-1.5" value={form.date} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} /></label>
+                <label className="block"><Eyebrow>Time</Eyebrow><input type="time" className="input-field mt-1.5" value={form.time} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} /></label>
+              </div>
+              {formError && <div className="px-3 py-2.5 rounded-md text-[12.5px]" style={{ background: 'rgba(160,82,45,0.08)', color: 'var(--rust)', border: '1px solid rgba(160,82,45,0.25)' }}>{formError}</div>}
+              <div className="flex justify-end gap-3 pt-1">
+                <button type="button" onClick={closeSchedule} className="px-4 py-2 rounded-md text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--muted)', border: '1px solid var(--line)' }}>Cancel</button>
+                <button type="submit" disabled={submitting} className="px-4 py-2 rounded-md text-[10px] font-semibold uppercase tracking-[0.12em] text-white disabled:opacity-60" style={{ background: 'var(--ink)' }}>{submitting ? 'Scheduling…' : 'Schedule fitting'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -922,10 +1266,17 @@ function AppointmentsView() {
 /* ============================================================
    PAYMENTS VIEW
 ============================================================= */
-function PaymentsView() {
-  const paid = PAYMENTS.reduce((sum, p) => sum + p.amount, 0);
-  const outstanding = ORDERS.reduce((sum, o) => sum + o.balance, 0);
-  const byJob = ORDERS.map((o) => ({ job: o.id, paid: o.total - o.balance })).filter((j) => j.paid > 0);
+function PaymentsView({ payments = [], orders = [], customerName = '' }) {
+  // Real server data only — no demo fallback. If the customer has no payments,
+  // the ledger renders its "No payments recorded yet" empty state.
+  const livePayments = payments;
+  const liveOrders = orders;
+  const paid = livePayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const outstanding = liveOrders.reduce((sum, o) => sum + (Number(o.balance) || 0), 0);
+  const byJob = liveOrders.map((o) => {
+    const total = Number(o.total ?? ((Number(o.paid) || 0) + (Number(o.balance) || 0))) || 0;
+    return { job: o.id, paid: Math.max(0, total - (Number(o.balance) || 0)) };
+  }).filter((j) => j.paid > 0);
 
   return (
     <div className="space-y-6">
@@ -934,7 +1285,7 @@ function PaymentsView() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
         <Kpi icon={TrendingUp} tone="var(--success)" label="Paid to date" value={formatPeso(paid)} sub="Across all orders" delay="0s" />
         <Kpi icon={Wallet} tone="var(--rust)" label="Outstanding balance" value={formatPeso(outstanding)} sub="Due on release" delay="0.06s" />
-        <Kpi icon={PackageCheck} tone="var(--navy)" label="Receipts" value={String(PAYMENTS.length)} sub="On file" delay="0.12s" />
+        <Kpi icon={PackageCheck} tone="var(--navy)" label="Receipts" value={String(livePayments.length)} sub="On file" delay="0.12s" />
       </div>
 
       <div className="rise atelier-card p-7" style={{ animationDelay: '0.16s' }}>
@@ -953,7 +1304,7 @@ function PaymentsView() {
         </div>
       </div>
 
-      <PaymentLedger payments={PAYMENTS} title="Payment activity" />
+      <PaymentLedger payments={livePayments} title="Payment activity" customerName={customerName} />
     </div>
   );
 }
@@ -1240,6 +1591,10 @@ export default function CustomerDashboard() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileLoadError, setProfileLoadError] = useState('');
   const [catalog, setCatalog] = useState(() => getCatalog());
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [customerPayments, setCustomerPayments] = useState<any[]>([]);
+  const [customerMeasurements, setCustomerMeasurements] = useState<any[]>([]);
+  const [customerAppointments, setCustomerAppointments] = useState<any[]>([]);
   useEffect(() => {
     const t = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(t);
@@ -1262,6 +1617,17 @@ export default function CustomerDashboard() {
         }
       })
       .catch(() => setProfileLoadError('Unable to load your saved profile details. Please refresh after the server is running.'));
+    loadCustomerData();
+    fetch(`${API_URL}/auth/catalog`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (response) => { if (!response.ok) throw new Error('Unable to load catalog.'); return response.json(); })
+      .then((data) => { if (Array.isArray(data.catalog)) setCatalog(data.catalog); })
+      .catch(() => { /* Keep the bundled catalog if the server is unavailable. */ });
+  }, [navigate]);
+
+  // Re-fetch the customer's live data (orders, payments, measurements,
+  // appointments) from the server — after an order is placed and whenever
+  // they open a data view, so a fresh online order appears immediately.
+  const loadCustomerData = () => {
     fetch(`${API_URL}/auth/customer/dashboard`, { headers: { Authorization: `Bearer ${authToken()}` } })
       .then(async (response) => {
         if (!response.ok) { if (response.status === 401) signOut(); throw new Error('Unable to load account profile.'); }
@@ -1272,13 +1638,17 @@ export default function CustomerDashboard() {
           setProfile((current) => ({ ...current, ...data.user }));
           setProfileLoadError('');
         }
+        if (Array.isArray(data.orders)) setCustomerOrders(data.orders.map(customerOrderFromRow));
+        if (Array.isArray(data.payments)) setCustomerPayments(data.payments);
+        if (Array.isArray(data.measurements)) setCustomerMeasurements(data.measurements);
+        if (Array.isArray(data.appointments)) setCustomerAppointments(data.appointments);
       })
       .catch(() => setProfileLoadError('Unable to load your saved profile details. Please refresh after the server is running.'));
-    fetch(`${API_URL}/auth/catalog`, { headers: { Authorization: `Bearer ${authToken()}` } })
-      .then(async (response) => { if (!response.ok) throw new Error('Unable to load catalog.'); return response.json(); })
-      .then((data) => { if (Array.isArray(data.catalog)) setCatalog(data.catalog); })
-      .catch(() => { /* Keep the bundled catalog if the server is unavailable. */ });
-  }, [navigate]);
+  };
+
+  useEffect(() => {
+    if (view === 'orders' || view === 'dashboard' || view === 'payments') loadCustomerData();
+  }, [view]);
 
   const customerName = profile?.full_name || profile?.name || CUSTOMER.name;
   const customerEmail = profile?.email || CUSTOMER.email;
@@ -1293,12 +1663,12 @@ export default function CustomerDashboard() {
 
   function renderView() {
     switch (view) {
-      case 'dashboard': return <DashboardView catalog={catalog} onBrowseGarments={() => setView('catalog')} />;
-      case 'catalog': return <CatalogView catalog={catalog} />;
-      case 'orders': return <OrdersView />;
+      case 'dashboard': return <DashboardView catalog={catalog} onBrowseGarments={() => setView('catalog')} payments={customerPayments} orders={customerOrders} measurements={customerMeasurements} appointments={customerAppointments} onViewPayments={() => setView('payments')} customerName={customerName} />;
+      case 'catalog': return <CatalogView catalog={catalog} onOrderPlaced={loadCustomerData} />;
+      case 'orders': return <OrdersView orders={customerOrders} onBrowseGarments={() => setView('catalog')} />;
       case 'measurements': return <MeasurementsView />;
       case 'appointments': return <AppointmentsView />;
-      case 'payments': return <PaymentsView />;
+      case 'payments': return <PaymentsView payments={customerPayments} orders={customerOrders} customerName={customerName} />;
       case 'settings': return <SettingsView profile={profile} onProfileSaved={(updated) => { setProfile(updated); const storage = localStorage.getItem('authToken') ? localStorage : sessionStorage; storage.setItem('currentUser', JSON.stringify(updated)); }} onUnauthorized={() => signOut()} />;
       default: return <DashboardView />;
     }

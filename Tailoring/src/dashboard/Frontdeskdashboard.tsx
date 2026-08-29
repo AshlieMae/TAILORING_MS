@@ -243,6 +243,7 @@ function CreateOrderModal({
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [fabricOptions, setFabricOptions] = useState<{ id: number; fabricName: string; tone: string; unit: string }[]>([]);
+  const [tailorOptions, setTailorOptions] = useState<{ id: number; full_name: string; position: string }[]>([]);
   const [priceCalculation, setPriceCalculation] = useState<{
     laborCost: number;
     fabricCost: number;
@@ -312,6 +313,13 @@ function CreateOrderModal({
     frontDeskApi.getFabricCatalog()
       .then((data) => setFabricOptions(data.fabrics || []))
       .catch(() => setFabricOptions([]));
+  }, []);
+
+  // Load approved Master Tailors so the Front Desk can pick who gets the job.
+  useEffect(() => {
+    frontDeskApi.getTailors()
+      .then((tailors) => setTailorOptions(tailors.map((t) => ({ id: t.id, full_name: t.full_name, position: t.position || '' }))))
+      .catch(() => setTailorOptions([]));
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -514,12 +522,19 @@ function CreateOrderModal({
               </div>
               <div>
                 <label className="block mb-1.5"><MonoLabel>Assigned tailor (optional)</MonoLabel></label>
-                <input
+                <select
                   value={form.assignedTailorId}
                   onChange={(e) => setForm(f => ({ ...f, assignedTailorId: e.target.value }))}
-                  placeholder="Tailor name or ID"
-                  className="w-full border-b border-[#E2D7C7] bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-                />
+                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+                >
+                  <option value="">Auto-assign / not selected</option>
+                  {tailorOptions.map((t) => (
+                    <option key={t.id} value={String(t.id)}>{t.full_name}{t.position ? ` — ${t.position}` : ''}</option>
+                  ))}
+                </select>
+                {tailorOptions.length === 0 && (
+                  <span className="mt-1 block text-[10px]" style={{ color: '#A3958B' }}>No approved tailors found — the job will be auto-assigned to the least-loaded tailor.</span>
+                )}
               </div>
             </div>
 
@@ -664,11 +679,28 @@ function RecordPaymentModal({
 
   const selectedOrder = orders.find(o => o.job_card_id === form.jobCardId.toUpperCase());
 
+  // Auto-fill the amount from the payment type: Deposit = 50% of the total,
+  // Final Payment = the full remaining balance, Partial = typed by the staff.
+  const applyAmountForType = (type: 'Deposit' | 'Final Payment' | 'Partial', order?: Order) => {
+    const target = order || selectedOrder;
+    if (!target) return;
+    const total = Number(target.total_amount) || 0;
+    const balance = Number(target.remaining_balance) || 0;
+    let suggested = '';
+    if (type === 'Deposit') {
+      suggested = String(Math.min(Math.round(total * 0.5 * 100) / 100, balance));
+    } else if (type === 'Final Payment') {
+      suggested = String(balance);
+    }
+    setForm(f => ({ ...f, paymentType: type, amount: suggested }));
+  };
+
   const handleJobCardSearch = (value: string) => {
     setForm(f => ({ ...f, jobCardId: value }));
     const found = orders.find(o => o.job_card_id === value.toUpperCase());
     if (found) {
       setForm(f => ({ ...f, orderId: found.order_id }));
+      applyAmountForType(form.paymentType, found);
     }
   };
 
@@ -764,15 +796,15 @@ function RecordPaymentModal({
                 <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-dashed border-[#E2D7C7]">
                   <div>
                     <MonoLabel>Total</MonoLabel>
-                    <div className="text-sm font-semibold text-[#2A211D]">{formatPeso(selectedOrder.total_amount)}</div>
+                    <div className="text-sm font-semibold text-[#2A211D]">{formatPeso(Number(selectedOrder.total_amount))}</div>
                   </div>
                   <div>
                     <MonoLabel>Paid</MonoLabel>
-                    <div className="text-sm font-semibold text-[#4E7357]">{formatPeso(selectedOrder.deposit_paid)}</div>
+                    <div className="text-sm font-semibold text-[#4E7357]">{formatPeso(Number(selectedOrder.deposit_paid))}</div>
                   </div>
                   <div>
                     <MonoLabel>Balance</MonoLabel>
-                    <div className="text-sm font-semibold text-[#9E5B4B]">{formatPeso(selectedOrder.remaining_balance)}</div>
+                    <div className="text-sm font-semibold text-[#9E5B4B]">{formatPeso(Number(selectedOrder.remaining_balance))}</div>
                   </div>
                 </div>
                 <div className="mt-2 text-xs text-[#766A62]">
@@ -786,7 +818,7 @@ function RecordPaymentModal({
                 <label className="block mb-1.5"><MonoLabel>Payment type</MonoLabel></label>
                 <select
                   value={form.paymentType}
-                  onChange={(e) => setForm(f => ({ ...f, paymentType: e.target.value as any }))}
+                  onChange={(e) => applyAmountForType(e.target.value as any)}
                   className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
                 >
                   <option value="Deposit">Deposit</option>
@@ -824,9 +856,12 @@ function RecordPaymentModal({
                   className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
                 />
               </div>
-              {selectedOrder && selectedOrder.remaining_balance > 0 && (
+              {selectedOrder && (
                 <p className="text-[11px] text-[#A3958B] mt-1">
-                  Remaining balance: {formatPeso(selectedOrder.remaining_balance)}
+                  Remaining balance: {formatPeso(Number(selectedOrder.remaining_balance))}
+                  {Number(selectedOrder.remaining_balance) > 0 && (
+                    <> · Deposit (50%): {formatPeso(Math.round(Number(selectedOrder.total_amount) * 0.5 * 100) / 100)} · Partial: type any amount</>
+                  )}
                 </p>
               )}
             </div>

@@ -160,9 +160,23 @@ const NAV: { label: string; icon: typeof LayoutDashboard; view: ViewKey }[] = [
    DASHBOARD VIEW
 ================================================================== */
 
-function DashboardView({ onGoToInventory }: { onGoToInventory: () => void }) {
-  const maxRevenue = Math.max(...WEEK_REVENUE.map((d) => d.amount));
-  const totalStageCount = STAGES.reduce((s, x) => s + x.count, 0);
+function DashboardView({ onGoToInventory, onGoToProduction, onGoToOrders }: { onGoToInventory: () => void; onGoToProduction: () => void; onGoToOrders: () => void }) {
+  const [data, setData] = useState<any>(null);
+  const [loadError, setLoadError] = useState('');
+  useEffect(() => {
+    fetch(`${API_URL}/admin/dashboard`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.message || 'Unable to load dashboard.'); return d; })
+      .then(setData)
+      .catch((e) => setLoadError(e.message));
+  }, []);
+
+  const stages: typeof STAGES = (data?.stages && data.stages.length ? data.stages : STAGES);
+  const weekRevenue: typeof WEEK_REVENUE = (data?.weekRevenue && data.weekRevenue.length ? data.weekRevenue : WEEK_REVENUE);
+  const recentOrders: typeof RECENT_ORDERS = (data?.recentOrders && data.recentOrders.length ? data.recentOrders : RECENT_ORDERS);
+  const lowStock: typeof LOW_STOCK = (data?.lowStock && data.lowStock.length ? data.lowStock : LOW_STOCK);
+  const maxRevenue = Math.max(1, ...weekRevenue.map((d) => d.amount));
+  const totalStageCount = stages.reduce((s: number, x: any) => s + Number(x.count || 0), 0);
+  const peso = (n: number) => `₱${Number(n || 0).toLocaleString('en-PH')}`;
 
   return (
     <div className="space-y-8">
@@ -171,13 +185,14 @@ function DashboardView({ onGoToInventory }: { onGoToInventory: () => void }) {
         <h1 className="text-3xl sm:text-4xl leading-tight mt-1 italic" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, color: INK }}>
           Good afternoon — here's today's shop.
         </h1>
+        {loadError && <p className="mt-2 text-[12px]" style={{ color: THREAD }}>{loadError}</p>}
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard delay={0.04} label="Today's sales" value="₱24,300" trend="+12.4%" trendUp icon={<Wallet className="w-4 h-4" strokeWidth={1.6} />} />
-        <StatCard delay={0.08} label="Orders in production" value={`${totalStageCount}`} trend="+3 this week" trendUp icon={<Scissors className="w-4 h-4" strokeWidth={1.6} />} />
-        <StatCard delay={0.12} label="Outstanding balance" value="₱58,940" trend="-6.1%" trendUp={false} icon={<Clock className="w-4 h-4" strokeWidth={1.6} />} />
-        <StatCard delay={0.16} label="Low stock alerts" value={`${LOW_STOCK.length}`} trend="Needs reorder" trendUp={false} tone="warn" icon={<AlertTriangle className="w-4 h-4" strokeWidth={1.6} />} />
+        <StatCard delay={0.04} label="Today's sales" value={peso(data?.todaySales)} trend="Collected today" trendUp={Number(data?.todaySales || 0) > 0} icon={<Wallet className="w-4 h-4" strokeWidth={1.6} />} />
+        <StatCard delay={0.08} label="Orders in production" value={`${totalStageCount}`} trend="Active job cards" trendUp icon={<Scissors className="w-4 h-4" strokeWidth={1.6} />} />
+        <StatCard delay={0.12} label="Outstanding balance" value={peso(data?.outstandingBalance)} trend="Collect at pickup" trendUp={false} icon={<Clock className="w-4 h-4" strokeWidth={1.6} />} />
+        <StatCard delay={0.16} label="Low stock alerts" value={`${data?.lowStockAlerts ?? lowStock.length}`} trend="Needs reorder" trendUp={false} tone="warn" icon={<AlertTriangle className="w-4 h-4" strokeWidth={1.6} />} />
       </div>
 
       <div className="dash-in relative p-6 sm:p-8 border shadow-[0_1px_3px_rgba(42,38,32,0.08)] hover:shadow-[0_4px_16px_-4px_rgba(42,38,32,0.14)] transition-shadow" style={{ animationDelay: '0.2s', borderColor: LINE, background: PAPER }}>
@@ -190,11 +205,11 @@ function DashboardView({ onGoToInventory }: { onGoToInventory: () => void }) {
             <MonoLabel>Measured today — production pipeline</MonoLabel>
             <h2 className="text-lg mt-1 italic" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, color: INK }}>Where every garment sits today</h2>
           </div>
-          <button className="hidden sm:flex items-center gap-1 text-[11px] tracking-[0.14em] uppercase" style={{ color: THREAD }}>
+          <button onClick={onGoToProduction} className="hidden sm:flex items-center gap-1 text-[11px] tracking-[0.14em] uppercase hover:gap-2 transition-all" style={{ color: THREAD }}>
             View all <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
-        <TapeRail stages={STAGES} />
+        <TapeRail stages={stages} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-6">
@@ -205,11 +220,11 @@ function DashboardView({ onGoToInventory }: { onGoToInventory: () => void }) {
               <h2 className="text-lg mt-1 italic" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, color: INK }}>Revenue</h2>
             </div>
             <span className="text-xl" style={{ fontFamily: "'IBM Plex Mono', monospace", color: INK }}>
-              ₱{WEEK_REVENUE.reduce((s, d) => s + d.amount, 0).toLocaleString()}
+              ₱{weekRevenue.reduce((s, d) => s + d.amount, 0).toLocaleString()}
             </span>
           </div>
           <div className="flex items-end gap-3 sm:gap-5 h-40">
-            {WEEK_REVENUE.map((d, i) => (
+            {weekRevenue.map((d, i) => (
               <div key={d.day} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
                 <div className="relative w-full flex-1 flex items-end">
                   <div
@@ -231,7 +246,7 @@ function DashboardView({ onGoToInventory }: { onGoToInventory: () => void }) {
           <MonoLabel>Fabric inventory</MonoLabel>
           <h2 className="text-lg mt-1 mb-6 italic" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, color: INK }}>Running low</h2>
           <div className="space-y-5">
-            {LOW_STOCK.map((f) => {
+            {lowStock.map((f) => {
               const pct = Math.min(100, (f.remaining / f.threshold) * 100);
               return (
                 <div key={f.fabric}>
@@ -258,7 +273,7 @@ function DashboardView({ onGoToInventory }: { onGoToInventory: () => void }) {
             <MonoLabel>Job cards</MonoLabel>
             <h2 className="text-lg mt-1 italic" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, color: INK }}>Recent orders</h2>
           </div>
-          <button className="flex items-center gap-1 text-[11px] tracking-[0.14em] uppercase" style={{ color: THREAD }}>
+          <button onClick={onGoToOrders} className="flex items-center gap-1 text-[11px] tracking-[0.14em] uppercase hover:gap-2 transition-all" style={{ color: THREAD }}>
             View all <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -267,7 +282,7 @@ function DashboardView({ onGoToInventory }: { onGoToInventory: () => void }) {
             <MonoLabel key={h}>{h}</MonoLabel>
           ))}
         </div>
-        {RECENT_ORDERS.map((o) => (
+        {recentOrders.map((o) => (
           <div key={o.id} className="grid grid-cols-1 md:grid-cols-[1fr_1.4fr_1.4fr_1.2fr_0.8fr_0.8fr] gap-2 md:gap-4 px-6 sm:px-8 py-4 border-t first:border-t-0 items-center" style={{ borderColor: LINE }}>
             <span className="flex items-center gap-2 text-[12px]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: '#3A4372' }}>
               <span className="h-1.5 w-1.5 rounded-full border" style={{ borderColor: MUTED }} />
@@ -278,7 +293,7 @@ function DashboardView({ onGoToInventory }: { onGoToInventory: () => void }) {
             <span>
               <span className={`inline-block px-2 py-0.5 text-[10px] tracking-[0.1em] uppercase border ${stageTone[o.stage] ?? ''}`}>{o.stage}</span>
             </span>
-            <span className="text-[13px]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: INK }}>{o.amount}</span>
+            <span className="text-[13px]" style={{ fontFamily: "'IBM Plex Mono', monospace", color: INK }}>{typeof o.amount === 'number' ? peso(o.amount) : o.amount}</span>
             <span className="text-[12px]" style={{ color: MUTED }}>{o.due}</span>
           </div>
         ))}
@@ -382,7 +397,7 @@ export default function AdminDashboard({ initialView = 'dashboard' }: { initialV
   function renderView() {
     switch (view) {
       case 'dashboard':
-        return <DashboardView onGoToInventory={() => setView('inventory')} />;
+        return <DashboardView onGoToInventory={() => setView('inventory')} onGoToProduction={() => setView('production')} onGoToOrders={() => setView('orders')} />;
       case 'users':
         return <UserManagementView externalQuery={quickSearch} />;
       case 'customers':

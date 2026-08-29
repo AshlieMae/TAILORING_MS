@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { Ruler, Search, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Tooltip, Legend,
 } from 'recharts';
@@ -19,14 +19,11 @@ const TOKENS = {
   brass: '#C9A227', brassLight: '#E4C25E', pin: '#C0392B', green: '#3F6633',
 };
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const authToken = () => localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '';
+
 const FIELDS = ['Chest', 'Waist', 'Shoulder', 'Sleeve'];
 const STANDARD = { Chest: 38, Waist: 32, Shoulder: 17, Sleeve: 24 };
-
-const PROFILES = [
-  { name: 'Reyna Fuentes', id: 'CUS-001', garment: 'Barong Tagalog', values: [36, 29, 15, 23] },
-  { name: 'Boyet Salcedo', id: 'CUS-002', garment: 'Two-piece Suit', values: [41, 35, 18, 25] },
-  { name: 'Consuelo Reyes', id: 'CUS-003', garment: "Women's Coat", values: [39, 33, 16, 22] },
-];
 
 function MonoLabel({ children, className = '' }) {
   return (
@@ -80,9 +77,30 @@ function MeasurementRadar({ profile }) {
 export function TailorMeasurementsView() {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(null);
+  const [allProfiles, setAllProfiles] = useState([]);
+  const [error, setError] = useState('');
+
+  // Load live cutting-reference profiles from the shared database.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/tailor/measurements`, {
+          headers: { Authorization: `Bearer ${authToken()}` },
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Unable to load measurements.');
+        if (!cancelled) setAllProfiles(Array.isArray(data.profiles) ? data.profiles : []);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Unable to load measurements.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const profiles = useMemo(
-    () => PROFILES.filter((p) => `${p.name} ${p.garment}`.toLowerCase().includes(query.toLowerCase())),
-    [query],
+    () => (Array.isArray(allProfiles) ? allProfiles : []).filter((p) => `${p.name} ${p.garment}`.toLowerCase().includes(query.toLowerCase())),
+    [query, allProfiles],
   );
 
   return (
@@ -153,7 +171,13 @@ export function TailorMeasurementsView() {
             </button>
           ))}
           {!profiles.length && (
-            <div className="col-span-full py-14 text-center text-sm text-[#6D6A60]">No client profile matches "{query}".</div>
+            <div className="col-span-full py-14 text-center text-sm text-[#6D6A60]">
+              {error
+                ? error
+                : query
+                  ? `No client profile matches "${query}".`
+                  : 'No cut-ready profiles yet — profiles appear here once customers have measurements recorded on an order.'}
+            </div>
           )}
         </div>
       </section>

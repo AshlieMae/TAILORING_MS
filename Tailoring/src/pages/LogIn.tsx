@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Scissors } from 'lucide-react';
 
 /* ---------------------------------------------------------------
@@ -294,6 +294,12 @@ export default function LoginPage() {
                 />
                 <span>Keep me signed in</span>
               </label>
+              <Link
+                to="/forgot-password"
+                className="text-xs text-[#A63D40] hover:text-[#8B3235] transition-colors"
+              >
+                Forgot password?
+              </Link>
             </div>
 
             {/* swatch-tag button */}

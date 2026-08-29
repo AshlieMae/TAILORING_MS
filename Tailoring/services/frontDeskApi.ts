@@ -514,6 +514,13 @@ const frontDeskApi = {
     });
     return handleResponse(response);
   },
+  getTailors: async (): Promise<{ id: number; full_name: string; position: string; employee_id: string }[]> => {
+    const response = await fetch(`${API_URL}/frontdesk/tailors`, {
+      headers: { Authorization: `Bearer ${authToken()}` },
+    });
+    const data = await handleResponse<{ tailors: { id: number; full_name: string; position: string; employee_id: string }[] }>(response);
+    return data.tailors || [];
+  },
 
 };
 

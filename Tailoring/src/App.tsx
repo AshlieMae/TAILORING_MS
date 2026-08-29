@@ -3,6 +3,8 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 
 import LandingPage from './pages/LandingPage';
 import Login from './pages/LogIn';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import AdminDashboard from './dashboard/AdminDashboard';
 import Frontdeskdashboard from './dashboard/Frontdeskdashboard';
 import Customerdashboard from './dashboard/Customerdashboard';
@@ -56,6 +58,8 @@ const App: React.FC = () => {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<Login />} />
+<Route path="/forgot-password" element={<ForgotPassword />} />
+<Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/customers" element={<AdminDashboard initialView="customers" />} />
       <Route path="/orders" element={<AdminDashboard initialView="orders" />} />

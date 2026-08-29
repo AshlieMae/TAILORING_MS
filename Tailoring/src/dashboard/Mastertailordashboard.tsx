@@ -218,10 +218,7 @@ interface JobCard {
   fabricUsed: string;
 }
 
-const FITTINGS_TODAY = [
-  { time: '2:00 PM', customer: 'Consuelo Reyes', garment: "Women's Coat", jobCardId: 'JC-3019' },
-  { time: '3:30 PM', customer: 'Reyna Fuentes', garment: 'Barong Tagalog', jobCardId: 'JC-3021' },
-];
+const FITTINGS_TODAY: { time: string; customer: string; garment: string; jobCardId: string }[] = [];
 
 /* ---------------------------------------------------------------
    Production flow chart — job cards grouped by stage, drawn as
@@ -395,70 +392,113 @@ function UpdateStageModal({
         className="relative w-full max-w-xl bg-[var(--paper)] border border-[var(--line)] rounded-[3px] overflow-hidden"
         style={{ boxShadow: 'var(--shadow-2)' }}
       >
-        <div className="h-[3px] w-full bg-gradient-to-r from-[var(--brass)] via-[var(--brass-light)] to-[var(--brass)]" />
-        <div className="flex items-center justify-between px-7 sm:px-10 pt-8">
-          <MonoLabel>{card.id}</MonoLabel>
-          <button onClick={onClose} aria-label="Close" className="text-[var(--muted-2)] hover:text-[var(--ink)] transition-colors">
-            <X className="w-4 h-4" />
+        <div className="h-[3px] w-full bg-gradient-to-r from-[var(--brass-deep)] via-[var(--brass-light)] to-[var(--brass)]" />
+        <div className="flex items-start justify-between px-7 sm:px-10 pt-7">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <MonoLabel>{card.id}</MonoLabel>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[2px] bg-[var(--brass)]/12 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--brass-deep)] border border-[var(--brass)]/25">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--brass)]" style={{ animation: 'jcPulse 1.6s ease-in-out infinite' }} />
+                {STAGES[card.stageIndex]}
+              </span>
+            </div>
+            <h2 className="text-[26px] leading-tight text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>
+              Update stage
+            </h2>
+            <p className="text-[13px] text-[var(--ink-soft)] font-light mt-1">{card.garment} · {card.customer}</p>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="mt-1 text-[var(--muted-2)] hover:text-[var(--ink)] transition-colors p-1">
+            <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="px-7 sm:px-10 pb-9 pt-3">
-          <h2 className="text-3xl leading-tight mb-2 text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>
-            Update production stage
-          </h2>
-                                        <p className="text-[14px] text-[var(--ink-soft)] font-light mb-8 leading-relaxed">
-            {card.garment} for {card.customer}
-          </p>
 
-          <div className="space-y-2">
-            {STAGES.map((s, i) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setStageIndex(i)}
-                disabled={saving}
-                className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-[3px] border text-left transition-all duration-150 ${
-                  i === stageIndex
-                    ? 'bg-[var(--graphite)] border-[var(--graphite)] text-[#EDEAE2] shadow-[0_6px_16px_-8px_rgba(33,31,28,0.5)]'
-                    : 'border-[var(--line)] text-[var(--ink-soft)] hover:border-[var(--muted-2)] hover:bg-[var(--paper-dim)]'
-                }`}
-              >
-                <span
-                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                    i === stageIndex ? 'border-[var(--brass-light)] bg-[var(--brass)]/25' : 'border-[var(--line)]'
-                  }`}
-                >
-                  {i === stageIndex && <Check className="w-3 h-3 text-[#EDEAE2]" strokeWidth={2.5} />}
-                </span>
-                <span className="text-[13px]">{s}</span>
-              </button>
-            ))}
+        {/* Progress bar */}
+        <div className="px-7 sm:px-10 pt-6 pb-2">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--muted)]">Production progress</span>
+            <span className="text-[11px] text-[var(--brass-deep)]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{Math.round(((stageIndex + 1) / STAGES.length) * 100)}%</span>
           </div>
+          <div className="h-1.5 w-full rounded-full bg-[var(--paper-dim)] border border-[var(--line)] overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[var(--brass)] via-[var(--brass-light)] to-[var(--brass)] transition-all duration-500"
+              style={{ width: `${Math.round(((stageIndex + 1) / STAGES.length) * 100)}%`, boxShadow: '0 0 8px rgba(194,154,30,0.5)' }}
+            />
+          </div>
+        </div>
 
-          {error && (
-            <div role="alert" className="mt-4 border border-[var(--pin-soft)]/30 bg-[var(--pin-soft)]/10 px-3 py-2 text-sm text-[#96291E] rounded-[2px]">
-              {error}
+        {/* Stage stepper */}
+        <div className="px-7 sm:px-10 pt-6 pb-3 max-h-[330px] overflow-y-auto pr-5">
+          <div className="relative">
+            {/* connecting rail */}
+            <div className="absolute left-[19px] top-4 bottom-4 w-px bg-[var(--line)]" />
+            <div className="space-y-1">
+              {STAGES.map((s, i) => {
+                const isSelected = i === stageIndex;
+                const isPastCurrent = i <= card.stageIndex;
+                const ICONS = [<Ruler key="m" className="w-[18px] h-[18px]" strokeWidth={1.6} />, <Scissors key="p" className="w-[18px] h-[18px]" strokeWidth={1.6} />, <Shirt key="a" className="w-[18px] h-[18px]" strokeWidth={1.6} />, <Clock key="f" className="w-[18px] h-[18px]" strokeWidth={1.6} />, <Scissors key="al" className="w-[18px] h-[18px]" strokeWidth={1.6} />, <Check key="q" className="w-[18px] h-[18px]" strokeWidth={1.6} />, <PackageCheck key="c" className="w-[18px] h-[18px]" strokeWidth={1.6} />, <PackageCheck key="r" className="w-[18px] h-[18px]" strokeWidth={1.6} />];
+                const stageHints = ['Open the workbench & verify measurements', 'Cut pattern pieces & record fabric usage', 'Assemble the garment pieces', 'Book the first fitting with Front Desk', 'Apply alterations from the fitting', 'Run the quality checklist', 'Mark production complete', 'Hand off to Front Desk for pickup'];
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setStageIndex(i)}
+                    disabled={saving}
+                    className={`group w-full flex items-center gap-3.5 rounded-[4px] px-2 py-2.5 text-left transition-all duration-150 ${
+                      isSelected ? 'bg-[var(--graphite)] text-[#EDEAE2] shadow-[0_8px_20px_-10px_rgba(33,31,28,0.5)]' : 'hover:bg-[var(--paper-dim)]'
+                    }`}
+                  >
+                    <span
+                      className={`relative z-10 w-[39px] h-[39px] rounded-full flex items-center justify-center flex-shrink-0 border-2 transition-all duration-200 ${
+                        isSelected
+                          ? 'border-[var(--brass-light)] bg-[var(--brass)]/25 text-[var(--brass-light)]'
+                          : isPastCurrent
+                            ? 'border-[var(--brass)]/40 bg-[var(--brass)]/8 text-[var(--brass-deep)]'
+                            : 'border-[var(--line)] bg-[var(--paper)] text-[var(--muted-2)]'
+                      }`}
+                    >
+                      {s !== STAGES[card.stageIndex] ? ICONS[i] : <span className="w-2.5 h-2.5 rounded-full bg-[var(--brass)]" style={{ animation: 'jcPulse 1.6s ease-in-out infinite' }} />}
+                    </span>
+                    <span className="flex-1">
+                      <span className={`block text-[13px] font-medium leading-tight ${isSelected ? 'text-[#EDEAE2]' : isPastCurrent ? 'text-[var(--ink)]' : 'text-[var(--muted)]'}`}>
+                        {s}
+                        {i === card.stageIndex && <span className="ml-2 align-middle inline-block px-1.5 py-px rounded-[2px] bg-[var(--brass)]/15 text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--brass-deep)]">Current</span>}
+                      </span>
+                      <span className="block text-[10.5px] mt-0.5 text-[var(--muted-2)]">{stageHints[i]}</span>
+                    </span>
+                    {isSelected && <Check className="w-4 h-4 text-[var(--brass-light)]" strokeWidth={2.5} />}
+                  </button>
+                );
+              })}
             </div>
-          )}
-
-          <div className="flex items-center gap-3 pt-8">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={saving}
-              className="flex-1 px-4 py-3 rounded-[3px] border border-[var(--line)] text-[var(--ink-soft)] text-[11px] font-medium tracking-[0.14em] uppercase hover:border-[var(--muted-2)] hover:bg-[var(--paper-dim)] transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="flex-1 px-4 py-3 rounded-[3px] bg-[var(--graphite)] text-[#EDEAE2] text-[11px] font-medium tracking-[0.14em] uppercase hover:bg-[var(--graphite-2)] transition-colors shadow-[0_10px_24px_-12px_rgba(33,31,28,0.55)] disabled:opacity-60 disabled:cursor-wait"
-            >
-              {saving ? 'Saving…' : 'Save stage'}
-            </button>
           </div>
+        </div>
+
+        {error && (
+          <div role="alert" className="mx-7 sm:mx-10 mt-2 border border-[var(--pin-soft)]/30 bg-[var(--pin-soft)]/10 px-3 py-2 text-sm text-[#96291E] rounded-[3px]">
+            <span className="font-medium">Could not save:</span> {error}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center gap-3 px-7 sm:px-10 pt-7 pb-8">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="flex-1 px-4 py-3 rounded-[3px] border border-[var(--line)] text-[var(--ink-soft)] text-[11px] font-medium tracking-[0.14em] uppercase hover:border-[var(--muted-2)] hover:bg-[var(--paper-dim)] transition-colors disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 px-4 py-3 rounded-[3px] bg-gradient-to-b from-[var(--graphite)] to-[var(--graphite-2)] text-[#EDEAE2] text-[11px] font-semibold tracking-[0.14em] uppercase hover:brightness-110 transition-all disabled:opacity-60 disabled:cursor-wait flex items-center justify-center gap-2"
+            style={{ boxShadow: '0 12px 26px -12px rgba(33,31,28,0.6), 0 1px 0 rgba(255,255,255,0.08) inset' }}
+          >
+            {saving && <span className="w-3.5 h-3.5 border-2 border-[#EDEAE2]/40 border-t-[#EDEAE2] rounded-full animate-spin" />}
+            {saving ? 'Saving…' : 'Save stage'}
+          </button>
         </div>
       </div>
     </div>
@@ -646,14 +686,12 @@ function DashboardView() {
         setUsageSummary(data.fabricSummary || []);
         setMonthlyProductivity(data.monthlyProductivity || []);
         const upcoming = data.upcomingFittings || [];
-        if (upcoming.length) {
-          setFittingsToday(upcoming.map((f: any) => ({
-            time: new Date(f.appointment_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-            customer: f.customer_name || 'Customer',
-            garment: (f.job_card_number || 'Job card'),
-            jobCardId: f.job_card_number || '',
-          })));
-        }
+        setFittingsToday(upcoming.map((f: any) => ({
+          time: new Date(f.appointment_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+          customer: f.customer_name || 'Customer',
+          garment: (f.job_card_number || 'Job card'),
+          jobCardId: f.job_card_number || '',
+        })));
       } catch { /* non-fatal */ }
     }
     loadCards();
@@ -927,18 +965,24 @@ function DashboardView() {
           <MonoLabel>Today's calendar</MonoLabel>
           <h2 className="text-xl mt-1 mb-5 text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>Fittings &amp; alterations</h2>
           <div className="space-y-4">
-            {fittingsToday.map((f) => (
-              <div key={`${f.time}-${f.customer}`} className="flex items-center gap-3">
-                <div className="flex flex-col items-center flex-shrink-0 w-14">
-                  <Clock className="w-3 h-3 text-[var(--brass)] mb-0.5" strokeWidth={1.8} />
-                  <span className="text-[11px] text-[var(--ink-soft)]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{f.time}</span>
+            {fittingsToday.length > 0 ? (
+              fittingsToday.map((f) => (
+                <div key={`${f.time}-${f.customer}`} className="flex items-center gap-3">
+                  <div className="flex flex-col items-center flex-shrink-0 w-14">
+                    <Clock className="w-3 h-3 text-[var(--brass)] mb-0.5" strokeWidth={1.8} />
+                    <span className="text-[11px] text-[var(--ink-soft)]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{f.time}</span>
+                  </div>
+                  <div className="min-w-0 flex-1 border-l border-[var(--line-soft)] pl-3">
+                    <div className="text-[13px] text-[var(--ink)] font-medium truncate">{f.customer}</div>
+                    <div className="text-[12px] text-[var(--ink-soft)] truncate">{f.garment} · {f.jobCardId}</div>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1 border-l border-[var(--line-soft)] pl-3">
-                  <div className="text-[13px] text-[var(--ink)] font-medium truncate">{f.customer}</div>
-                  <div className="text-[12px] text-[var(--ink-soft)] truncate">{f.garment} · {f.jobCardId}</div>
-                </div>
+              ))
+            ) : (
+              <div className="py-6 text-center text-[12.5px] text-[var(--muted-2)]">
+                No fittings scheduled today yet.
               </div>
-            ))}
+            )}
           </div>
 
           <div className="mt-8 pt-6 border-t border-[var(--line-soft)]">

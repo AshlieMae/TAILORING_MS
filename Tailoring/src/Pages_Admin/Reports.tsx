@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { BarChart3, CalendarDays, Download, PackageCheck, PhilippinePeso, Shirt, TrendingUp } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import {
@@ -9,13 +9,12 @@ import {
 const monthlyRevenue = [{ label: 'Mar', value: 118000 }, { label: 'Apr', value: 142000 }, { label: 'May', value: 126000 }, { label: 'Jun', value: 168000 }, { label: 'Jul', value: 194000 }, { label: 'Aug', value: 121500 }];
 const turnaroundTrend = [{ label: 'Wk 1', value: 9.6 }, { label: 'Wk 2', value: 9.1 }, { label: 'Wk 3', value: 8.7 }, { label: 'Wk 4', value: 8.4 }];
 const garments = [{ name: 'Barong Tagalog', orders: 32, percent: 82 }, { name: 'Two-piece Suit', orders: 26, percent: 67 }, { name: 'Filipiniana Dress', orders: 21, percent: 54 }, { name: 'School Uniform Set', orders: 18, percent: 46 }];
-const fabricUsage = [{ fabric: 'Piña Jusi — Ivory', usage: '16.5 m' }, { fabric: 'Italian Wool — Charcoal', usage: '12.0 m' }, { fabric: 'Silk Habotai — Wine', usage: '9.5 m' }, { fabric: 'Cotton Poplin — White', usage: '8.0 m' }];
-const donutSegments = [
-  { value: 32, color: COLORS.navy },
-  { value: 26, color: COLORS.brass },
-  { value: 21, color: '#7B92B2' },
-  { value: 18, color: COLORS.border },
-];
+const fabricUsage = [{ fabric: 'PiÃ±a Jusi â€” Ivory', usage: '16.5 m' }, { fabric: 'Italian Wool â€” Charcoal', usage: '12.0 m' }, { fabric: 'Silk Habotai â€” Wine', usage: '9.5 m' }, { fabric: 'Cotton Poplin â€” White', usage: '8.0 m' }];
+
+
+type RevenuePoint = { label: string; value: number };
+type GarmentRow = { name: string; orders: number; percent?: number };
+type FabricUsageRow = { fabric: string; usage: string };
 
 const REPORT_PERIODS = {
   'This month': { revenue: 121500, ordersReceived: 48, completedOrders: 39, outstandingBalance: 18725, revenueTrend: '+12.4% vs last month', ordersTrend: '+8 this month', completionTrend: '81% completion', balanceTrend: '6 open balances', revenueData: monthlyRevenue },
@@ -27,7 +26,25 @@ const peso = (amount: number) => new Intl.NumberFormat('en-PH', { style: 'curren
 
 export function AdminReportsView() {
   const [period, setPeriod] = useState<keyof typeof REPORT_PERIODS>('This month');
-  const report = REPORT_PERIODS[period];
+  const [live, setLive] = useState<any>(null);
+  const [loadError, setLoadError] = useState('');
+  useEffect(() => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const authToken = () => localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '';
+    fetch(`${API_URL}/admin/reports`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.message || 'Unable to load reports.'); return d; })
+      .then(setLive)
+      .catch((e) => setLoadError(e.message));
+  }, []);
+  const base = REPORT_PERIODS[period];
+  const monthlyRevenueLive: RevenuePoint[] = (Array.isArray(live?.monthlyRevenue) && live.monthlyRevenue.length) ? live.monthlyRevenue : monthlyRevenue;
+  const report = { ...base, revenueData: monthlyRevenueLive };
+  const garmentsDisplay: GarmentRow[] = (Array.isArray(live?.garments) && live.garments.length) ? live.garments : garments;
+  const fabricUsageDisplay: FabricUsageRow[] = (Array.isArray(live?.fabricUsage) && live.fabricUsage.length) ? live.fabricUsage : fabricUsage;
+  const donutSegmentsDisplay = garmentsDisplay.map((g: any, i: number) => ({
+    value: Number(g.orders || 0),
+    color: [COLORS.navy, COLORS.brass, '#7B92B2', COLORS.border][i % 4],
+  }));
 
   const exportReport = async () => {
     const workbook = new ExcelJS.Workbook();
@@ -59,11 +76,11 @@ export function AdminReportsView() {
         cell.alignment = { vertical: 'middle', horizontal: columnNumber === 2 ? 'right' : 'left' };
       });
       row.getCell(2).font = { bold: true, color: { argb: navy } };
-      if (currency) row.getCell(2).numFmt = '₱#,##0';
+      if (currency) row.getCell(2).numFmt = 'â‚±#,##0';
     };
 
     worksheet.mergeCells('A1:B1');
-    worksheet.getCell('A1').value = "ASHLIE'S TAILOR — BUSINESS REPORT";
+    worksheet.getCell('A1').value = "ASHLIE'S TAILOR â€” BUSINESS REPORT";
     worksheet.getCell('A1').font = { bold: true, size: 16, color: { argb: 'FFFFFF' } };
     worksheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: navy } };
     worksheet.getCell('A1').alignment = { vertical: 'middle' };
@@ -83,10 +100,10 @@ export function AdminReportsView() {
     report.revenueData.forEach(({ label, value }, index) => dataRow(11 + index, label, value, true));
     const garmentsRow = 12 + report.revenueData.length;
     section(garmentsRow, 'MOST ORDERED GARMENTS', 'ORDERS');
-    garments.forEach(({ name, orders }, index) => dataRow(garmentsRow + 1 + index, name, orders));
-    const fabricRow = garmentsRow + garments.length + 2;
+    garmentsDisplay.forEach(({ name, orders }, index) => dataRow(garmentsRow + 1 + index, name, orders));
+    const fabricRow = garmentsRow + garmentsDisplay.length + 2;
     section(fabricRow, 'MOST USED FABRICS', 'USAGE');
-    fabricUsage.forEach(({ fabric, usage }, index) => dataRow(fabricRow + 1 + index, fabric, usage));
+    fabricUsageDisplay.forEach(({ fabric, usage }, index) => dataRow(fabricRow + 1 + index, fabric, usage));
     worksheet.autoFilter = { from: 'A4', to: 'B8' };
 
     const canvas = document.createElement('canvas');
@@ -121,7 +138,7 @@ export function AdminReportsView() {
         context.fillStyle = '#334155'; context.font = '16px Arial';
         context.textAlign = 'center'; context.fillText(label, x + barWidth / 2, chart.top + chart.height + 28);
         context.fillStyle = '#17324D'; context.font = 'bold 14px Arial';
-        context.fillText(`₱${Math.round(value / 1000)}k`, x + barWidth / 2, y - 10);
+        context.fillText(`â‚±${Math.round(value / 1000)}k`, x + barWidth / 2, y - 10);
       });
       context.textAlign = 'left';
       const image = workbook.addImage({ base64: canvas.toDataURL('image/png'), extension: 'png' });
@@ -155,6 +172,8 @@ export function AdminReportsView() {
           </div>
         }
       />
+
+      {loadError && <p className="text-sm" style={{ color: COLORS.danger }}>{loadError}</p>}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard delay={0.05} icon={<PhilippinePeso />} label="Revenue" value={peso(report.revenue)} trend={report.revenueTrend} sparkline={[92, 105, 98, 112, 121]} tone="brass" />
@@ -198,13 +217,13 @@ export function AdminReportsView() {
           <EyebrowLabel>Demand report</EyebrowLabel>
           <h2 className="text-[16px] font-semibold" style={{ color: COLORS.ink }}>Most ordered garments</h2>
           <div className="mt-6 flex flex-col gap-6 sm:flex-row sm:items-center">
-            <DonutChart segments={donutSegments} />
+            <DonutChart segments={donutSegmentsDisplay} />
             <div className="flex-1 space-y-4">
-              {garments.map((garment, i) => (
+              {garmentsDisplay.map((garment, i) => (
                 <div key={garment.name}>
                   <div className="flex items-center justify-between gap-4 text-sm">
                     <span className="flex items-center gap-2" style={{ color: COLORS.ink }}>
-                      <span className="h-2 w-2 rounded-full" style={{ background: donutSegments[i].color }} />
+                      <span className="h-2 w-2 rounded-full" style={{ background: donutSegmentsDisplay[i].color }} />
                       {garment.name}
                     </span>
                     <span className="mono" style={{ color: COLORS.muted }}>{garment.orders} orders</span>
@@ -222,13 +241,25 @@ export function AdminReportsView() {
           </div>
           <h2 className="text-[16px] font-semibold" style={{ color: COLORS.ink }}>Most used fabrics</h2>
           <dl className="mt-6 divide-y border-y" style={{ borderColor: COLORS.border }}>
-            {fabricUsage.map(({ fabric, usage }) => (
+            {fabricUsageDisplay.map(({ fabric, usage }) => (
               <div key={fabric} className="flex justify-between py-3 text-sm">
                 <dt style={{ color: COLORS.ink }}>{fabric}</dt>
                 <dd className="mono" style={{ color: COLORS.brassDeep }}>{usage}</dd>
               </div>
             ))}
           </dl>
+          {live && (Number(live.inventoryValue) || Number(live.usageCost)) > 0 && (
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="border p-3" style={{ borderColor: COLORS.border, background: COLORS.surfaceAlt, borderRadius: 8 }}>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: COLORS.muted }}>Fabric inventory value</div>
+                <div className="mono mt-1 text-lg font-semibold" style={{ color: COLORS.navy }}>{peso(Number(live.inventoryValue || 0))}</div>
+              </div>
+              <div className="border p-3" style={{ borderColor: COLORS.border, background: COLORS.surfaceAlt, borderRadius: 8 }}>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: COLORS.muted }}>Fabric cost used</div>
+                <div className="mono mt-1 text-lg font-semibold" style={{ color: COLORS.brassDeep }}>{peso(Number(live.usageCost || 0))}</div>
+              </div>
+            </div>
+          )}
         </Card>
       </div>
     </div>

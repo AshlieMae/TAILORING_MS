@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CalendarDays, ChevronRight, Shirt, UserRound } from 'lucide-react';
 import {
   COLORS, FONT_IMPORT, PageHeader, StatCard, SearchField, Card, TableHeadRow, EmptyState,
@@ -27,7 +27,25 @@ const STAGE_TONE: Record<Stage, 'neutral' | 'info' | 'warning' | 'danger' | 'suc
 export function AdminProductionView() {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Job | null>(null);
-  const jobs = useMemo(() => JOBS.filter((job) => `${job.id} ${job.customer} ${job.garment} ${job.tailor}`.toLowerCase().includes(query.toLowerCase())), [query]);
+  const [rows, setRows] = useState<Job[]>(JOBS);
+  const [loadError, setLoadError] = useState('');
+  useEffect(() => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const authToken = () => localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '';
+    fetch(`${API_URL}/admin/production`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.message || 'Unable to load production.'); return d; })
+      .then((d) => {
+        const mapped: Job[] = (d.jobs || []).map((j: any) => ({
+          id: j.id, customer: j.customer, garment: j.garment, tailor: j.tailor,
+          stage: (['Measuring', 'Pattern Cutting', 'Initial Assembly', 'First Fitting', 'Final Alterations', 'Completed', 'Ready for Pickup'].includes(j.stage) ? j.stage : 'Measuring') as Stage,
+          due: j.due, priority: j.priority === 'High' ? 'Due soon' : 'Normal' as 'Due soon' | 'Normal' | 'Overdue',
+          fabric: j.fabric,
+        }));
+        setRows(mapped);
+      })
+      .catch((e) => setLoadError(e.message));
+  }, []);
+  const jobs = useMemo(() => rows.filter((job) => `${job.id} ${job.customer} ${job.garment} ${job.tailor}`.toLowerCase().includes(query.toLowerCase())), [query, rows]);
 
   return (
     <div className="space-y-7" style={{ color: COLORS.ink }}>
@@ -39,11 +57,11 @@ export function AdminProductionView() {
         <EyebrowLabel color={COLORS.brassDeep}>Cutting line — the pipeline, station by station</EyebrowLabel>
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           {STAGES.map((stage) => {
-            const count = JOBS.filter((job) => job.stage === stage).length;
+            const count = rows.filter((job) => job.stage === stage).length;
             return (
               <button
                 key={stage}
-                onClick={() => setSelected(JOBS.find((job) => job.stage === stage) || null)}
+                onClick={() => setSelected(rows.find((job) => job.stage === stage) || null)}
                 className="border bg-white p-4 text-left transition-colors"
                 style={{ borderColor: COLORS.border, borderRadius: 8 }}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.navy; }}
@@ -58,9 +76,10 @@ export function AdminProductionView() {
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard delay={0.1} icon={<Shirt />} label="Jobs in progress" value={5} tone="neutral" />
-        <StatCard delay={0.14} icon={<CalendarDays />} label="Due within 3 days" value={3} tone="warning" />
-        <StatCard delay={0.18} icon={<AlertTriangle />} label="Past due" value={1} tone="danger" />
+        <StatCard delay={0.1} icon={<Shirt />} label="Jobs in progress" value={rows.length} tone="neutral" />
+        <StatCard delay={0.14} icon={<CalendarDays />} label="Unassigned" value={rows.filter((j) => j.tailor === 'Unassigned').length} tone="warning" />
+        <StatCard delay={0.18} icon={<AlertTriangle />} label="Ready for pickup" value={rows.filter((j) => j.stage === 'Ready for Pickup').length} tone="danger" />
+        {loadError && <p className="text-sm sm:col-span-3" style={{ color: COLORS.danger }}>{loadError}</p>}
       </div>
 
       <Card delay={0.22}>

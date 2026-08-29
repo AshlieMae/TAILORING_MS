@@ -34,13 +34,26 @@ export function AdminCustomersView({ externalQuery = '' }: { externalQuery?: str
   const [query, setQuery] = useState(externalQuery);
   const [status, setStatus] = useState<'All' | CustomerStatus>('All');
   const [selected, setSelected] = useState<Customer | null>(null);
+  const [rows, setRows] = useState<Customer[]>(CUSTOMERS);
 
   useEffect(() => setQuery(externalQuery), [externalQuery]);
+  useEffect(() => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const authToken = () => localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '';
+    fetch(`${API_URL}/admin/customers`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.message || 'Unable to load customers.'); return d; })
+      .then((d) => { setRows(Array.isArray(d.customers) && d.customers.length ? d.customers : CUSTOMERS); })
+      .catch(() => { /* keep the bundled sample if the server is unavailable. */ });
+  }, []);
 
-  const customers = useMemo(() => CUSTOMERS.filter((customer) => {
+  const customers = useMemo(() => rows.filter((customer) => {
     const matchQuery = `${customer.name} ${customer.email} ${customer.phone} ${customer.id}`.toLowerCase().includes(query.toLowerCase());
     return matchQuery && (status === 'All' || customer.status === status);
-  }), [query, status]);
+  }), [query, status, rows]);
+  const activeCount = rows.filter((c) => c.status === 'Active').length;
+  const pickupCount = rows.filter((c) => c.status === 'Pickup due').length;
+  const avgOrders = rows.length ? (rows.reduce((s, c) => s + (c.orders || 0), 0) / rows.length).toFixed(1) : '0.0';
+  const recentCount = rows.filter((c) => c.status !== 'Inactive').length;
 
   return (
     <div className="space-y-7" style={{ color: COLORS.ink }}>
@@ -52,17 +65,17 @@ export function AdminCustomersView({ externalQuery = '' }: { externalQuery?: str
         description="Profiles, running measurements, and order history, all in one place."
         action={
           <div className="border px-4 py-3" style={{ borderColor: COLORS.border, background: COLORS.surface, borderRadius: 10, boxShadow: shadowSm }}>
-            <span className="mono text-xl font-semibold" style={{ color: COLORS.ink }}>{CUSTOMERS.length}</span>
+            <span className="mono text-xl font-semibold" style={{ color: COLORS.ink }}>{rows.length}</span>
             <span className="ml-2 text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: COLORS.muted }}>on file</span>
           </div>
         }
       />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard delay={0.05} icon={<UserRound />} label="Active customers" value={CUSTOMERS.filter((c) => c.status === 'Active').length} tone="success" />
-        <StatCard delay={0.09} icon={<Ruler />} label="Pickup due" value={CUSTOMERS.filter((c) => c.status === 'Pickup due').length} tone="warning" />
-        <StatCard delay={0.13} icon={<UserRound />} label="New this month" value={4} tone="brass" />
-        <StatCard delay={0.17} icon={<UserRound />} label="Avg. orders / customer" value="4.8" tone="neutral" />
+        <StatCard delay={0.05} icon={<UserRound />} label="Active customers" value={activeCount} tone="success" />
+        <StatCard delay={0.09} icon={<Ruler />} label="Pickup due" value={pickupCount} tone="warning" />
+        <StatCard delay={0.13} icon={<UserRound />} label="Engaged customers" value={recentCount} tone="brass" />
+        <StatCard delay={0.17} icon={<UserRound />} label="Avg. orders / customer" value={avgOrders} tone="neutral" />
       </div>
 
       <Card delay={0.2}>

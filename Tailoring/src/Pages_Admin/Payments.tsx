@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Banknote, CalendarDays, ChevronRight, CreditCard, ReceiptText } from 'lucide-react';
 import {
   COLORS, FONT_IMPORT, PageHeader, StatCard, SearchField, FilterPill, Card, TableHeadRow, EmptyState,
@@ -24,9 +24,26 @@ export function AdminPaymentsView() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'All' | PaymentStatus>('All');
   const [selected, setSelected] = useState<Payment | null>(null);
-  const payments = useMemo(() => PAYMENTS.filter((payment) => `${payment.receipt} ${payment.customer} ${payment.job} ${payment.garment}`.toLowerCase().includes(query.toLowerCase()) && (filter === 'All' || payment.status === filter)), [query, filter]);
-  const collected = PAYMENTS.reduce((sum, payment) => sum + payment.amount, 0);
-  const outstanding = PAYMENTS.reduce((sum, payment) => sum + payment.balance, 0);
+  const [rows, setRows] = useState<Payment[]>(PAYMENTS);
+  const [loadError, setLoadError] = useState('');
+  useEffect(() => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const authToken = () => localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '';
+    fetch(`${API_URL}/admin/payments`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.message || 'Unable to load payments.'); return d; })
+      .then((d) => {
+        const mapped: Payment[] = (d.payments || []).map((p: any) => ({
+          receipt: p.receipt, customer: p.customer, job: p.job, garment: p.garment,
+          method: p.method, type: p.type, amount: p.amount, balance: p.balance,
+          date: p.date, status: p.status === 'Paid' ? 'Paid' : (p.status === 'Balance due' ? 'Balance due' : 'Partial'),
+        }));
+        setRows(mapped);
+      })
+      .catch((e) => setLoadError(e.message));
+  }, []);
+  const payments = useMemo(() => rows.filter((payment) => `${payment.receipt} ${payment.customer} ${payment.job} ${payment.garment}`.toLowerCase().includes(query.toLowerCase()) && (filter === 'All' || payment.status === filter)), [query, filter, rows]);
+  const collected = rows.reduce((sum, payment) => sum + payment.amount, 0);
+  const outstanding = rows.reduce((sum, payment) => sum + payment.balance, 0);
 
   return (
     <div className="space-y-7" style={{ color: COLORS.ink }}>
@@ -37,7 +54,8 @@ export function AdminPaymentsView() {
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard delay={0.05} icon={<Banknote />} label="Collected this period" value={peso(collected)} tone="success" sparkline={[8, 12, 9, 14, 11, 16, 13]} trend="+9.2% vs last period" />
         <StatCard delay={0.09} icon={<CreditCard />} label="Outstanding balance" value={peso(outstanding)} tone="danger" trend="6 open balances" trendTone="danger" />
-        <StatCard delay={0.13} icon={<ReceiptText />} label="Transactions" value={PAYMENTS.length} tone="neutral" />
+        <StatCard delay={0.13} icon={<ReceiptText />} label="Transactions" value={rows.length} tone="neutral" />
+        {loadError && <p className="text-sm sm:col-span-3" style={{ color: COLORS.danger }}>{loadError}</p>}
       </div>
 
       <Card delay={0.18}>

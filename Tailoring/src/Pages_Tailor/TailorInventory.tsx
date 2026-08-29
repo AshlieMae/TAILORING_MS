@@ -138,13 +138,13 @@ export function TailorInventoryView() {
   };
 
   // Create a new bolt on the shelf (persisted to the backend, then refreshed).
-  const addFabric = async (name: string, tone: string, stock: number, unit: string) => {
+  const addFabric = async (name: string, tone: string, stock: number, unit: string, unitCost?: number | null) => {
     setAddErr('');
     try {
       const res = await fetch(`${API_URL}/tailor/inventory/fabric`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
-        body: JSON.stringify({ fabricName: name, tone, stockQuantity: stock, unit }),
+        body: JSON.stringify({ fabricName: name, tone, stockQuantity: stock, unit, unitCost: unitCost != null ? unitCost : null }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Unable to add fabric.');
@@ -324,11 +324,12 @@ export function TailorInventoryView() {
   );
 }
 
-function AddFabricModal({ onClose, onAdd, error }: { onClose: () => void; onAdd: (name: string, tone: string, stock: number, unit: string) => void; error: string }) {
+function AddFabricModal({ onClose, onAdd, error }: { onClose: () => void; onAdd: (name: string, tone: string, stock: number, unit: string, unitCost?: number | null) => void; error: string }) {
   const [name, setName] = useState('');
   const [tone, setTone] = useState('');
   const [stock, setStock] = useState('20');
   const [unit, setUnit] = useState('yards');
+  const [unitCost, setUnitCost] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -338,7 +339,7 @@ function AddFabricModal({ onClose, onAdd, error }: { onClose: () => void; onAdd:
     if (Number.isNaN(qty) || qty < 0) return;
     setBusy(true);
     try {
-      await onAdd(name.trim(), tone.trim(), qty, unit);
+      await onAdd(name.trim(), tone.trim(), qty, unit, unitCost !== '' ? Number(unitCost) : null);
     } catch (caught) {
       /* parent surfaces the backend error via `error` */
     } finally {
@@ -372,6 +373,9 @@ function AddFabricModal({ onClose, onAdd, error }: { onClose: () => void; onAdd:
             </div>
             <label className="block text-xs font-medium text-[#6D6A60]">Initial stock on hand
               <input type="number" min="0" value={stock} onChange={(e) => setStock(e.target.value)} className="mt-2 w-full border border-[#DCD8C7] bg-[#FFF] rounded-[2px] px-3 py-2.5 text-sm outline-none focus:border-[#9C7D12] transition-colors" />
+            </label>
+            <label className="block text-xs font-medium text-[#6D6A60]">Unit cost per {unit} (₱)
+              <input type="number" min="0" step="0.01" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} placeholder="e.g. 250" className="mt-2 w-full border border-[#DCD8C7] bg-[#FFF] rounded-[2px] px-3 py-2.5 text-sm outline-none focus:border-[#9C7D12] transition-colors" />
             </label>
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-[3px] border border-[#DCD8C7] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8A846F] hover:text-[#262420] transition-colors">Cancel</button>

@@ -29,10 +29,33 @@ export function AdminOrdersView({ externalQuery = '' }: { externalQuery?: string
   const [query, setQuery] = useState(externalQuery);
   const [filter, setFilter] = useState('All stages');
   const [selected, setSelected] = useState<Order | null>(null);
+  const [rows, setRows] = useState<Order[]>(ORDERS);
+  const [loadError, setLoadError] = useState('');
   useEffect(() => setQuery(externalQuery), [externalQuery]);
-  const stages = ['All stages', ...Array.from(new Set(ORDERS.map((order) => order.stage)))];
-  const orders = useMemo(() => ORDERS.filter((order) => `${order.id} ${order.customer} ${order.garment}`.toLowerCase().includes(query.toLowerCase()) && (filter === 'All stages' || order.stage === filter)), [query, filter]);
-  const total = ORDERS.reduce((sum, order) => sum + Number(order.total.replace(/[^0-9]/g, '')), 0);
+  useEffect(() => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const authToken = () => localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '';
+    fetch(`${API_URL}/admin/orders`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.message || 'Unable to load orders.'); return d; })
+      .then((d) => {
+        const mapped: Order[] = (d.orders || []).map((o: any) => ({
+          id: o.id, customer: o.customer, garment: o.garment, fabric: o.fabric,
+          stage: o.stage, payment: o.payment === 'Paid' ? 'Paid' : 'Balance due',
+          total: `₱${Number(o.total || 0).toLocaleString('en-PH')}`, due: o.due, created: o.created,
+          measurements: 'Real-time from customer profile',
+        }));
+        setRows(mapped);
+      })
+      .catch((e) => setLoadError(e.message));
+  }, []);
+  const stages = ['All stages', ...Array.from(new Set(rows.map((order) => order.stage)))];
+  const orders = useMemo(() => rows.filter((order) => `${order.id} ${order.customer} ${order.garment}`.toLowerCase().includes(query.toLowerCase()) && (filter === 'All stages' || order.stage === filter)), [query, filter, rows]);
+  const total = rows.reduce((sum, order) => sum + Number(String(order.total || '0').replace(/[^0-9]/g, '') || 0), 0);
+  const isNumber = (v: unknown): v is number => typeof v === 'number';
+  const totalStr = isNumber(total) ? total.toLocaleString() : String(total).replace(/[^0-9]/g, '');
+  const openCount = rows.filter((o) => !['Completed', 'Released'].includes(o.stage)).length;
+  const pickupCount = rows.filter((o) => o.stage === 'Ready for Pickup').length;
+  const completedCount = rows.filter((o) => o.stage === 'Completed' || o.stage === 'Released').length;
 
   return (
     <div className="space-y-7" style={{ color: COLORS.ink }}>
@@ -44,18 +67,19 @@ export function AdminOrdersView({ externalQuery = '' }: { externalQuery?: string
         description="Every ticket on the workroom board — cut, stitched, fitted, and settled."
         action={
           <div className="border px-4 py-3" style={{ borderColor: COLORS.border, background: COLORS.surface, borderRadius: 10, boxShadow: shadowSm }}>
-            <span className="mono text-xl font-semibold" style={{ color: COLORS.ink }}>₱{total.toLocaleString()}</span>
+            <span className="mono text-xl font-semibold" style={{ color: COLORS.ink }}>₱{typeof total === 'number' ? total.toLocaleString() : totalStr}</span>
             <span className="ml-2 text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: COLORS.muted }}>on the books</span>
           </div>
         }
       />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard delay={0.05} icon={<ClipboardList />} label="Open orders" value={5} tone="neutral" />
-        <StatCard delay={0.09} icon={<CalendarDays />} label="Due this week" value={3} tone="warning" />
-        <StatCard delay={0.13} icon={<PackageCheck />} label="Ready for pickup" value={1} tone="success" />
-        <StatCard delay={0.17} icon={<Shirt />} label="Completed this month" value={12} tone="brass" />
+        <StatCard delay={0.05} icon={<ClipboardList />} label="Open orders" value={openCount} tone="neutral" />
+        <StatCard delay={0.09} icon={<CalendarDays />} label="Ready for pickup" value={pickupCount} tone="warning" />
+        <StatCard delay={0.13} icon={<PackageCheck />} label="Total job cards" value={rows.length} tone="success" />
+        <StatCard delay={0.17} icon={<Shirt />} label="Completed" value={completedCount} tone="brass" />
       </div>
+      {loadError && <p className="text-sm" style={{ color: COLORS.danger }}>{loadError}</p>}
 
       <Card delay={0.2}>
         <div className="flex flex-col gap-4 border-b p-5 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: COLORS.border }}>
