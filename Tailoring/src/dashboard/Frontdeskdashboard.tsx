@@ -117,10 +117,10 @@ const NAV: { label: string; icon: typeof LayoutDashboard; view: ViewKey }[] = [
 // CREATE ORDER MODAL
 // ============================================================
 interface CreateOrderFormData {
+  orderCategory: string;
   customerId: string;
   customerName: string;
   garmentType: string;
-  uniformCategory: string;
   styleDesign: string;
   fabric: string;
   fabricQuantity: string;
@@ -130,11 +130,39 @@ interface CreateOrderFormData {
   assignedTailorId: string;
   depositAmount: string;
   collectDeposit: boolean;
+  depositPaymentMethod: 'Cash' | 'Card' | 'Bank Transfer' | 'GCash' | 'Other';
+  depositReferenceNumber: string;
   referenceImage: string;
 }
 
-const GARMENT_TYPES = ['Barong Tagalog', 'Two-piece Suit', "Women's Coat", 'Evening Gown', 'School Uniform Set', 'Custom garment'];
-const UNIFORM_CATEGORIES = ['Regular University Uniform', 'Departmental Uniform', 'PE Uniform', 'Sports / Intramural Jersey', 'Custom/Bespoke Apparel', 'Not Applicable'];
+// --- ORDER CATEGORY -> GARMENT TYPE cascade -------------------------------
+// The Front Desk picks the Order Category first, then the exact Garment Type
+// within that category. The Garment Type alone drives pricing, measurement
+// requirements, the illustration preview, and the production workflow.
+const ORDER_CATEGORIES: { name: string; garments: string[] }[] = [
+  { name: 'School Uniform', garments: ['Regular Uniform', 'Department Uniform', 'PE Uniform', 'Sports Jersey'] },
+  { name: 'Corporate Uniform', garments: ['Office Uniform', 'Polo Shirt', 'Long Sleeve Uniform', 'Blazer'] },
+  { name: 'Formal Wear', garments: ['Barong Tagalog', 'Two-Piece Suit', 'Three-Piece Suit', "Women's Coat", 'Evening Gown', 'Wedding Gown'] },
+  { name: 'Casual Wear', garments: ['Polo Shirt', 'Long Sleeve', 'Dress', 'Jacket'] },
+  { name: 'Sportswear', garments: ['Sports Jersey', 'Team Uniform', 'Training Uniform'] },
+  { name: 'Custom/Bespoke', garments: ['Custom Shirt', 'Custom Pants', 'Custom Dress', 'Custom Coat', 'Other Custom Garment'] },
+];
+
+const GARMENTS_BY_CATEGORY: Record<string, string[]> = ORDER_CATEGORIES.reduce(
+  (acc, category) => { acc[category.name] = category.garments; return acc; },
+  {} as Record<string, string[]>,
+);
+
+// Flat union of every garment — keeps category-less lookups working.
+const GARMENT_TYPES = Array.from(new Set(ORDER_CATEGORIES.flatMap((c) => c.garments)));
+
+const FALLBACK_PRICES: Record<string, number> = {
+  'Barong Tagalog': 2500, 'Two-Piece Suit': 4800, 'Three-Piece Suit': 5800, 'Blazer': 3200,
+  "Women's Coat": 3500, 'Polo Shirt': 1200, 'Long Sleeve Polo': 1500, 'Dress': 2800,
+  'Evening Gown': 5000, 'Wedding Gown': 8000, 'School Uniform': 1800, 'PE Uniform': 1400,
+  'Sports Jersey': 1300, 'Scrub Suit': 1600, 'Chef Uniform': 1700, 'Corporate Uniform': 2000,
+  'Department Uniform': 1900, 'Custom/Bespoke Apparel': 3000,
+};
 const STYLE_DESIGNS = ['Classic', 'Modern', 'Embroidered', 'Minimalist', 'Traditional', 'Ruffled', 'Fitted', 'Loose fit'];
 
 /** Hand-drawn style SVG illustration for each garment type — shown live in the order form. */
@@ -154,6 +182,9 @@ function GarmentIllustration({ type, className }: { type: string; className?: st
           <circle cx="60" cy="54" r="1.8" fill="#8C6F3E" /><circle cx="60" cy="68" r="1.8" fill="#8C6F3E" /><circle cx="60" cy="82" r="1.8" fill="#8C6F3E" />
         </svg>
       );
+    case 'Two-Piece Suit':
+    case 'Three-Piece Suit':
+    case 'Blazer':
     case 'Two-piece Suit':
       return (
         <svg viewBox="0 0 120 140" className={className} aria-label="Two-piece suit illustration">
@@ -179,6 +210,8 @@ function GarmentIllustration({ type, className }: { type: string; className?: st
           <circle cx="60" cy="88" r="1.8" fill="#A46B48" /><circle cx="60" cy="100" r="1.8" fill="#A46B48" />
         </svg>
       );
+    case 'Dress':
+    case 'Wedding Gown':
     case 'Evening Gown':
       return (
         <svg viewBox="0 0 120 140" className={className} aria-label="Evening gown illustration">
@@ -189,6 +222,15 @@ function GarmentIllustration({ type, className }: { type: string; className?: st
           <path d="M52 84 Q60 88 68 84 M48 100 Q60 106 72 100" stroke="#C9A15C" strokeWidth="1.4" fill="none" strokeLinecap="round" />
         </svg>
       );
+    case 'Polo Shirt':
+    case 'Long Sleeve Polo':
+    case 'School Uniform':
+    case 'PE Uniform':
+    case 'Sports Jersey':
+    case 'Scrub Suit':
+    case 'Chef Uniform':
+    case 'Corporate Uniform':
+    case 'Department Uniform':
     case 'School Uniform Set':
       return (
         <svg viewBox="0 0 120 140" className={className} aria-label="School uniform set illustration">
@@ -225,10 +267,10 @@ function CreateOrderModal({
   orders: Order[];
 }) {
   const [form, setForm] = useState<CreateOrderFormData>({
+    orderCategory: '',
     customerId: '',
     customerName: '',
     garmentType: GARMENT_TYPES[0],
-    uniformCategory: UNIFORM_CATEGORIES[0],
     styleDesign: '',
     fabric: '',
     fabricQuantity: '',
@@ -238,6 +280,8 @@ function CreateOrderModal({
     assignedTailorId: '',
     depositAmount: '',
     collectDeposit: true,
+    depositPaymentMethod: 'Cash',
+    depositReferenceNumber: '',
     referenceImage: '',
   });
   const [error, setError] = useState('');
@@ -270,7 +314,6 @@ function CreateOrderModal({
     try {
       const result = await frontDeskApi.calculatePrice({
         garmentType: form.garmentType,
-        uniformCategory: form.uniformCategory,
         fabric: form.fabric || 'Standard',
         fabricQuantity: parseFloat(form.fabricQuantity) || 0,
         quantity: form.quantity || 1,
@@ -281,11 +324,7 @@ function CreateOrderModal({
     } catch (err) {
       console.error('Price calculation failed:', err);
       // Fallback calculation
-      const basePrice = form.garmentType === 'Barong Tagalog' ? 2500 :
-                        form.garmentType === 'Two-piece Suit' ? 4800 :
-                        form.garmentType === "Women's Coat" ? 3500 :
-                        form.garmentType === 'Evening Gown' ? 5000 :
-                        form.garmentType === 'School Uniform Set' ? 1800 : 3000;
+      const basePrice = FALLBACK_PRICES[form.garmentType] || 3000;
       const total = basePrice * (form.quantity || 1);
       setPriceCalculation({
         laborCost: total * 0.6,
@@ -328,8 +367,8 @@ function CreateOrderModal({
       setError('Please select a customer.');
       return;
     }
-    if (unpaidOrders.length) {
-      setError(`This customer still owes ${formatPeso(unsettledTotal)} on ${unpaidOrders.length} earlier job card${unpaidOrders.length === 1 ? '' : 's'}. Settle it in the Payments desk before creating a new order.`);
+    if (!form.orderCategory) {
+      setError('Please select an order category.');
       return;
     }
     if (!form.garmentType) {
@@ -412,7 +451,7 @@ function CreateOrderModal({
               )}
               {unpaidOrders.length > 0 && (
                 <div className="mt-3 rounded-lg border border-[#ECD8A7] bg-[#FFF7E3] p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8A6618]">Unsettled balance — new order blocked</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8A6618]">Unsettled balance — review before creating a new draft</p>
                   <ul className="mt-2 space-y-1">
                     {unpaidOrders.map(o => (
                       <li key={o.order_id} className="flex items-center justify-between gap-3 text-[12px] text-[#8A6618]">
@@ -422,14 +461,27 @@ function CreateOrderModal({
                     ))}
                   </ul>
                   <p className="mt-2 text-[11px] leading-relaxed text-[#8A6618]">
-                    Total outstanding: <span className="font-bold">₱{unsettledTotal.toLocaleString()}</span>. Settle it in the Payments desk before creating a new job card for this customer.
+                    Total outstanding: <span className="font-bold">₱{unsettledTotal.toLocaleString()}</span>. The customer may still place a new walk-in order; use the Payments desk to collect or review the earlier balance.
                   </p>
                 </div>
               )}
             </div>
 
-            {/* Garment Details */}
+            {/* Order Classification — Category first, then Garment Type */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+              <div>
+                <label className="block mb-1.5"><MonoLabel>Order category</MonoLabel></label>
+                <select
+                  value={form.orderCategory}
+                  onChange={(e) => setForm(f => {
+                    const list = GARMENTS_BY_CATEGORY[e.target.value] || GARMENT_TYPES;
+                    return { ...f, orderCategory: e.target.value, garmentType: list.includes(f.garmentType) ? f.garmentType : list[0] };
+                  })}
+                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+                >
+                  {ORDER_CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
               <div>
                 <label className="block mb-1.5"><MonoLabel>Garment type</MonoLabel></label>
                 <select
@@ -437,19 +489,10 @@ function CreateOrderModal({
                   onChange={(e) => setForm(f => ({ ...f, garmentType: e.target.value }))}
                   className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
                 >
-                  {GARMENT_TYPES.map(g => <option key={g} value={g}>{g}</option>)}
+                  {(GARMENTS_BY_CATEGORY[form.orderCategory] || GARMENT_TYPES).map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="block mb-1.5"><MonoLabel>Uniform category</MonoLabel></label>
-                <select
-                  value={form.uniformCategory}
-                  onChange={(e) => setForm(f => ({ ...f, uniformCategory: e.target.value }))}
-                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-                >
-                  {UNIFORM_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
+              
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
@@ -521,13 +564,13 @@ function CreateOrderModal({
                 />
               </div>
               <div>
-                <label className="block mb-1.5"><MonoLabel>Assigned tailor (optional)</MonoLabel></label>
+                <label className="block mb-1.5"><MonoLabel>Preferred tailor (confirmed at handoff)</MonoLabel></label>
                 <select
                   value={form.assignedTailorId}
                   onChange={(e) => setForm(f => ({ ...f, assignedTailorId: e.target.value }))}
                   className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
                 >
-                  <option value="">Auto-assign / not selected</option>
+                  <option value="">Select at production handoff</option>
                   {tailorOptions.map((t) => (
                     <option key={t.id} value={String(t.id)}>{t.full_name}{t.position ? ` — ${t.position}` : ''}</option>
                   ))}
@@ -549,7 +592,7 @@ function CreateOrderModal({
               />
             </div>
 
-            {/* Garment preview — follows the selected type & category */}
+            {/* Garment preview — follows the selected garment type */}
             <div>
               <label className="block mb-1.5"><MonoLabel>Garment preview</MonoLabel></label>
               <div className="flex items-center gap-4 rounded-xl border border-[#E2D7C7] bg-gradient-to-br from-[#F8F3EB] to-[#FFFCF8] p-4">
@@ -558,9 +601,8 @@ function CreateOrderModal({
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{form.garmentType}</p>
-                  <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em] text-[#8C7E74]" style={{ fontFamily: "'Space Mono', monospace" }}>{form.uniformCategory}</p>
                   <p className="mt-2 text-[11px] leading-relaxed text-[#766A62]">
-                    The illustration follows the garment type. The category records the order's purpose — a school uniform program vs a bespoke piece.
+                    The illustration follows the selected garment type. Pricing, measurement requirements, and the production workflow all follow it.
                   </p>
                 </div>
               </div>
@@ -613,6 +655,10 @@ function CreateOrderModal({
                       className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
                     />
                   </div>
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="block"><MonoLabel>Payment method</MonoLabel><select value={form.depositPaymentMethod} onChange={(e) => setForm(f => ({ ...f, depositPaymentMethod: e.target.value as CreateOrderFormData['depositPaymentMethod'] }))} className="mt-1.5 w-full border-b border-[#E2D7C7] bg-transparent py-2.5 text-[14px] text-[#2A211D] outline-none"><option>Cash</option><option>GCash</option><option>Card</option><option>Bank Transfer</option><option>Other</option></select></label>
+                    <label className="block"><MonoLabel>Reference no. (optional)</MonoLabel><input value={form.depositReferenceNumber} onChange={(e) => setForm(f => ({ ...f, depositReferenceNumber: e.target.value }))} placeholder="GCash, card, or bank ref." className="mt-1.5 w-full border-b border-[#E2D7C7] bg-transparent py-2.5 text-[14px] text-[#2A211D] outline-none" /></label>
+                  </div>
                   <p className="text-[11px] text-[#A3958B] mt-2">
                     Enter the amount collected now. It will be saved as the initial payment for this new job card. Suggested deposit: {formatPeso(depositRequired)} · Balance after deposit: {formatPeso(remainingBalance)}
                   </p>
@@ -631,11 +677,10 @@ function CreateOrderModal({
               </button>
               <button
                 type="submit"
-                disabled={saving || unpaidOrders.length > 0}
-                title={unpaidOrders.length ? 'Settle the outstanding balance first' : undefined}
+                disabled={saving}
                 className="flex-1 px-4 py-3 rounded-lg bg-[#2A211D] text-[#FAF7F2] text-[11px] font-semibold tracking-[0.14em] uppercase hover:bg-[#3D312B] transition-colors shadow-md disabled:opacity-50"
               >
-                {unpaidOrders.length ? 'Balance must be settled first' : saving ? 'Creating...' : 'Create Order'}
+                {saving ? 'Creating...' : 'Create Intake Draft'}
               </button>
             </div>
           </form>
@@ -654,6 +699,7 @@ interface RecordPaymentFormData {
   amount: string;
   paymentType: 'Deposit' | 'Final Payment' | 'Partial';
   paymentMethod: 'Cash' | 'Card' | 'Bank Transfer' | 'GCash' | 'Other';
+  referenceNumber: string;
   notes: string;
 }
 
@@ -672,6 +718,7 @@ function RecordPaymentModal({
     amount: '',
     paymentType: 'Deposit',
     paymentMethod: 'Cash',
+    referenceNumber: '',
     notes: '',
   });
   const [error, setError] = useState('');
@@ -731,6 +778,7 @@ function RecordPaymentModal({
         amount: amountNum,
         paymentType: form.paymentType,
         paymentMethod: form.paymentMethod,
+        referenceNumber: form.referenceNumber,
         notes: form.notes,
       });
       onClose();
@@ -867,6 +915,16 @@ function RecordPaymentModal({
             </div>
 
             <div>
+              <label className="block mb-1.5"><MonoLabel>Reference number (optional)</MonoLabel></label>
+              <input
+                value={form.referenceNumber}
+                onChange={(e) => setForm(f => ({ ...f, referenceNumber: e.target.value }))}
+                placeholder="GCash, bank, card, or other reference"
+                className="w-full border-b border-[#E2D7C7] bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
+              />
+            </div>
+
+            <div>
               <label className="block mb-1.5"><MonoLabel>Notes (optional)</MonoLabel></label>
               <input
                 value={form.notes}
@@ -949,11 +1007,12 @@ function ScheduleFittingModal({
   // The fitting stage is decided automatically — never by the user.
   const activeVisit = useMemo(() => findActiveAppointmentForJob(appointments, form.orderId), [appointments, form.orderId]);
   const plannedType = useMemo(() => {
-    // Fresh booking (no job order attached yet): the first visit on the
-    // journey is always a Consultation.
-    if (!form.orderId) return 'Consultation';
+    // Walk-in measuring is completed at intake; the first bookable visit is
+    // a First Fitting. Rescheduling an active visit must retain its type.
+    if (!form.orderId) return 'First Fitting';
+    if (activeVisit) return activeVisit.appointment_type;
     return determineStageForJob(appointments, form.orderId);
-  }, [appointments, form.orderId]);
+  }, [appointments, form.orderId, activeVisit]);
 
   // Appointment-type graph: every visit on record grouped by fitting stage.
   const typeChart = useMemo(
@@ -982,7 +1041,7 @@ function ScheduleFittingModal({
     try {
       await onSchedule({
         ...form,
-        appointmentType: plannedType || activeVisit?.appointment_type || 'Consultation',
+        appointmentType: plannedType || activeVisit?.appointment_type || 'First Fitting',
       });
       onClose();
     } catch (err) {
@@ -1012,7 +1071,7 @@ function ScheduleFittingModal({
             ) : (
               <>
                 Next visit for <span className="font-semibold uppercase tracking-[0.08em]">{selectedOrder.job_card_id}</span> is booked automatically as{' '}
-                <span className="font-semibold uppercase tracking-[0.08em]">{plannedType || 'Consultation'}</span>. Just pick a date and time.
+                <span className="font-semibold uppercase tracking-[0.08em]">{plannedType || 'First Fitting'}</span>. Just pick a date and time.
               </>
             )}
           </p>
@@ -1138,6 +1197,23 @@ function DashboardView() {
   // Same display rules as the Appointments page: merge duplicate records
   // (same appointment ID) and keep only the latest active booking per
   // job card + fitting stage.
+  // APPOINTMENT PIPELINE — status counts plus the production visit types the
+  // workshop suggests (First Fitting / Final Fitting / Pickup).
+  const pipeline = useMemo(() => {
+    const isActive = (a: Appointment) => ['Suggested', 'Approved', 'Rescheduled', 'Scheduled', 'Confirmed'].includes(a.status);
+    const count = (fn: (a: Appointment) => boolean) => allAppointments.filter(fn).length;
+    return [
+      { label: 'Suggested', value: count((a) => a.status === 'Suggested') },
+      { label: 'Approved', value: count((a) => a.status === 'Approved' || a.status === 'Confirmed' || a.status === 'Scheduled') },
+      { label: 'Rescheduled', value: count((a) => a.status === 'Rescheduled') },
+      { label: 'Completed', value: count((a) => a.status === 'Completed') },
+      { label: 'Cancelled', value: count((a) => a.status === 'Cancelled') },
+      { label: 'First fitting', value: count((a) => isActive(a) && a.appointment_type === 'First Fitting') },
+      { label: 'Final fitting', value: count((a) => isActive(a) && a.appointment_type === 'Final Fitting') },
+      { label: 'Pickup', value: count((a) => isActive(a) && a.appointment_type === 'Pickup') },
+    ];
+  }, [allAppointments]);
+
   const visibleFittings = useMemo(() => dedupeAppointments(upcomingFittings), [upcomingFittings]);
 
   // Job orders that are already fully paid (zero remaining balance) have no
@@ -1210,7 +1286,7 @@ function DashboardView() {
       const newOrder = await frontDeskApi.createOrder({
         customerId: data.customerId,
         garmentType: data.garmentType,
-        uniformCategory: data.uniformCategory,
+        uniformCategory: data.orderCategory || undefined,
         styleDesign: data.styleDesign,
         fabric: data.fabric,
         fabricQuantity: parseFloat(data.fabricQuantity) || 0,
@@ -1230,8 +1306,9 @@ function DashboardView() {
             orderId: newOrder.order_id,
             amount: depositAmount,
             paymentType: 'Deposit',
-            paymentMethod: 'Cash',
-            notes: 'Initial deposit recorded at front desk',
+            paymentMethod: data.depositPaymentMethod,
+            referenceNumber: data.depositReferenceNumber,
+            notes: 'Initial deposit recorded at Front Desk',
           });
           setBanner('Order created successfully. Deposit payment has been recorded.');
         } else {
@@ -1258,26 +1335,25 @@ function DashboardView() {
   // Same rule as the Appointments page: if the job order already has a live
   // appointment, that SAME record is updated in place (new date/time + next
   // fitting stage) instead of creating a duplicate row.
+  // MANUAL EXCEPTION APPOINTMENT (special follow-ups only). Normal fitting and
+  // pickup visits are suggested automatically by production and approved on the
+  // Appointments page. An existing job card is required; its customer and
+  // assigned tailor come from the card, never from this form.
   const handleScheduleFitting = async (data: ScheduleFittingPayload) => {
-    const existing = findActiveAppointmentForJob(allAppointments, data.orderId);
-    if (existing) {
-      await frontDeskApi.rescheduleAppointment(existing.appointment_id, {
-        appointmentDate: data.appointmentDate,
-        appointmentTime: data.appointmentTime,
-        appointmentType: data.appointmentType,
-      });
-      setBanner(`${existing.customer_name || 'Customer'}'s ${existing.appointment_type} visit moved to ${data.appointmentType} — same appointment updated.`);
-    } else {
-      await frontDeskApi.createAppointment({
-        customerId: data.customerId,
-        orderId: data.orderId,
-        appointmentDate: data.appointmentDate,
-        appointmentTime: data.appointmentTime,
-        appointmentType: data.appointmentType,
-        notes: data.notes,
-      });
-      setBanner('Fitting appointment scheduled successfully.');
-    }
+    const order = orders.find((o) => String(o.order_id) === String(data.orderId))
+      || orders.find((o) => String(o.customer_id) === String(data.customerId));
+    const jobCardNumber = order?.job_card_id || '';
+    if (!jobCardNumber) throw new Error('This customer has no job card yet. An exception visit must belong to an existing job card.');
+    const existing = findActiveAppointmentForJob(allAppointments, jobCardNumber);
+    if (existing) throw new Error(`Job card ${jobCardNumber} already has a live ${existing.appointment_type} visit. Reschedule it from the appointment queue instead.`);
+    const created = await frontDeskApi.createExceptionAppointment({
+      jobCardNumber,
+      appointmentDate: data.appointmentDate,
+      appointmentTime: data.appointmentTime,
+      appointmentType: data.appointmentType,
+      notes: data.notes,
+    });
+    setBanner(`Exception visit scheduled for ${created.customer_name || 'the customer'} (${jobCardNumber}).`);
     loadDashboardData();
     setTimeout(() => setBanner(''), 5000);
   };
@@ -1317,7 +1393,7 @@ function DashboardView() {
         <QuickAction icon={<UserPlus className="w-5 h-5" strokeWidth={1.6} />} label="Register customer" hint="New profile" onClick={() => setActiveModal('customer')} />
         <QuickAction icon={<FilePlus2 className="w-5 h-5" strokeWidth={1.6} />} label="Create order" hint="New job card" helper="Create a new job card and optionally collect the initial deposit." onClick={() => setActiveModal('order')} />
         <QuickAction icon={<Banknote className="w-5 h-5" strokeWidth={1.6} />} label="Record payment" hint="Existing job card" helper="Record additional payments for existing job cards." onClick={() => setActiveModal('payment')} />
-        <QuickAction icon={<CalendarPlus className="w-5 h-5" strokeWidth={1.6} />} label="Schedule fitting" hint="Book appointment" onClick={() => setActiveModal('fitting')} />
+            <QuickAction icon={<CalendarPlus className="w-5 h-5" strokeWidth={1.6} />} label="Manual exception" hint="Special follow-ups" helper="Only for exceptional follow-ups. Normal fitting and pickup visits are suggested automatically by production and approved on the Appointments page." onClick={() => setActiveModal('fitting')} />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1325,6 +1401,25 @@ function DashboardView() {
         <StatCard delay={0.14} label="Customers today" value={`${stats.todayCustomers}`} icon={<Users className="w-4 h-4" strokeWidth={1.6} />} />
         <StatCard delay={0.18} label="Fittings today" value={`${stats.upcomingFittings}`} icon={<CalendarClock className="w-4 h-4" strokeWidth={1.6} />} />
         <StatCard delay={0.22} label="Ready for pickup" value={`${stats.readyForPickup}`} icon={<Package className="w-4 h-4" strokeWidth={1.6} />} tone="warn" />
+      </div>
+
+      {/* APPOINTMENT PIPELINE — production-driven appointment counts. */}
+      <div className="dash-in dash-card rounded-xl p-6" style={{ animationDelay: '0.24s' }}>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <MonoLabel>Appointment pipeline</MonoLabel>
+            <h2 className="text-xl font-normal mt-0.5 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Suggested visits waiting for the counter</h2>
+          </div>
+          <span className="text-[11px] uppercase tracking-[0.14em] text-[#8C7E74]">Approve or reschedule them on the Appointments page</span>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+          {pipeline.map((item) => (
+            <div key={item.label} className="rounded-lg border border-[#E2D7C7] bg-[#FCFAF7] px-3 py-3">
+              <div className="text-2xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{item.value}</div>
+              <MonoLabel>{item.label}</MonoLabel>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-6">
@@ -1425,8 +1520,13 @@ function DashboardView() {
                           setTimeout(() => setBanner(''), 5000);
                           return;
                         }
+                        const releasedToName = window.prompt('Enter the full name of the person receiving this garment:')?.trim();
+                        if (!releasedToName) return;
+                        const releasedToRelation = window.prompt('Relationship to customer (leave blank if the customer is collecting it):')?.trim() || '';
+                        const releaseReference = window.prompt('ID/reference number (optional):')?.trim() || '';
+                        if (!window.confirm(`Release ${order.job_card_id} to ${releasedToName}? This records the pickup acknowledgement.`)) return;
                         try {
-                          await frontDeskApi.releaseOrder(order.order_id);
+                          await frontDeskApi.releaseOrder(order.order_id, { releasedToName, releasedToRelation, releaseReference, releaseAcknowledged: true });
                           setBanner(`${order.job_card_id} released successfully.`);
                           loadDashboardData();
                           setTimeout(() => setBanner(''), 5000);

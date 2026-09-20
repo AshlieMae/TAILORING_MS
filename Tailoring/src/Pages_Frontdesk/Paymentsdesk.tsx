@@ -1,6 +1,6 @@
 // Pages_Frontdesk/Paymentsdesk.tsx
 import { useMemo, useState, useEffect, useCallback } from 'react';
-import { Banknote, Check, ChevronRight, Plus, Search, X, Loader2, Printer, Package } from 'lucide-react';
+import { Banknote, Check, ChevronRight, Plus, Search, X, Loader2, Printer, Package, Ban } from 'lucide-react';
 import frontDeskApi, { type Payment, type Order } from '../../services/frontDeskApi';
 
 function Label({ children }: { children: React.ReactNode }) {
@@ -18,7 +18,7 @@ function Badge({ status }: { status: string }) {
   );
 }
 
-function PaymentDetails({ payment, orders, onClose, onPay, onPrint }: { payment: Payment; orders: Order[]; onClose: () => void; onPay: (data: any) => Promise<void>; onPrint?: (p: Payment) => Promise<void> }) {
+function PaymentDetails({ payment, orders, onClose, onPay, onPrint, onVoid }: { payment: Payment; orders: Order[]; onClose: () => void; onPay: (data: any) => Promise<void>; onPrint?: (p: Payment) => Promise<void>; onVoid: (p: Payment, reason: string) => Promise<void> }) {
   // The job order behind this receipt — gives us the live balance.
   const order = orders.find((o) => o.job_card_id === payment.job_card_id);
   const balance = order ? Number(order.remaining_balance) : 0;
@@ -26,6 +26,8 @@ function PaymentDetails({ payment, orders, onClose, onPay, onPrint }: { payment:
   const [method, setMethod] = useState<'Cash' | 'Card' | 'Bank Transfer' | 'GCash' | 'Other'>('Cash');
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState('');
+  const [voidReason, setVoidReason] = useState('');
+  const [voiding, setVoiding] = useState(false);
 
   async function handlePay() {
     const amt = Number(amount || balance);
@@ -85,6 +87,15 @@ function PaymentDetails({ payment, orders, onClose, onPay, onPrint }: { payment:
           <Badge status={payment.payment_type === 'Final Payment' ? 'Fully Paid' : 'Paid'} />
           <span className="text-xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{peso(payment.amount)}</span>
         </div>
+        {payment.voided_at ? (
+          <p className="mt-4 rounded-lg border border-[#E6C8C2] bg-[#FDF0ED] px-4 py-3 text-sm text-[#9E5B4B]">Voided on {new Date(payment.voided_at).toLocaleString()}. This payment is excluded from the order balance.</p>
+        ) : (
+          <div className="mt-5 rounded-lg border border-[#E6C8C2] bg-[#FDF0ED] p-4">
+            <Label>Void payment</Label>
+            <p className="mt-1 text-[12px] text-[#9E5B4B]">Voiding keeps this receipt in the audit trail and restores its amount to the job-card balance.</p>
+            <div className="mt-3 flex gap-2"><input value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Required void reason" className="min-w-0 flex-1 rounded-lg border border-[#E2D7C7] bg-white px-3 py-2 text-sm outline-none focus:border-[#A46B48]" /><button disabled={voiding || !voidReason.trim()} onClick={async () => { setVoiding(true); try { await onVoid(payment, voidReason); onClose(); } catch (err) { setError(err instanceof Error ? err.message : 'Unable to void payment.'); setVoiding(false); } }} className="inline-flex items-center gap-1 rounded-lg border border-[#C86A58]/40 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#9A3B2A] disabled:opacity-50"><Ban className="h-3.5 w-3.5" />{voiding ? 'Voiding…' : 'Void'}</button></div>
+          </div>
+        )}
 
         {/* Pay-the-order action */}
         {order && balance > 0 && (
@@ -243,6 +254,7 @@ interface RecordPaymentFormData {
   amount: string;
   paymentType: 'Deposit' | 'Final Payment' | 'Partial';
   paymentMethod: 'Cash' | 'Card' | 'Bank Transfer' | 'GCash' | 'Other';
+  referenceNumber: string;
   notes: string;
 }
 
@@ -261,6 +273,7 @@ function RecordPaymentModal({
     amount: '',
     paymentType: 'Deposit',
     paymentMethod: 'Cash',
+    referenceNumber: '',
     notes: '',
   });
   const [error, setError] = useState('');
@@ -303,6 +316,7 @@ function RecordPaymentModal({
         amount: amountNum,
         paymentType: form.paymentType,
         paymentMethod: form.paymentMethod,
+        referenceNumber: form.referenceNumber,
         notes: form.notes,
       });
       onClose();
@@ -338,6 +352,11 @@ function RecordPaymentModal({
                 {error}
               </div>
             )}
+
+            <div>
+              <label className="block mb-1.5"><Label>Reference number <span className="normal-case tracking-normal text-[#A3958B]">(for GCash, bank, card, or other)</span></Label></label>
+              <input value={form.referenceNumber} onChange={(e) => setForm(f => ({ ...f, referenceNumber: e.target.value }))} placeholder="Transaction or authorization number" className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]" />
+            </div>
 
             <div>
               <label className="block mb-1.5"><Label>Existing job card</Label></label>
@@ -473,6 +492,7 @@ export function FrontDeskPaymentsView() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [query, setQuery] = useState('');
+  const [receiptQuery, setReceiptQuery] = useState('');
   const [selected, setSelected] = useState<Payment | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [recordOpen, setRecordOpen] = useState(false);
@@ -526,7 +546,25 @@ export function FrontDeskPaymentsView() {
       );
   }, [orders, query]);
 
-  const collected = payments.reduce((total, p) => total + p.amount, 0);
+  const activePayments = payments.filter((p) => !p.voided_at);
+  const collected = activePayments.reduce((total, p) => total + Number(p.amount || 0), 0);
+
+  // Receipt history search — find any recorded payment directly by receipt
+    // number, job card, customer, payment method, or cashier, then open its
+    // printable receipt (reprint) straight from the stored record.
+    const receiptRows = useMemo(() => {
+      const q = receiptQuery.trim().toLowerCase();
+      return payments
+        .filter((p) =>
+          !q ||
+          p.receipt_number.toLowerCase().includes(q) ||
+          p.job_card_id.toLowerCase().includes(q) ||
+          (p.customer_name || '').toLowerCase().includes(q) ||
+          (p.payment_method || '').toLowerCase().includes(q) ||
+          (p.recorded_by_name || '').toLowerCase().includes(q)
+        )
+        .slice(0, 8);
+    }, [payments, receiptQuery]);
 
   const handleRecordPayment = async (data: any) => {
     const newPayment = await frontDeskApi.recordPayment(data);
@@ -542,6 +580,13 @@ export function FrontDeskPaymentsView() {
     setSelected(null);
     setSelectedOrder(null);
     setNotice(`Payment of ${peso(newPayment.amount)} recorded for ${newPayment.job_card_id}.`);
+    setTimeout(() => setNotice(''), 4000);
+    await loadData();
+  };
+
+  const handleVoidPayment = async (payment: Payment, reason: string) => {
+    const result = await frontDeskApi.voidPayment(payment.payment_id, reason);
+    setNotice(result.message || `Receipt ${payment.receipt_number} was voided.`);
     setTimeout(() => setNotice(''), 4000);
     await loadData();
   };
@@ -588,7 +633,7 @@ export function FrontDeskPaymentsView() {
 
       <div className="dash-in grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Metric label="Total collected" value={peso(collected)} />
-        <Metric label="Transactions" value={payments.length.toString()} />
+        <Metric label="Transactions" value={activePayments.length.toString()} />
         <Metric label="Orders with balance" value={orders.filter(o => o.remaining_balance > 0).length.toString()} tone={orders.some(o => o.remaining_balance > 0) ? 'warn' : 'default'} />
       </div>
 
@@ -619,7 +664,34 @@ export function FrontDeskPaymentsView() {
         {!orderRows.length && <p className="p-12 text-center text-sm text-[#766A62]">No orders match your search.</p>}
       </section>
 
-      {selected && <PaymentDetails payment={selected} orders={orders} onClose={() => setSelected(null)} onPay={handleQuickPay} onPrint={handlePrintReceipt} />}
+      <section className="dash-card overflow-hidden rounded-xl">
+        <div className="flex flex-col gap-4 border-b border-[#E8DFD3] p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Label>Receipt history</Label>
+            <p className="mt-1 text-xs text-[#8C7E74]">Search recorded receipts to view or reprint them.</p>
+          </div>
+          <div className="relative max-w-md flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A3958B]" />
+            <input value={receiptQuery} onChange={(event) => setReceiptQuery(event.target.value)} placeholder="Search receipt no., job card, customer, cashier" className="w-full rounded-lg border border-[#E2D7C7] bg-white py-2.5 pl-10 pr-3 text-sm outline-none focus:border-[#A46B48]" />
+          </div>
+        </div>
+        <div className="hidden grid-cols-[0.9fr_1fr_0.8fr_1fr_0.7fr_24px] gap-4 border-b border-[#E8DFD3] bg-[#FCFAF7] px-6 py-3 md:grid">
+          {['Receipt no.', 'Date & time', 'Job card', 'Customer', 'Amount', ''].map((label) => <Label key={label}>{label}</Label>)}
+        </div>
+        {receiptRows.map((p) => (
+          <button key={p.payment_id} onClick={() => handlePrintReceipt(p)} className="grid w-full grid-cols-2 gap-2 border-b border-[#F0EAE2] px-6 py-4 text-left hover:bg-[#FCFAF7] md:grid-cols-[0.9fr_1fr_0.8fr_1fr_0.7fr_24px] md:items-center md:gap-4">
+            <span className="text-[12px] text-[#8C6F3E]" style={{ fontFamily: "'Space Mono', monospace" }}>{p.receipt_number}</span>
+            <span className="text-[12px] text-[#5E5048]">{new Date(p.payment_date).toLocaleString()}</span>
+            <span className="text-[12px] text-[#8C6F3E]" style={{ fontFamily: "'Space Mono', monospace" }}>{p.job_card_id}</span>
+            <span className="truncate text-sm text-[#2A211D]">{p.customer_name}</span>
+            <span className="text-sm font-semibold text-[#2A211D]">{p.voided_at ? <span className="text-[#9A3B2A]">Voided</span> : peso(p.amount)}</span>
+            <Printer className="hidden h-4 w-4 text-[#A46B48] md:block" />
+          </button>
+        ))}
+        {!receiptRows.length && <p className="p-12 text-center text-sm text-[#766A62]">No receipts match your search.</p>}
+      </section>
+
+      {selected && <PaymentDetails payment={selected} orders={orders} onClose={() => setSelected(null)} onPay={handleQuickPay} onPrint={handlePrintReceipt} onVoid={handleVoidPayment} />}
       {selectedOrder && (
         <OrderDetails
           order={selectedOrder}
@@ -648,6 +720,18 @@ function Metric({ label, value, tone = 'default' }: { label: string; value: stri
 // Printable receipt rendered from the payment record.
 function ReceiptModal({ receipt, onClose }: { receipt: { receiptNumber: string; receiptData: any }; onClose: () => void }) {
   const d = receipt.receiptData || {};
+  // Opens the receipt in a print window; choosing "Save as PDF" as the
+  // destination exports it as a PDF named after the receipt number.
+  const openReceiptWindow = () => {
+    const el = document.getElementById('printable-receipt');
+    if (!el) return;
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(`<html><head><title>Receipt ${d.receiptNumber || ''}</title><style>body{font-family:sans-serif;max-width:420px;margin:24px auto;padding:16px}table{width:100%;border-collapse:collapse}td{padding:6px 4px}h2{margin:0}.dashed{border-top:2px dashed #999;margin:10px 0}</style></head><body>${el.outerHTML}</body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <button onClick={onClose} aria-label="Close receipt" className="absolute inset-0 bg-[#1F1916]/45 backdrop-blur-sm" />
@@ -677,10 +761,20 @@ function ReceiptModal({ receipt, onClose }: { receipt: { receiptNumber: string; 
             <span className="text-[#5E5048]">Job card</span>
             <span className="mono text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{d.jobCardId}</span>
           </div>
+          {d.referenceNumber ? (
+            <div className="flex items-center justify-between text-[13px] mt-1">
+              <span className="text-[#5E5048]">Reference no.</span>
+              <span className="mono text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{d.referenceNumber}</span>
+            </div>
+          ) : null}
           <div className="mt-4 border-t-2 border-dashed border-[#E2D7C7] pt-4">
             <div className="flex items-center justify-between text-[13px]">
               <span className="text-[#5E5048]">{d.paymentType || 'Payment'}</span>
               <span className="font-semibold text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{peso(Number(d.amount || 0))}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[13px]">
+              <span className="text-[#5E5048]">Previous balance</span>
+              <span className="text-[#2A211D]">{peso(Number(d.previousBalance || 0))}</span>
             </div>
             <div className="mt-1 flex items-center justify-between text-[13px]">
               <span className="text-[#5E5048]">Total order</span>
@@ -698,11 +792,14 @@ function ReceiptModal({ receipt, onClose }: { receipt: { receiptNumber: string; 
         </div>
         <div className="flex items-center justify-between gap-2 border-t border-[#E8DFD3] px-6 py-4">
           <button onClick={onClose} className="rounded-lg border border-[#E2D7C7] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048]">Close</button>
-          <button
-            onClick={() => { const el = document.getElementById('printable-receipt'); if (el) { const w = window.open('', '_blank'); if (w) { w.document.write(`<html><head><title>Receipt ${d.receiptNumber || ''}</title><style>body{font-family:sans-serif;max-width:420px;margin:24px auto;padding:16px}table{width:100%;border-collapse:collapse}td{padding:6px 4px}h2{margin:0}.dashed{border-top:2px dashed #999;margin:10px 0}</style></head><body>${el.outerHTML}</body></html>`); w.document.close(); w.focus(); w.print(); } } }}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#2A211D] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
-            <Printer className="h-4 w-4" /> Print
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={openReceiptWindow} className="inline-flex items-center gap-2 rounded-lg border border-[#E2D7C7] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048] hover:bg-[#F8F3EB]">
+              <Printer className="h-4 w-4" /> Print
+            </button>
+            <button onClick={openReceiptWindow} title="Choose 'Save as PDF' as the destination in the print dialog to export the receipt as PDF" className="inline-flex items-center gap-2 rounded-lg bg-[#2A211D] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">
+              <Printer className="h-4 w-4" /> Save PDF
+            </button>
+          </div>
         </div>
       </section>
     </div>

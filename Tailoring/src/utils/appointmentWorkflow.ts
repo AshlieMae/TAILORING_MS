@@ -20,14 +20,16 @@ import type { Appointment } from '../../services/frontDeskApi';
 import { ACTIVE_APPOINTMENT_STATUSES, appointmentTimestamp } from './appointmentDisplay';
 
 /** The fixed fitting journey every job order walks through, in order. */
-export const FITTING_JOURNEY = ['Consultation', 'First Fitting', 'Final Fitting', 'Pickup'] as const;
+export const FITTING_JOURNEY = ['First Fitting', 'Final Fitting', 'Pickup'] as const;
 export type FittingStage = (typeof FITTING_JOURNEY)[number];
 
 /** Terminal state reached after the Pickup visit is completed. */
 export const JOURNEY_COMPLETE = 'Completed';
 
 /** Business rule: a brand-new job order always starts here. */
-export const FIRST_VISIT_STAGE: FittingStage = 'Consultation';
+// Walk-in measurements happen during counter intake, so appointments begin at
+// the first fitting rather than a separate consultation visit.
+export const FIRST_VISIT_STAGE: FittingStage = 'First Fitting';
 
 /**
  * Stage that follows the given one.

@@ -16,11 +16,17 @@
 
 import type { Appointment } from '../../services/frontDeskApi';
 
-/** Statuses that represent a live/upcoming booking rather than finished history. */
+/**
+ * Statuses that represent a live/upcoming booking rather than finished history.
+ * `Suggested` counts as live because it already holds the tailor's slot until
+ * the Front Desk approves, reschedules or cancels it.
+ */
 export const ACTIVE_APPOINTMENT_STATUSES: ReadonlySet<string> = new Set([
+  'Suggested',
+  'Approved',
+  'Rescheduled',
   'Scheduled',
   'Confirmed',
-  'Rescheduled',
 ]);
 
 /** Parse an appointment's date + time into a comparable timestamp (ms). */
@@ -88,7 +94,6 @@ export function dedupeAppointments(list: Appointment[]): Appointment[] {
 
 /** Tailwind class tokens for the fitting-stage chip, keyed by appointment type. */
 export const STAGE_BADGE_STYLES: Record<string, { border: string; bg: string; text: string; dot: string }> = {
-  Consultation: { border: 'border-[#E3CFA3]', bg: 'bg-[#FBF3DF]', text: 'text-[#8A6618]', dot: 'bg-[#C9A15C]' },
   'First Fitting': { border: 'border-[#E4C1AC]', bg: 'bg-[#FAEBE2]', text: 'text-[#9E5B4B]', dot: 'bg-[#A46B48]' },
   'Second Fitting': { border: 'border-[#E0CBB0]', bg: 'bg-[#F7EEE0]', text: 'text-[#8A6618]', dot: 'bg-[#B89255]' },
   'Final Fitting': { border: 'border-[#D9CBA6]', bg: 'bg-[#F5EFDE]', text: 'text-[#6E5F2E]', dot: 'bg-[#8C6F3E]' },

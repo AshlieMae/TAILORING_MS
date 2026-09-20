@@ -177,11 +177,21 @@ function StageTracker({ stageIndex, compact = false }: { stageIndex: number; com
   );
 }
 
-const TAILOR = { name: 'Delfin Ortega', role: 'Master Tailor' };
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// No placeholder identity: the signed-in tailor's real record is loaded from
+// /api/auth/me (and cached in storage), so the UI never shows a fictional name.
+const UNKNOWN_TAILOR = 'Tailor';
 
 function authToken() {
   return localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '';
+}
+
+// Job-card deadlines come back as SQL dates; render them short and human.
+function formatDueDate(value: unknown) {
+  if (!value) return '—';
+  const d = new Date(String(value));
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 }
 
 function LiveDateTime() {
@@ -214,9 +224,11 @@ interface JobCard {
   fabric: string;
   stageIndex: number;
   due: string;
-  measurements: { label: string; value: string }[];
   fabricUsed: string;
 }
+// Measurement snapshots are per-job-card detail (label/value pairs) and are
+// fetched lazily from the job card endpoint the first time a card is opened.
+type MeasurementSnapshot = { label: string; value: string }[];
 
 const FITTINGS_TODAY: { time: string; customer: string; garment: string; jobCardId: string }[] = [];
 
@@ -372,11 +384,61 @@ function UpdateStageModal({
   const [stageIndex, setStageIndex] = useState(card.stageIndex);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // Quality-control checklist (recorded via /quality-control before the stage
+  // can move to Completed / Ready for Pickup — enforced by the server gate).
+  const [qc, setQc] = useState({ measurementsVerified: false, stitchingChecked: false, fabricQualityChecked: false, requirementsCompleted: false, cleanedPressed: false, reworkNotes: '' });
+  const [qcSaving, setQcSaving] = useState(false);
+  const QC_FIELDS: { key: 'measurementsVerified' | 'stitchingChecked' | 'fabricQualityChecked' | 'requirementsCompleted' | 'cleanedPressed'; label: string }[] = [
+    { key: 'measurementsVerified', label: 'Measurements verified against the job card' },
+    { key: 'stitchingChecked', label: 'Stitching checked (seams secure, no skipped stitches)' },
+    { key: 'fabricQualityChecked', label: 'Fabric quality checked (no flaws or stains)' },
+    { key: 'requirementsCompleted', label: 'All customer requirements completed' },
+    { key: 'cleanedPressed', label: 'Garment cleaned and pressed' },
+  ];
+  const qcRequired = stageIndex >= STAGES.indexOf('Quality Review');
+  const allChecked = QC_FIELDS.every((f) => qc[f.key]);
+
+  const saveQc = async (): Promise<boolean> => {
+    setQcSaving(true);
+    try {
+      const response = await fetch(`${API_URL}/tailor/job-cards/${encodeURIComponent(card.id)}/quality-control`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+        body: JSON.stringify({ ...qc, result: allChecked ? 'Passed' : 'Returned for Rework' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Unable to record the quality review.');
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to record the quality review.');
+      return false;
+    } finally {
+      setQcSaving(false);
+    }
+  };
 
   const handleSave = async () => {
     setError('');
     setSaving(true);
     try {
+      if (qcRequired && !allChecked) {
+        // Record/refresh the review first so the server QC gate sees it; an
+        // incomplete checklist is stored as "Returned for Rework" and the
+        // stage advance to Completed/Ready for Pickup will be rejected.
+        const ok = await saveQc();
+        if (!ok) return;
+      }
+      // Handing off to the Front Desk requires the final inspection sign-off
+      // (part of the server QC gate) — record it automatically.
+      if (STAGES[stageIndex] === 'Ready for Pickup') {
+        const response = await fetch(`${API_URL}/tailor/job-cards/${encodeURIComponent(card.id)}/final-inspection`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+          body: JSON.stringify({}),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.message || 'Unable to record the final inspection sign-off.');
+      }
       await onUpdate(card.id, stageIndex);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to advance stage. Please verify the required steps.');
@@ -472,6 +534,39 @@ function UpdateStageModal({
             </div>
           </div>
         </div>
+
+        {qcRequired && (
+          <div className="mx-7 sm:mx-10 mt-4 border border-[var(--line)] rounded-[3px] bg-[var(--paper-dim)]/60 px-4 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">Quality control checklist</span>
+              <span className={`text-[10px] font-semibold uppercase tracking-[0.12em] ${allChecked ? 'text-[#3F6633]' : 'text-[#96291E]'}`}>
+                {allChecked ? 'Passed' : 'Incomplete — returned for rework'}
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              {QC_FIELDS.map((f) => (
+                <label key={f.key} className="flex items-center gap-2.5 text-[12px] text-[var(--ink)] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={qc[f.key]}
+                    disabled={qcSaving || saving}
+                    onChange={(e) => setQc((p) => ({ ...p, [f.key]: e.target.checked }))}
+                    className="w-3.5 h-3.5 accent-[var(--brass)]"
+                  />
+                  {f.label}
+                </label>
+              ))}
+            </div>
+            <input
+              type="text"
+              value={qc.reworkNotes}
+              disabled={qcSaving || saving}
+              onChange={(e) => setQc((p) => ({ ...p, reworkNotes: e.target.value }))}
+              placeholder="Rework notes (optional)"
+              className="mt-2.5 w-full px-2.5 py-2 text-[12px] bg-[var(--paper)] border border-[var(--line)] rounded-[2px] text-[var(--ink)] placeholder:text-[var(--muted-2)] focus:outline-none focus:border-[var(--brass)]/50"
+            />
+          </div>
+        )}
 
         {error && (
           <div role="alert" className="mx-7 sm:mx-10 mt-2 border border-[var(--pin-soft)]/30 bg-[var(--pin-soft)]/10 px-3 py-2 text-sm text-[#96291E] rounded-[3px]">
@@ -648,6 +743,11 @@ const NAV: { label: string; icon: typeof LayoutDashboard; view: ViewKey }[] = [
 function DashboardView() {
   const [cards, setCards] = useState<JobCard[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
+  // Signed-in tailor (cached from /api/auth/me by the layout) — used for the
+  // greeting so no placeholder name is ever rendered.
+  const [viewer] = useState(() => currentUser());
+  const [snapshots, setSnapshots] = useState<Record<string, MeasurementSnapshot>>({});
+  const [snapshotError, setSnapshotError] = useState('');
   const [stageModalCard, setStageModalCard] = useState<JobCard | null>(null);
   const [fabricModalCard, setFabricModalCard] = useState<JobCard | null>(null);
   const [banner, setBanner] = useState('');
@@ -662,14 +762,25 @@ function DashboardView() {
     let cancelled = false;
     async function loadCards() {
       try {
-        const response = await fetch(`${API_URL}/auth/tailor/dashboard`, {
+        // Canonical tailor API. The list is always scoped server-side to the
+        // signed-in tailor's own assignments (drafts/unclaimed cards excluded).
+        const response = await fetch(`${API_URL}/tailor/job-cards?limit=50&sort=assigned_at&order=desc`, {
           headers: { Authorization: `Bearer ${authToken()}` },
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'Unable to load assigned job cards.');
         if (cancelled) return;
-        setCards(data.orders || []);
-        setExpanded((cur) => cur ?? data.orders?.[0]?.id ?? null);
+        const rows = (data.data || []).map((o: any) => ({
+          id: String(o.jobCardId ?? o.id ?? ''),
+          customer: o.customer || 'Customer',
+          garment: o.garmentType || 'Garment',
+          fabric: o.fabric || '',
+          stageIndex: Number.isFinite(o.stageIndex) ? o.stageIndex : Math.max(0, STAGES.indexOf(o.status)),
+          due: formatDueDate(o.deadline),
+          fabricUsed: o.fabricUsed || '',
+        }));
+        setCards(rows);
+        setExpanded((cur) => cur ?? rows?.[0]?.id ?? null);
       } catch (error) {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Unable to load assigned job cards.');
       } finally {
@@ -740,8 +851,35 @@ function DashboardView() {
     }
   }
 
+  // Load the measurement snapshot for a card the first time it is opened.
+  async function loadSnapshot(jobCardId: string) {
+    if (!jobCardId || snapshots[jobCardId]) return;
+    setSnapshotError('');
+    try {
+      const response = await fetch(`${API_URL}/tailor/job-cards/${encodeURIComponent(jobCardId)}`, {
+        headers: { Authorization: `Bearer ${authToken()}` },
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Unable to load the measurement snapshot.');
+      setSnapshots((prev) => ({ ...prev, [jobCardId]: data.measurementSnapshot || [] }));
+    } catch (error) {
+      setSnapshotError(error instanceof Error ? error.message : 'Unable to load the measurement snapshot.');
+    }
+  }
+
   const inProgress = cards.filter((c) => c.stageIndex < STAGES.length - 1).length;
-  const dueSoon = cards.filter((c) => c.due === 'Aug 03' || c.due === 'Aug 05').length;
+  // "Due soon" is computed from the live deadlines already on the cards
+  // (today through the next 3 days) instead of hard-coded calendar days.
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const soonLimit = new Date(today); soonLimit.setDate(soonLimit.getDate() + 3);
+  const dueSoon = cards.filter((c) => {
+    if (c.stageIndex >= STAGES.length - 2) return false; // Completed / Ready for Pickup
+    const due = new Date(c.due);
+    return !Number.isNaN(due.getTime()) && due >= today && due <= soonLimit;
+  }).length;
+
+  const viewerName = String(viewer?.full_name || '').trim();
+  const greetingName = viewerName ? viewerName.split(/\s+/)[0] : UNKNOWN_TAILOR;
 
   return (
     <div className="space-y-8">
@@ -752,7 +890,7 @@ function DashboardView() {
             <MonoLabel>The pattern table</MonoLabel>
           </div>
           <h1 className="text-2xl sm:text-[32px] leading-tight text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>
-            Good afternoon, {TAILOR.name.split(' ')[0]} — here's what's on the table.
+            Good afternoon, {greetingName} — here's what's on the table.
           </h1>
         </div>
       </div>
@@ -883,6 +1021,7 @@ function DashboardView() {
             )}
             {cards.map((card, i) => {
               const isOpen = expanded === card.id;
+              const snapshot = snapshots[card.id];
               return (
                 <div
                   key={card.id}
@@ -893,7 +1032,11 @@ function DashboardView() {
                   <Notch className="-top-px -right-px rotate-90" />
                   <button
                     type="button"
-                    onClick={() => setExpanded(isOpen ? null : card.id)}
+                    onClick={() => {
+                      const next = isOpen ? null : card.id;
+                      setExpanded(next);
+                      if (next) loadSnapshot(card.id);
+                    }}
                     className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left hover:bg-[var(--paper-dim)]/80 transition-colors"
                   >
                     <div className="flex items-center gap-4 min-w-0">
@@ -922,12 +1065,18 @@ function DashboardView() {
                         <StageTracker stageIndex={card.stageIndex} />
                       </div>
                       <div className="flex flex-wrap gap-x-6 gap-y-3 py-4">
-                        {card.measurements.map((m) => (
-                          <div key={m.label}>
-                            <MonoLabel>{m.label}</MonoLabel>
-                            <div className="text-[14px] text-[var(--ink)]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{m.value}</div>
-                          </div>
-                        ))}
+                        {snapshot === undefined ? (
+                          <p className="text-[12px] text-[var(--muted-2)]">{snapshotError || 'Loading measurements…'}</p>
+                        ) : snapshot.length === 0 ? (
+                          <p className="text-[12px] text-[var(--muted-2)]">No measurement snapshot on file for this job card yet.</p>
+                        ) : (
+                          snapshot.map((m) => (
+                            <div key={m.label}>
+                              <MonoLabel>{m.label}</MonoLabel>
+                              <div className="text-[14px] text-[var(--ink)]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{m.value}</div>
+                            </div>
+                          ))
+                        )}
                       </div>
                       <div className="flex items-center justify-between text-[12px] text-[var(--ink-soft)] mb-4">
                         <span>{card.fabric}</span>
@@ -1164,8 +1313,8 @@ export default function MasterTailorDashboard({ initialView = 'dashboard' }: { i
               {profile?.profile_picture ? <img src={profile.profile_picture} alt="Profile" className="h-full w-full object-cover" /> : <span className="text-[var(--brass-light)] text-xs font-medium">{profile?.full_name?.split(' ').map((name: string) => name[0]).join('').slice(0, 2) || 'MT'}</span>}
             </div>
             <div className="min-w-0 leading-tight">
-              <div className="truncate text-[13px] text-[#EDEAE2]">{profile?.full_name || TAILOR.name}</div>
-              <MonoLabel className="text-[#9C9686]">{profile?.position || TAILOR.role}</MonoLabel>
+              <div className="truncate text-[13px] text-[#EDEAE2]">{profile?.full_name || UNKNOWN_TAILOR}</div>
+              <MonoLabel className="text-[#9C9686]">{profile?.position || UNKNOWN_TAILOR}</MonoLabel>
             </div>
           </button>
           <button onClick={signOut} className="group flex w-full items-center justify-between border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 rounded-[3px] text-[10px] font-semibold tracking-[0.16em] uppercase text-[#B4AF9E] transition-all hover:border-[var(--brass-light)]/50 hover:text-[#EDEAE2]">
@@ -1246,7 +1395,7 @@ function MasterTailorProfileModal({ profile, onClose, onEdit }: { profile: any; 
         <header className="flex items-start justify-between border-b border-[var(--line)] px-6 py-6 sm:px-8">
           <div>
             <MonoLabel>Master Tailor Profile</MonoLabel>
-            <h2 className="mt-1 text-3xl text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>{profile?.full_name || TAILOR.name}</h2>
+            <h2 className="mt-1 text-3xl text-[var(--ink)]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>{profile?.full_name || UNKNOWN_TAILOR}</h2>
           </div>
           <button onClick={onClose} className="p-2 text-[var(--ink-soft)] hover:bg-[var(--paper-dim)] rounded-[2px]"><X className="h-5 w-5" /></button>
         </header>
@@ -1256,8 +1405,8 @@ function MasterTailorProfileModal({ profile, onClose, onEdit }: { profile: any; 
               {profile?.profile_picture ? <img src={profile.profile_picture} alt="Profile" className="h-full w-full object-cover" /> : <User className="m-6 h-8 w-8 text-[var(--brass-deep)]" />}
             </div>
             <div>
-              <div className="text-lg font-medium">{profile?.full_name || TAILOR.name}</div>
-              <p className="text-sm text-[var(--ink-soft)]">{profile?.position || TAILOR.role}</p>
+              <div className="text-lg font-medium">{profile?.full_name || UNKNOWN_TAILOR}</div>
+              <p className="text-sm text-[var(--ink-soft)]">{profile?.position || UNKNOWN_TAILOR}</p>
               <p className="mt-1 text-xs text-[var(--muted)]">{profile?.email || 'No email'}</p>
             </div>
           </div>

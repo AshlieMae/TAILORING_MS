@@ -26,23 +26,27 @@ function Metric({ label, value, tone = 'default' }: { label: string; value: numb
 }
 
 const stageStyle: Record<string, string> = {
+  Draft: 'border-[#ECD8A7] bg-[#FFF7E3] text-[#8A6618]',
   Measuring: 'border-[#D9C8B7] bg-[#F8F3EB] text-[#766A62]',
   'Pattern Cutting': 'border-[#C7DDD3] bg-[#EDF5F0] text-[#4E7357]',
   'Initial Assembly': 'border-[#C7DDD3] bg-[#EDF5F0] text-[#4E7357]',
-  'Ready for First Fitting': 'border-[#ECD8A7] bg-[#FFF7E3] text-[#8A6618]',
+  'First Fitting': 'border-[#ECD8A7] bg-[#FFF7E3] text-[#8A6618]',
   'Final Alterations': 'border-[#E6C8C2] bg-[#FDF0ED] text-[#9E5B4B]',
+  'Quality Review': 'border-[#C7DDD3] bg-[#EDF5F0] text-[#4E7357]',
   Completed: 'border-[#B9DDD0] bg-[#E7F4EE] text-[#277257]',
   'Ready for Pickup': 'border-[#B9DDD0] bg-[#E7F4EE] text-[#277257]',
   Released: 'border-[#B9DDD0] bg-[#E7F4EE] text-[#277257]',
 };
 
-const STAGE_ORDER = ['Measuring', 'Pattern Cutting', 'Initial Assembly', 'Ready for First Fitting', 'Final Alterations', 'Completed', 'Ready for Pickup', 'Released'];
+const STAGE_ORDER = ['Draft', 'Measuring', 'Pattern Cutting', 'Initial Assembly', 'First Fitting', 'Final Alterations', 'Quality Review', 'Completed', 'Ready for Pickup', 'Released'];
 const STAGE_CHART_COLORS: Record<string, string> = {
+  Draft: '#C9A15C',
   Measuring: '#C9BBA6',
   'Pattern Cutting': '#8FAF9E',
   'Initial Assembly': '#8FAF9E',
-  'Ready for First Fitting': '#C9A15C',
+  'First Fitting': '#C9A15C',
   'Final Alterations': '#A8644A',
+  'Quality Review': '#8FAF9E',
   Completed: '#6E8F72',
   'Ready for Pickup': '#6E8F72',
   Released: '#6E8F72',
@@ -105,6 +109,11 @@ function OrderDetails({ order, onClose, onHandoff }: { order: Order; onClose: ()
         </header>
 
         <div className="p-6">
+          {order.production_status === 'Draft' && (
+            <div className="mb-5 rounded-lg border border-[#ECD8A7] bg-[#FFF7E3] px-4 py-3 text-sm text-[#765818]">
+              <strong>Walk-in intake draft.</strong> Record measurements, fabric, due date, tailor, and required deposit before sending this job card to production.
+            </div>
+          )}
           {/* Reference photo preference */}
           {order.reference_image && (
             <div className="mb-5">

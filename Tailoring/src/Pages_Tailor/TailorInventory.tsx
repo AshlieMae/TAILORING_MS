@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { Boxes, Minus, Plus, AlertTriangle, X, PlusCircle, Check } from 'lucide-react';
+import { Boxes, AlertTriangle, Info, RotateCcw } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
   RadialBarChart, RadialBar,
@@ -27,12 +27,10 @@ const CAPACITY = 20;
 type Fabric = { id: number | string; name: string; tone: string; stock: number; unit: string };
 type ChartPayload = { dataKey?: string | number; fill?: string; color?: string; value?: string | number };
 
-const INITIAL: Fabric[] = [
-  { id: 1, name: 'Piña Jusi', tone: 'Ivory', stock: 14, unit: 'yards' },
-  { id: 2, name: 'Italian Wool', tone: 'Charcoal', stock: 8, unit: 'yards' },
-  { id: 3, name: 'Wool Blend', tone: 'Camel', stock: 3, unit: 'yards' },
-  { id: 4, name: 'Polyester', tone: 'Navy', stock: 19, unit: 'yards' },
-];
+/* The shelf is read live from MySQL. There is deliberately NO seeded/demo
+   bolt list: stock levels are owned by Inventory/Admin, and this board is a
+   read-only view for the tailor. If the API cannot be reached the board shows
+   the failure plus a retry — never fictional fabric. */
 
 function toneHex(tone: string) {
   return tone === 'Ivory' ? '#F2E8C9' : tone === 'Charcoal' ? '#43423F' : tone === 'Camel' ? '#AE8259' : '#26364C';
@@ -95,16 +93,17 @@ function SpoolGauge({ stock, low }: { stock: number; low: boolean }) {
 }
 
 export function TailorInventoryView() {
-  const [fabrics, setFabrics] = useState<Fabric[]>(INITIAL);
+  const [fabrics, setFabrics] = useState<Fabric[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [live, setLive] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
-  const [addErr, setAddErr] = useState('');
-  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  // Bumping this re-runs the fetch effect (the "Retry" action on a failure).
+  const [reloadKey, setReloadKey] = useState(0);
 
   const loadInventory = async () => {
     const response = await fetch(`${API_URL}/tailor/inventory`, { headers: { Authorization: `Bearer ${authToken()}` } });
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.message || 'Unable to load inventory.');
     setFabrics((data.inventory || []).map((f: any) => ({ id: f.id, name: f.fabricName, tone: f.tone || '—', stock: f.stockQuantity, unit: f.unit })));
     setLogs(data.logs || []);
@@ -113,47 +112,28 @@ export function TailorInventoryView() {
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setError('');
     loadInventory()
-      .catch(() => { /* demo values remain */ })
-      .finally(() => { if (!cancelled) setLive(false); });
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        // No demo bolts and no silent success: report that the shelf could not
+        // be read and let the tailor retry.
+        setFabrics([]);
+        setLogs([]);
+        setLive(false);
+        setError(e instanceof Error && e.message ? e.message : 'Unable to load fabric inventory.');
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [reloadKey]);
 
-  const adjust = async (id: number | string, delta: number) => {
-    try {
-      const res = await fetch(`${API_URL}/tailor/inventory/adjust`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
-        body: JSON.stringify({ fabricId: Number(id), delta }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Unable to adjust stock.');
-      // Update locally to match the persisted balance immediately.
-      setFabrics((current) => current.map((f) => (Number(f.id) === Number(id) ? { ...f, stock: data.fabric.stockQuantity } : f)));
-      await loadInventory(); // refresh logs + chart so the ledger stays in sync
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : 'Unable to adjust stock.');
-      setTimeout(() => setNotice(''), 4000);
-    }
-  };
+  // Re-read the shelf after a failed load.
+  function retry() {
+    setError('');
+    setReloadKey((k) => k + 1);
+  }
 
-  // Create a new bolt on the shelf (persisted to the backend, then refreshed).
-  const addFabric = async (name: string, tone: string, stock: number, unit: string, unitCost?: number | null) => {
-    setAddErr('');
-    try {
-      const res = await fetch(`${API_URL}/tailor/inventory/fabric`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
-        body: JSON.stringify({ fabricName: name, tone, stockQuantity: stock, unit, unitCost: unitCost != null ? unitCost : null }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Unable to add fabric.');
-      await loadInventory();
-      setShowAdd(false);
-    } catch (e) {
-      setAddErr(e instanceof Error ? e.message : 'Unable to add fabric.');
-    }
-  };
   const record = useMemo(() => logs.slice(0, 8), [logs]);
 
   const withLevel = useMemo(
@@ -171,11 +151,26 @@ export function TailorInventoryView() {
         @media (prefers-reduced-motion: reduce) { .dash-in { opacity: 1; animation: none; } }
       `}</style>
 
-      {notice && (
-        <div className="dash-in flex items-center gap-2 border border-[#8FAE85]/60 bg-[#E4E9DB] px-4 py-3 text-sm text-[#3F6633] rounded-[3px]">
-          <Check className="h-4 w-4 flex-shrink-0" /> {notice}
+      {error && (
+        <div role="alert" className="dash-in flex flex-wrap items-center justify-between gap-3 border border-[#C87965]/40 bg-[#F7E7E1] px-4 py-3 text-sm text-[#9A4936] rounded-[3px]">
+          <span className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" /> <span>{error}</span>
+          </span>
+          <button
+            type="button"
+            onClick={retry}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 border border-[#C87965]/50 bg-white rounded-[2px] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#9A4936] hover:bg-[#F2D9D1] transition-colors disabled:opacity-50"
+          >
+            <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.8} /> Retry
+          </button>
         </div>
       )}
+
+      <div className="dash-in flex items-start gap-2 border border-[#DCD8C7] bg-[#F4F1E6] px-4 py-3 text-sm text-[#55503F] rounded-[3px]">
+        <Info className="h-4 w-4 flex-shrink-0 mt-0.5 text-[#8A846F]" />
+        <span>Read-only shelf. Inventory/Admin add, correct and restock cloth — cutting a job card deducts the fabric automatically, so record usage from the job card.</span>
+      </div>
 
       <header
         className="dash-in flex flex-col justify-between gap-4 border border-[#3A3833] p-6 text-[#F3F1E7] sm:flex-row sm:items-end sm:p-8 rounded-[3px] relative overflow-hidden"
@@ -200,16 +195,11 @@ export function TailorInventoryView() {
           <div className="w-11 h-11 rounded-[3px] border border-[#E4C25E]/40 flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, rgba(228,194,94,0.14), rgba(201,162,39,0.04))' }}>
             <Boxes className="h-5 w-5 text-[#E4C25E]" strokeWidth={1.6} />
           </div>
-          <button
-            onClick={() => { setAddErr(''); setShowAdd(true); }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[3px] border border-[#E4C25E]/50 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#E4C25E] hover:bg-[#E4C25E]/10 transition-colors flex-shrink-0"
-          >
-            <PlusCircle className="h-3.5 w-3.5" strokeWidth={2} /> Add fabric
-          </button>
         </div>
       </header>
 
       {/* ---------------- SHELF OVERVIEW (bar chart) ---------------- */}
+      {withLevel.length > 0 && (
       <section
         className="dash-in border border-[#DCD8C7] bg-[#FBF9F2] p-6 sm:p-8 rounded-[4px] relative overflow-hidden"
         style={{ boxShadow: '0 1px 2px rgba(38,36,32,0.05), 0 14px 30px -16px rgba(38,36,32,0.25)', animationDelay: '0.08s' }}
@@ -240,8 +230,21 @@ export function TailorInventoryView() {
           </ResponsiveContainer>
         </div>
       </section>
+      )}
 
       {/* ---------------- BOLT CARDS ---------------- */}
+      {loading ? (
+        <div className="py-12 text-center text-sm text-[#8A846F]">Loading fabric inventory from the server&hellip;</div>
+      ) : withLevel.length === 0 ? (
+        <div className="border border-[#DCD8C7] bg-[#FBF9F2] p-10 rounded-[4px] text-center">
+          <h2 className="text-xl text-[#262420]" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}>
+            {error ? 'The fabric shelf could not be loaded.' : 'No fabric on the shelf yet.'}
+          </h2>
+          <p className="text-sm text-[#6D6A60] mt-1">
+            {error ? 'Use Retry above to read the shelf again.' : 'Inventory/Admin keeps this shelf — every bolt added there appears here.'}
+          </p>
+        </div>
+      ) : (
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {withLevel.map((fabric, index) => (
           <article
@@ -268,18 +271,13 @@ export function TailorInventoryView() {
               </div>
             </div>
 
-            <div className="mt-4 flex items-center justify-center gap-3 border-t border-[#E8E4D5] pt-4">
-              <button onClick={() => adjust(fabric.id, -1)} aria-label={`Decrease ${fabric.name} stock`} className="border border-[#DCD8C7] p-2 rounded-[2px] text-[#55503F] hover:border-[#A39D8A] hover:bg-[#F4F1E6] transition-colors active:scale-95">
-                <Minus className="h-3 w-3" />
-              </button>
-              <span className="text-[10px] uppercase tracking-[0.12em] text-[#8A846F] w-16 text-center">Adjust</span>
-              <button onClick={() => adjust(fabric.id, 1)} aria-label={`Increase ${fabric.name} stock`} className="border border-[#DCD8C7] p-2 rounded-[2px] text-[#55503F] hover:border-[#A39D8A] hover:bg-[#F4F1E6] transition-colors active:scale-95">
-                <Plus className="h-3 w-3" />
-              </button>
+            <div className="mt-4 border-t border-[#E8E4D5] pt-4 text-center">
+              <span className="text-[10px] uppercase tracking-[0.12em] text-[#8A846F]">Balance set by Inventory / Admin</span>
             </div>
           </article>
         ))}
       </section>
+      )}
 
       {/* ---------------- RECENT STOCK MOVEMENTS ---------------- */}
       {record.length > 0 && (
@@ -313,77 +311,6 @@ export function TailorInventoryView() {
           </div>
         </section>
       )}
-    {showAdd && (
-        <AddFabricModal
-          onClose={() => setShowAdd(false)}
-          onAdd={addFabric}
-          error={addErr}
-        />
-      )}
-    </div>
-  );
-}
-
-function AddFabricModal({ onClose, onAdd, error }: { onClose: () => void; onAdd: (name: string, tone: string, stock: number, unit: string, unitCost?: number | null) => void; error: string }) {
-  const [name, setName] = useState('');
-  const [tone, setTone] = useState('');
-  const [stock, setStock] = useState('20');
-  const [unit, setUnit] = useState('yards');
-  const [unitCost, setUnitCost] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    const qty = Number(stock);
-    if (Number.isNaN(qty) || qty < 0) return;
-    setBusy(true);
-    try {
-      await onAdd(name.trim(), tone.trim(), qty, unit, unitCost !== '' ? Number(unitCost) : null);
-    } catch (caught) {
-      /* parent surfaces the backend error via `error` */
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#211F1C]/60 backdrop-blur-[3px]" onClick={onClose} />
-      <div className="relative w-full max-w-lg border border-[#D8D3C0] rounded-[4px] overflow-hidden" style={{ background: '#FBF9F2', boxShadow: '0 24px 60px -18px rgba(33,31,28,0.5)' }}>
-        <div className="h-[3px] w-full" style={{ background: 'linear-gradient(90deg, #B4842A, #E4C25E 50%, #B4842A)' }} />
-        <div className="flex items-center justify-between px-7 pt-6">
-          <MonoLabel>New bolt on the shelf</MonoLabel>
-          <button onClick={onClose} aria-label="Close" className="text-[#A39D8A] hover:text-[#262420] transition-colors"><X className="h-4 w-4" /></button>
-        </div>
-        <div className="px-7 pb-8 pt-2">
-          <h2 className="text-2xl font-semibold" style={{ fontFamily: "'Fraunces', serif", color: '#262420' }}>Add fabric</h2>
-          <form onSubmit={submit} className="mt-5 space-y-4">
-            {error && <div role="alert" className="border border-[#C87965]/50 bg-[#F7E7E1] px-3 py-2 text-sm text-[#9A4936] rounded-[2px]">{error}</div>}
-            <label className="block text-xs font-medium text-[#6D6A60]">Fabric name
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Linen" className="mt-2 w-full border border-[#DCD8C7] bg-white rounded-[2px] px-3 py-2.5 text-sm text-[#262420] outline-none focus:border-[#9C7D12] transition-colors" />
-            </label>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block text-xs font-medium text-[#6D6A60]">Tone / colour
-                <input value={tone} onChange={(e) => setTone(e.target.value)} placeholder="e.g. Beige" className="mt-2 w-full border border-[#DCD8C7] bg-[#FFF] rounded-[2px] px-3 py-2.5 text-sm outline-none focus:border-[#9C7D12] transition-colors" />
-              </label>
-              <label className="block text-xs font-medium text-[#6D6A60]">Unit
-                <select value={unit} onChange={(e) => setUnit(e.target.value)} className="mt-2 w-full border border-[#DCD8C7] bg-[#FFF] rounded-[2px] px-3 py-2.5 text-sm outline-none"><option value="yards">yards</option><option value="meters">meters</option></select>
-              </label>
-            </div>
-            <label className="block text-xs font-medium text-[#6D6A60]">Initial stock on hand
-              <input type="number" min="0" value={stock} onChange={(e) => setStock(e.target.value)} className="mt-2 w-full border border-[#DCD8C7] bg-[#FFF] rounded-[2px] px-3 py-2.5 text-sm outline-none focus:border-[#9C7D12] transition-colors" />
-            </label>
-            <label className="block text-xs font-medium text-[#6D6A60]">Unit cost per {unit} (₱)
-              <input type="number" min="0" step="0.01" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} placeholder="e.g. 250" className="mt-2 w-full border border-[#DCD8C7] bg-[#FFF] rounded-[2px] px-3 py-2.5 text-sm outline-none focus:border-[#9C7D12] transition-colors" />
-            </label>
-            <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-[3px] border border-[#DCD8C7] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8A846F] hover:text-[#262420] transition-colors">Cancel</button>
-              <button type="submit" disabled={busy} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[3px] bg-[#262420] text-[#F3F1E7] text-[10px] font-semibold uppercase tracking-[0.12em] disabled:opacity-50">{busy ? 'Adding…' : 'Add to shelf'}</button>
-            </div>
-          </form>
-        </div>
-      </div>
     </div>
   );
 }

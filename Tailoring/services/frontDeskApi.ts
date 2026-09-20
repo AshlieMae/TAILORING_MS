@@ -78,7 +78,7 @@ export interface Order {
   deposit_paid: number;
   remaining_balance: number;
   payment_status: 'No Payment' | 'Deposit Paid' | 'Partial' | 'Fully Paid';
-  production_status: 'Measuring' | 'Pattern Cutting' | 'Initial Assembly' | 'Ready for First Fitting' | 'Final Alterations' | 'Completed' | 'Ready for Pickup' | 'Released';
+  production_status: 'Draft' | 'Measuring' | 'Pattern Cutting' | 'Initial Assembly' | 'First Fitting' | 'Final Alterations' | 'Quality Review' | 'Completed' | 'Ready for Pickup' | 'Released';
   measurement_snapshot_id: string;
   order_notes: string;
   created_at: string;
@@ -94,6 +94,8 @@ export interface Payment {
   amount: number;
   payment_type: 'Deposit' | 'Final Payment' | 'Partial';
   payment_method: 'Cash' | 'Card' | 'Bank Transfer' | 'GCash' | 'Other';
+  reference_number?: string | null;
+  voided_at?: string | null;
   receipt_number: string;
   payment_date: string;
   recorded_by: string;
@@ -101,18 +103,46 @@ export interface Payment {
   notes: string;
 }
 
+export type AppointmentStatus =
+  | 'Suggested'
+  | 'Approved'
+  | 'Rescheduled'
+  | 'Completed'
+  | 'Cancelled'
+  // Legacy values retained for historical rows (migrated to 'Approved').
+  | 'Scheduled'
+  | 'Confirmed';
+
+/** Production-driven visit types. Consultation is never bookable (counter intake). */
+export type AppointmentType = 'First Fitting' | 'Second Fitting' | 'Final Fitting' | 'Pickup';
+
 export interface Appointment {
   appointment_id: string;
+  appointment_number?: string;
   customer_id: string;
   customer_name: string;
   order_id: string;
   job_card_id: string;
+  garment?: string;
   appointment_date: string;
   appointment_time: string;
-  appointment_type: 'First Fitting' | 'Final Fitting' | 'Consultation' | 'Pickup';
+  appointment_type: AppointmentType | string;
   notes: string;
-  status: 'Scheduled' | 'Confirmed' | 'Completed' | 'Rescheduled' | 'Cancelled';
+  status: AppointmentStatus;
   created_at: string;
+  // Walk-in workflow: the system suggests, the Front Desk decides.
+  suggested_reason?: string | null;
+  suggested_at?: string | null;
+  generated_from_stage?: string | null;
+  appointment_origin?: 'production' | 'manual_exception';
+  approved_at?: string | null;
+  approved_by_user_id?: number | string | null;
+  rescheduled_at?: string | null;
+  cancelled_at?: string | null;
+  completed_at?: string | null;
+  assigned_tailor_id?: string;
+  assigned_tailor_name?: string;
+  history?: { from_status: string | null; to_status: string; notes: string | null; created_at: string; actor_name: string | null }[];
 }
 
 export interface DailySummary {
@@ -247,7 +277,7 @@ const frontDeskApi = {
   createOrder: async (data: {
     customerId: string;
     garmentType: string;
-    uniformCategory: string;
+    uniformCategory?: string;
     styleDesign: string;
     fabric: string;
     fabricQuantity: number;
@@ -323,6 +353,7 @@ const frontDeskApi = {
     amount: number;
     paymentType: 'Deposit' | 'Final Payment' | 'Partial';
     paymentMethod: 'Cash' | 'Card' | 'Bank Transfer' | 'GCash' | 'Other';
+    referenceNumber?: string;
     notes: string;
   }): Promise<Payment> => {
     const response = await fetch(`${API_URL}/payments`, {
@@ -347,14 +378,44 @@ const frontDeskApi = {
     return handleResponse(response);
   },
 
-  // Appointment endpoints
-  createAppointment: async (data: {
-    customerId: string;
-    orderId: string;
+  voidPayment: async (paymentId: string, reason: string): Promise<{ message: string }> => {
+    const response = await fetch(`${API_URL}/payments/${paymentId}/void`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify({ reason }),
+    });
+    return handleResponse(response);
+  },
+
+  // Appointment endpoints (walk-in, production-driven).
+  // The system SUGGESTS a visit when production reaches a milestone; the Front
+  // Desk decides. Tailors and customers can never create or change a visit.
+  getPendingAppointments: async (): Promise<Appointment[]> => {
+    const response = await fetch(`${API_URL}/appointments/pending`, {
+      headers: { Authorization: `Bearer ${authToken()}` },
+    });
+    return handleResponse(response);
+  },
+
+  // Pending Appointment Approvals -> Approve. Customer, job card, type and
+  // tailor stay exactly as the production record derived them.
+  approveAppointment: async (appointmentId: string, notes = ''): Promise<Appointment> => {
+    const response = await fetch(`${API_URL}/appointments/${appointmentId}/approve`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify({ notes }),
+    });
+    return handleResponse(response);
+  },
+
+  // MANUAL EXCEPTION APPOINTMENT — special follow-ups only. An existing job
+  // card is required; its customer and assigned tailor are derived server-side.
+  createExceptionAppointment: async (data: {
+    jobCardNumber: string;
     appointmentDate: string;
     appointmentTime: string;
     appointmentType: string;
-    notes: string;
+    notes?: string;
   }): Promise<Appointment> => {
     const response = await fetch(`${API_URL}/appointments`, {
       method: 'POST',
@@ -371,28 +432,40 @@ const frontDeskApi = {
     return handleResponse(response);
   },
 
-  getCustomerAppointments: async (customerId: string): Promise<Appointment[]> => {
-    const response = await fetch(`${API_URL}/appointments/customer/${customerId}`, {
+  // View Details — the appointment plus its append-only decision history.
+  getAppointmentDetails: async (appointmentId: string): Promise<Appointment> => {
+    const response = await fetch(`${API_URL}/appointments/${appointmentId}/details`, {
       headers: { Authorization: `Bearer ${authToken()}` },
     });
     return handleResponse(response);
   },
 
-  updateAppointmentStatus: async (appointmentId: string, status: string): Promise<Appointment> => {
-    const response = await fetch(`${API_URL}/appointments/${appointmentId}/status`, {
+  cancelAppointment: async (appointmentId: string, notes = ''): Promise<Appointment> => {
+    const response = await fetch(`${API_URL}/appointments/${appointmentId}/cancel`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ notes }),
     });
     return handleResponse(response);
   },
 
-  // Move an EXISTING appointment to a new date/time/stage instead of creating
-  // a duplicate row for the same job order.
+  // Mark the visit completed once the customer attends the fitting or pickup.
+  completeAppointment: async (appointmentId: string, notes = ''): Promise<Appointment> => {
+    const response = await fetch(`${API_URL}/appointments/${appointmentId}/complete`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify({ notes }),
+    });
+    return handleResponse(response);
+  },
+
+  // Reschedule an EXISTING visit (Suggested/Approved). ONLY the date, time and
+  // notes may change: customer, job card, appointment type and assigned tailor
+  // come from the job card and stay locked.
   rescheduleAppointment: async (appointmentId: string, data: {
     appointmentDate: string;
     appointmentTime: string;
-    appointmentType?: string;
+    notes?: string;
   }): Promise<Appointment> => {
     const response = await fetch(`${API_URL}/appointments/${appointmentId}/reschedule`, {
       method: 'PATCH',
@@ -434,7 +507,7 @@ const frontDeskApi = {
   // Price calculation
   calculatePrice: async (data: {
     garmentType: string;
-    uniformCategory: string;
+    uniformCategory?: string;
     fabric: string;
     fabricQuantity: number;
     quantity: number;
@@ -450,10 +523,11 @@ const frontDeskApi = {
   },
 
     // Release order
-  releaseOrder: async (orderId: string): Promise<Order> => {
+  releaseOrder: async (orderId: string, release: { releasedToName: string; releasedToRelation?: string; releaseReference?: string; releaseAcknowledged: boolean }): Promise<Order> => {
     const response = await fetch(`${API_URL}/orders/${orderId}/release`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify(release),
     });
     return handleResponse(response);
   },
