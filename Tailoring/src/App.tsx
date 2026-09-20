@@ -11,6 +11,7 @@ import Customerdashboard from './dashboard/Customerdashboard';
 import Mastertailordashboard from './dashboard/Mastertailordashboard';
 import CompleteProfile from './pages/CompleteProfile';
 import { CustomerOrdersView } from './pages/CustomerOrders';
+import { CustomerAppointmentsView } from './pages/CustomerAppointments';
 import { FrontDeskCustomersExactView } from './Pages_Frontdesk/CustomersdeskExact';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -19,6 +20,11 @@ const authToken = () => localStorage.getItem('authToken') || sessionStorage.getI
 function currentUser() {
   const stored = localStorage.getItem('currentUser') || sessionStorage.getItem('currentUser');
   try { return stored ? JSON.parse(stored) : null; } catch { return null; }
+}
+
+function RequireRole({ children, role }: { children: React.ReactNode; role: 'admin' | 'front_desk' | 'tailor' | 'customer' }) {
+  const user = currentUser();
+  return user?.role === role ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
 function RequireCompleteStaffProfile({ children, role }: { children: React.ReactNode; role: 'front_desk' | 'tailor' }) {
@@ -60,20 +66,21 @@ const App: React.FC = () => {
       <Route path="/login" element={<Login />} />
 <Route path="/forgot-password" element={<ForgotPassword />} />
 <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/admin" element={<AdminDashboard />} />
-      <Route path="/customers" element={<AdminDashboard initialView="customers" />} />
-      <Route path="/orders" element={<AdminDashboard initialView="orders" />} />
-      <Route path="/garment-catalog" element={<AdminDashboard initialView="catalog" />} />
-      <Route path="/production" element={<AdminDashboard initialView="production" />} />
-      <Route path="/inventory" element={<AdminDashboard initialView="inventory" />} />
-      <Route path="/payments" element={<AdminDashboard initialView="payments" />} />
-      <Route path="/reports" element={<AdminDashboard initialView="reports" />} />
-      <Route path="/settings" element={<AdminDashboard initialView="settings" />} />
+      <Route path="/admin" element={<RequireRole role="admin"><AdminDashboard /></RequireRole>} />
+      <Route path="/customers" element={<RequireRole role="admin"><AdminDashboard initialView="customers" /></RequireRole>} />
+      <Route path="/orders" element={<RequireRole role="admin"><AdminDashboard initialView="orders" /></RequireRole>} />
+      <Route path="/garment-catalog" element={<RequireRole role="admin"><AdminDashboard initialView="catalog" /></RequireRole>} />
+      <Route path="/production" element={<RequireRole role="admin"><AdminDashboard initialView="production" /></RequireRole>} />
+      <Route path="/inventory" element={<RequireRole role="admin"><AdminDashboard initialView="inventory" /></RequireRole>} />
+      <Route path="/payments" element={<RequireRole role="admin"><AdminDashboard initialView="payments" /></RequireRole>} />
+      <Route path="/reports" element={<RequireRole role="admin"><AdminDashboard initialView="reports" /></RequireRole>} />
+      <Route path="/settings" element={<RequireRole role="admin"><AdminDashboard initialView="settings" /></RequireRole>} />
       <Route path="/frontdesk" element={<RequireCompleteStaffProfile role="front_desk"><Frontdeskdashboard /></RequireCompleteStaffProfile>} />
       <Route path="/complete-profile" element={<CompleteProfile />} />
-      <Route path="/customer" element={<Customerdashboard />} />
-      <Route path="/my-orders" element={<CustomerOrdersView />} />
-      <Route path="/customerdesk" element={<FrontDeskCustomersExactView />} />
+      <Route path="/customer" element={<RequireRole role="customer"><Customerdashboard /></RequireRole>} />
+      <Route path="/my-orders" element={<RequireRole role="customer"><CustomerOrdersView /></RequireRole>} />
+      <Route path="/my-appointments" element={<RequireRole role="customer"><CustomerAppointmentsView /></RequireRole>} />
+      <Route path="/customerdesk" element={<RequireRole role="front_desk"><FrontDeskCustomersExactView /></RequireRole>} />
       <Route path="/master" element={<RequireCompleteStaffProfile role="tailor"><Mastertailordashboard /></RequireCompleteStaffProfile>} />
       <Route path="/usermanagement" element={<AdminDashboard initialView="users" />} />
       <Route path="*" element={<Navigate to="/" replace />} />

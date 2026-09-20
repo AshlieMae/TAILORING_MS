@@ -4,13 +4,13 @@ import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Shirt, Ruler, CalendarClock, Wallet, Settings, Bell, Search,
   ChevronRight, Menu, X, PackageCheck, Download, LogOut, Sparkles, TrendingUp,
-  Check, UserRound, Save, ArrowUpRight, ShoppingBag, Mail, Phone, MapPin, ShieldCheck, Pencil, Camera,
+  Check, UserRound, Save, ArrowUpRight, Mail, Phone, MapPin, ShieldCheck, Pencil, Camera,
   Lock, Eye, EyeOff,
 } from 'lucide-react';
 import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  LineChart, Line, Legend, BarChart, Bar,
+  LineChart, BarChart, Bar,
 } from 'recharts';
 import NotificationBell from '../components/NotificationBell';
 
@@ -88,69 +88,18 @@ function StatusPill({ status }) {
   );
 }
 
-/* ---------------- Sample data ---------------- */
-const CUSTOMER = { name: 'Reyna Fuentes', email: 'reyna.fuentes@email.com', memberSince: '2024', tier: 'Private Client' };
+/* ---------------- Session-neutral fallbacks (no fictional demo data) ---------------- */
+const CUSTOMER = { name: '', email: '', memberSince: '', tier: '' };
 const STAGES = ['Measuring', 'Pattern Cutting', 'Assembly', 'First Fitting', 'Final Alterations', 'Completed', 'Pickup'];
 
-const ORDERS = [
-  { id: 'JC-3021', garment: 'Barong Tagalog', fabric: 'Piña-Seye, Ivory', swatchA: '#F4EFE3', swatchB: '#E4DAC0', stageIndex: 3, due: 'Aug 12, 2026', balance: 2400, total: 9600, status: 'In progress', notes: 'Client requested slightly looser cuffs at second fitting.' },
-  { id: 'JC-3022', garment: 'Evening Gown', fabric: 'Silk Habotai, Wine', swatchA: '#5C1F2B', swatchB: '#3A0F18', stageIndex: 1, due: 'Aug 22, 2026', balance: 7950, total: 15900, status: 'In progress', notes: 'Awaiting fabric delivery confirmation from supplier.' },
-  { id: 'JC-3018', garment: 'School Uniform Set', fabric: 'Cotton Twill, Navy', swatchA: '#2A3B5C', swatchB: '#16213A', stageIndex: 6, due: 'Aug 03, 2026', balance: 0, total: 3300, status: 'Ready for pickup', notes: 'Complete. Awaiting pickup at the atelier.' },
-];
-
-const MEASUREMENTS = [
-  { label: 'Chest', value: 96, prev: 95, max: 130 },
-  { label: 'Waist', value: 78, prev: 80, max: 120 },
-  { label: 'Hip', value: 99, prev: 98, max: 130 },
-  { label: 'Shoulder', value: 41, prev: 41, max: 55 },
-  { label: 'Sleeve', value: 58, prev: 58, max: 70 },
-  { label: 'Inseam', value: 76, prev: 76, max: 90 },
-  { label: 'Neck', value: 36, prev: 36, max: 50 },
-];
-const MEASUREMENTS_UPDATED = 'Jul 12, 2026';
-
-const MEASUREMENT_HISTORY = [
-  { date: 'Jan', chest: 95, waist: 80, hip: 98 },
-  { date: 'Apr', chest: 95, waist: 79, hip: 98 },
-  { date: 'Jul', chest: 96, waist: 78, hip: 99 },
-];
-
-const SPEND_TREND = [
-  { month: 'Mar', amount: 0, projected: false },
-  { month: 'Apr', amount: 3200, projected: false },
-  { month: 'May', amount: 1650, projected: false },
-  { month: 'Jun', amount: 4050, projected: false },
-  { month: 'Jul', amount: 2400, projected: false },
-  { month: 'Aug', amount: 7950, projected: true },
-];
-
-const NOTIFICATIONS = [
-  { time: 'Today, 3:30 PM', label: 'Fitting today', detail: 'JC-3021 — Barong Tagalog, first fitting', kind: 'fitting' },
-  { time: 'Aug 03', label: 'Ready for pickup', detail: 'JC-3018 — School Uniform Set', kind: 'pickup' },
-  { time: 'Aug 12', label: 'Balance due on release', detail: 'JC-3021 — ₱2,400 remaining', kind: 'reminder' },
-];
 const NOTIF_META = {
   fitting: { icon: CalendarClock, tone: 'var(--navy)' },
   pickup: { icon: PackageCheck, tone: 'var(--success)' },
   reminder: { icon: Bell, tone: 'var(--rust)' },
 };
 
-const PAYMENTS = [
-  { id: 'RCPT-0192', job: 'JC-3021', label: 'Deposit, 50%', amount: 2400, date: 'Jul 12, 2026' },
-  { id: 'RCPT-0188', job: 'JC-3018', label: 'Final balance', amount: 1650, date: 'Jul 02, 2026' },
-  { id: 'RCPT-0181', job: 'JC-3018', label: 'Deposit, 50%', amount: 1650, date: 'Jun 20, 2026' },
-  { id: 'RCPT-0174', job: 'JC-3022', label: 'Initial payment', amount: 7950, date: 'Jun 04, 2026' },
-];
-
-const APPOINTMENTS = [
-  { id: 'APT-106', day: '12', month: 'AUG', date: 'Aug 12, 2026', time: '3:30 PM', type: 'First Fitting', job: 'JC-3021', status: 'Confirmed' },
-  { id: 'APT-112', day: '22', month: 'AUG', date: 'Aug 22, 2026', time: '10:00 AM', type: 'Final Fitting', job: 'JC-3022', status: 'Scheduled' },
-  { id: 'APT-119', day: '02', month: 'SEP', date: 'Sep 02, 2026', time: '1:00 PM', type: 'Pickup', job: 'JC-3018', status: 'Scheduled' },
-];
-
 const NAV = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { key: 'catalog', label: 'Browse Garments', icon: ShoppingBag },
   { key: 'orders', label: 'My Orders', icon: Shirt },
   { key: 'measurements', label: 'Measurements', icon: Ruler },
   { key: 'appointments', label: 'Appointments', icon: CalendarClock },
@@ -255,7 +204,7 @@ function PageHeader({ eyebrow, title, sub, icon: Icon }) {
 /* ============================================================
    DASHBOARD VIEW
 ============================================================= */
-function DashboardView({ onBrowseGarments, catalog, payments = [], onViewPayments, customerName = '', orders = [], measurements = [], appointments = [] }) {
+function DashboardView({ payments = [], onViewPayments, customerName = '', orders = [], measurements = [], appointments = [] }) {
   const realOrders = orders || [];
   const [selected, setSelected] = useState(null);
   const activeOrders = realOrders.filter((o) => ((o.pickup_status || o.status || '') !== 'Released'));
@@ -325,20 +274,6 @@ function DashboardView({ onBrowseGarments, catalog, payments = [], onViewPayment
         <Kpi icon={CalendarClock} tone="var(--success)" label="Next appointment" value={nextApptValid ? nextApptDate.toLocaleDateString('en-US', { month: 'short', day: '2-digit' }) : '—'} sub={nextAppt ? `${nextAppt.appointment_type || 'Appointment'}${nextApptValid ? ` · ${nextApptDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : ''}` : 'No appointments yet'} delay="0.12s" />
       </div>
 
-      <section className="rise atelier-card overflow-hidden" style={{ animationDelay: '0.15s' }}>
-        <div className="flex items-start justify-between gap-4 p-6 sm:p-7">
-          <div>
-            <Eyebrow>Atelier collection</Eyebrow>
-            <Display as="h2" className="mt-1 text-[24px]" style={{ color: 'var(--ink)', fontWeight: 600 }}>Available garments</Display>
-            <p className="mt-1 text-[13px]" style={{ color: 'var(--muted)' }}>Start a custom order with a style that fits your occasion.</p>
-          </div>
-          <button onClick={onBrowseGarments} className="inline-flex shrink-0 items-center gap-2 rounded-md px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white" style={{ background: 'var(--navy)' }}><ShoppingBag className="h-4 w-4" /> Browse all</button>
-        </div>
-        <div className="grid grid-cols-2 border-t sm:grid-cols-4" style={{ borderColor: 'var(--line)' }}>
-          {catalog.map((garment) => <button key={garment.name} onClick={onBrowseGarments} className="p-4 text-left transition-colors hover:bg-[#FCFAF6]" style={{ borderRight: '1px solid var(--line)' }}><img src={garment.image} alt={garment.name} className="h-28 w-full rounded-md object-cover" loading="lazy" /><div className="mt-3 text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>{garment.name}</div><div className="mt-1 text-[11px]" style={{ color: 'var(--brass)' }}>{garment.price}</div></button>)}
-        </div>
-      </section>
-
       <div className="grid grid-cols-1 xl:grid-cols-[1.35fr_1fr] gap-6">
         {order ? (
         <div className="rise atelier-card p-7" style={{ animationDelay: '0.18s' }}>
@@ -404,8 +339,7 @@ function DashboardView({ onBrowseGarments, catalog, payments = [], onViewPayment
         <div className="rise atelier-card p-7 flex flex-col items-center justify-center text-center py-14" style={{ animationDelay: '0.18s' }}>
           <Shirt className="w-8 h-8" style={{ color: 'var(--muted)' }} strokeWidth={1.4} />
           <Display as="h2" className="text-xl mt-3" style={{ color: 'var(--ink)', fontWeight: 600 }}>No orders in progress</Display>
-          <p className="text-[13px] mt-1 max-w-xs" style={{ color: 'var(--muted)' }}>When you request a garment, it will appear here with its live production stage.</p>
-          <button onClick={onBrowseGarments} className="mt-5 inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white" style={{ background: 'var(--navy)' }}><ShoppingBag className="h-4 w-4" /> Browse garments</button>
+          <p className="text-[13px] mt-1 max-w-xs" style={{ color: 'var(--muted)' }}>Orders created with the Front Desk will appear here with their live production stage.</p>
         </div>
         )}
 
@@ -604,294 +538,6 @@ function PaymentLedger({ payments, title, showViewAll, onViewAll, customerName =
 }
 
 /* ============================================================
-   GARMENT CATALOG VIEW
-============================================================= */
-const DEFAULT_CATALOG = [
-  { name: 'Barong Tagalog', price: 'From ₱6,500', description: 'Hand-finished formal wear for weddings, ceremonies, and special occasions.', fabrics: ['Piña Jusi — Ivory', 'Cocoon Silk — Natural'], colors: ['#F5EEDF', '#D8C9A7'], image: 'https://ibarrafilipino.com/cdn/shop/files/Barong_Tagalog_JV402_02.png?v=1769481827&width=1200' },
-  { name: 'Two-piece Suit', price: 'From ₱12,000', description: 'A tailored jacket and trousers, cut to your measurements.', fabrics: ['Italian Wool — Charcoal', 'Wool Blend — Navy'], colors: ['#393B42', '#1D2A44'], image: 'https://images.pexels.com/photos/1043474/pexels-photo-1043474.jpeg?auto=compress&cs=tinysrgb&w=1200' },
-  { name: 'Filipiniana Dress', price: 'From ₱9,500', description: 'Custom occasion dress with a silhouette made for you.', fabrics: ['Silk Habotai — Wine', 'Satin — Blush'], colors: ['#6A2737', '#D9A6A6'], image: 'https://www.kulturafilipino.com/cdn/shop/files/Copyof_IMG8614_1800x1800.jpg?v=1722242874' },
-  { name: 'School Uniform Set', price: 'From ₱2,800', description: 'Durable, comfortable uniforms tailored for everyday wear.', fabrics: ['Cotton Twill — Navy', 'Cotton Poplin — White'], colors: ['#233553', '#ECE9E0'], image: 'https://images.pexels.com/photos/5212345/pexels-photo-5212345.jpeg?auto=compress&cs=tinysrgb&w=1200' },
-];
-
-function getCatalog() {
-  try { const saved = localStorage.getItem('garmentCatalog'); return saved ? JSON.parse(saved) : DEFAULT_CATALOG; } catch { return DEFAULT_CATALOG; }
-}
-
-const UNIFORM_CATEGORIES = ['Regular University Uniform', 'Departmental Uniform', 'PE Uniform', 'Sports / Intramural Jersey', 'Custom/Bespoke Apparel', 'Not Applicable'];
-const STYLE_DESIGNS = ['Classic', 'Modern', 'Embroidered', 'Minimalist', 'Traditional', 'Ruffled', 'Fitted', 'Loose fit'];
-const GARMENT_BASE_PRICE = {
-  'Barong Tagalog': 2500,
-  'Two-piece Suit': 4800,
-  "Women's Coat": 3500,
-  'Evening Gown': 5000,
-  'School Uniform Set': 1800,
-  'Filipiniana Dress': 4000,
-  'Custom garment': 3000,
-};
-
-function FormLabel({ children }) {
-  return <label className="block mb-1.5"><Eyebrow>{children}</Eyebrow></label>;
-}
-
-function CatalogView({ catalog, onOrderPlaced }) {
-  const [selected, setSelected] = useState(null);
-  const [notice, setNotice] = useState('');
-  const [submitError, setSubmitError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(null);
-  const [fabrics, setFabrics] = useState([]);
-  const [requestForm, setRequestForm] = useState({
-    garmentType: '',
-    uniformCategory: UNIFORM_CATEGORIES[0],
-    styleDesign: '',
-    fabric: '',
-    fabricQuantity: '',
-    quantity: 1,
-    specialInstructions: '',
-    targetCompletionDate: '',
-    measuringVisitDate: '',
-  });
-  const item = catalog.find((garment) => garment.name === selected);
-
-  // Load the fabric catalogue (from the shared inventory) so the customer picks
-  // a fabric that actually exists on the shelf.
-  useEffect(() => {
-    fetch(`${API_URL}/auth/catalog/fabrics`, { headers: { Authorization: `Bearer ${authToken()}` } })
-      .then(async (response) => (response.ok ? response.json() : { fabrics: [] }))
-      .then((data) => setFabrics(Array.isArray(data.fabrics) ? data.fabrics : []))
-      .catch(() => setFabrics([]));
-  }, []);
-
-  // Fabric chips on every card come from the real shelf inventory
-  // (fabric_inventory), so the card matches what the customer can actually
-  // order. Falls back to the stored catalog fabrics if inventory is unavailable.
-  const shelfChips = fabrics.map((f) => `${f.fabricName}${f.tone ? ` — ${f.tone}` : ''}`);
-  const chipLimit = 3;
-
-  const openRequest = (garment) => {
-    setSubmitError('');
-    setSubmitted(null);
-    setRequestForm((current) => ({
-      ...current,
-      garmentType: garment.name,
-      fabric: current.fabric || (garment.fabrics && garment.fabrics.length ? garment.fabrics[0] : (fabrics.length ? fabrics[0].fabricName : '')),
-    }));
-    setSelected(garment.name);
-  };
-
-  const setForm = (patch) => setRequestForm((current) => ({ ...current, ...patch }));
-
-  const basePrice = GARMENT_BASE_PRICE[requestForm.garmentType] || 3000;
-  const qty = Math.max(1, requestForm.quantity || 1);
-  const totalAmount = basePrice * qty;
-  const depositRequired = totalAmount * 0.5;
-  const remainingBalance = totalAmount * 0.5;
-
-  // Place the order LIVE through the server (Browse Garments → Front Desk →
-  // Master Tailor). A customer with a remaining balance may still order.
-  const submitRequest = async (event) => {
-    event.preventDefault();
-    if (!requestForm.garmentType) { setSubmitError('Please select a garment type.'); return; }
-    if (!requestForm.targetCompletionDate) { setSubmitError('Please set a target completion date.'); return; }
-    if (!requestForm.measuringVisitDate) { setSubmitError('Please choose the date you will visit the shop for measuring.'); return; }
-    const payload = {
-      garmentType: requestForm.garmentType,
-      uniformCategory: requestForm.uniformCategory,
-      styleDesign: requestForm.styleDesign,
-      fabric: requestForm.fabric,
-      fabricQuantity: parseFloat(requestForm.fabricQuantity) || 0,
-      quantity: qty,
-      specialInstructions: requestForm.specialInstructions,
-      targetCompletionDate: requestForm.targetCompletionDate,
-      measuringVisitDate: requestForm.measuringVisitDate,
-    };
-    setSubmitError('');
-    setSubmitting(true);
-    try {
-      const response = await fetch(`${API_URL}/auth/customer/order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
-        body: JSON.stringify(payload)
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setSubmitError(data.message || 'Unable to place your order. Please try again.');
-        return;
-      }
-      const jobLabel = data.job_card_id || payload.garmentType;
-      const visitLabel = requestForm.measuringVisitDate ? new Date(`${requestForm.measuringVisitDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : null;
-      setSubmitted({ job: jobLabel, deposit: Number(data.deposit_required ?? depositRequired) || depositRequired, visitLabel });
-      setNotice(`Order ${jobLabel} submitted — a tailor has been assigned and a deposit of ${formatPeso(data.deposit_required ?? depositRequired)} (50%) is due. Please visit our shop so the Front Desk can record your measurements and collect the deposit before production begins.`);
-      window.setTimeout(() => setNotice(''), 8000);
-      // Refresh the customer's live data so My Orders / Dashboard show the new job card immediately.
-      if (onOrderPlaced) onOrderPlaced();
-    } catch (e) {
-      setSubmitError('Unable to reach the server. Please check your connection and try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <PageHeader eyebrow="Atelier collection" title="Browse Garments" sub="Choose a style, share your preferences, and let our team prepare your custom order." icon={ShoppingBag} />
-      {notice && <div className="rise flex items-center gap-2 rounded-lg px-5 py-4 text-sm" style={{ color: 'var(--success)', background: '#EEF6EF', border: '1px solid #CDE2D1' }}><Check className="h-4 w-4" />{notice}</div>}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-        {catalog.map((garment, index) => (
-          <article key={garment.name} className="rise atelier-card overflow-hidden" style={{ animationDelay: `${index * 0.07}s` }}>
-            <div className="relative h-52 overflow-hidden" style={{ background: `linear-gradient(135deg, ${garment.colors[0]}, ${garment.colors[1]})` }}>
-              <img src={garment.image} alt={garment.name} className="h-full w-full object-cover" loading="lazy" />
-              <span className="absolute left-5 top-5 inline-block rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'white', background: 'rgba(20,23,31,0.58)' }}>Custom made</span>
-            </div>
-            <div className="p-6">
-              <div className="flex items-start justify-between gap-3"><h2 className="text-xl font-semibold" style={{ fontFamily: "'Fraunces', serif" }}>{garment.name}</h2><span className="text-sm font-semibold whitespace-nowrap" style={{ color: 'var(--brass)' }}>{garment.price}</span></div>
-              <p className="mt-3 text-[13px] leading-relaxed" style={{ color: 'var(--muted)' }}>{garment.description}</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {(garment.fabrics && garment.fabrics.length ? garment.fabrics : shelfChips).slice(0, chipLimit).map((fabric) => <span key={fabric} className="rounded-full px-2.5 py-1 text-[10px]" style={{ color: 'var(--muted)', background: 'var(--paper)', border: '1px solid var(--line)' }}>{fabric}</span>)}
-                {(garment.fabrics && garment.fabrics.length ? garment.fabrics : shelfChips).length > chipLimit && <span className="rounded-full px-2.5 py-1 text-[10px]" style={{ color: 'var(--brass)', background: 'var(--paper)', border: '1px solid var(--line)' }}>+{(garment.fabrics && garment.fabrics.length ? garment.fabrics : shelfChips).length - chipLimit} more available</span>}
-              </div>
-              <button onClick={() => openRequest(garment)} className="mt-6 inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.13em] text-white" style={{ background: 'var(--navy)' }}><ShoppingBag className="h-4 w-4" /> Request custom order</button>
-            </div>
-          </article>
-        ))}
-      </div>
-      {item && <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <button onClick={() => setSelected(null)} aria-label="Close order request" className="absolute inset-0 bg-black/45 backdrop-blur-sm" />
-        <form onSubmit={submitRequest} className="relative w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto" style={{ background: 'var(--card)', border: '1px solid var(--line)' }}>
-          <div className="flex items-center justify-between px-7 sm:px-9 pt-7 pb-2">
-            <Eyebrow>Custom order request</Eyebrow>
-            <button type="button" onClick={() => setSelected(null)} className="p-1 rounded-full" style={{ color: 'var(--muted)' }}><X className="h-5 w-5" /></button>
-          </div>
-          <div className="px-7 sm:px-9 pb-9 pt-2">
-            {submitted ? (
-              <div className="text-center py-6">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full" style={{ background: 'rgba(75,120,86,0.12)', color: 'var(--success)' }}>
-                  <Check className="h-7 w-7" strokeWidth={2} />
-                </div>
-                <h3 className="mt-4 text-2xl" style={{ fontFamily: "'Fraunces', serif", color: 'var(--ink)' }}>Order submitted</h3>
-                <p className="mt-1 text-[13px]" style={{ color: 'var(--muted)' }}>
-                  Job card <span style={{ fontFamily: "'IBM Plex Mono', monospace", color: 'var(--ink)' }}>{submitted.job}</span> has been created and a tailor has been assigned.
-                </p>
-                <div className="mt-6 flex items-start gap-3 rounded-xl px-4 py-3.5 text-left" style={{ background: 'var(--brass-wash)', border: '1px solid rgba(169,130,79,0.28)' }}>
-                  <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full" style={{ background: 'var(--brass)', color: '#fff' }}>
-                    <Ruler className="h-3.5 w-3.5" />
-                  </div>
-                  <div>
-                    <p className="text-[13px] font-semibold" style={{ color: 'var(--ink)' }}>Please visit the shop{submitted.visitLabel ? ` on ${submitted.visitLabel}` : ''} so we can measure you</p>
-                    <p className="mt-1 text-[12.5px] leading-relaxed" style={{ color: 'var(--muted)' }}>
-                      Your measurements must be recorded at the Front Desk before a tailor can begin. When you drop by on your chosen date, we'll take your measurements and collect the <strong style={{ color: 'var(--ink)' }}>50% deposit ({formatPeso(submitted.deposit)})</strong> to start production.
-                    </p>
-                  </div>
-                </div>
-                <button type="button" onClick={() => { setSubmitted(null); setSelected(null); }} className="mt-7 inline-flex items-center gap-2 rounded-md px-6 py-3 text-[10px] font-semibold uppercase tracking-[0.13em] text-white" style={{ background: 'var(--navy)' }}>Done</button>
-              </div>
-            ) : (
-            <>
-            <h2 className="text-3xl leading-tight mb-2" style={{ fontFamily: "'Fraunces', serif", color: 'var(--ink)' }}>Create Custom Order</h2>
-            <p className="text-[14px] font-light mb-4 leading-relaxed" style={{ color: 'var(--muted)' }}>
-              Your request becomes a job card that Front Desk reviews, a tailor is assigned, and a 50% deposit is collected at the Front Desk.
-            </p>
-
-            {submitError && (
-              <div className="border px-4 py-3 rounded-lg text-sm mb-6" style={{ borderColor: '#C86A5822', background: '#FDF4F2', color: '#9A3B2A' }}>{submitError}</div>
-            )}
-
-            <div className="space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
-                <div>
-                  <FormLabel>Garment type</FormLabel>
-                  <select value={requestForm.garmentType} onChange={(e) => setForm({ garmentType: e.target.value })} className="input-field">
-                    {catalog.map((g) => <option key={g.name} value={g.name}>{g.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <FormLabel>Uniform category</FormLabel>
-                  <select value={requestForm.uniformCategory} onChange={(e) => setForm({ uniformCategory: e.target.value })} className="input-field">
-                    {UNIFORM_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
-                <div>
-                  <FormLabel>Style / design</FormLabel>
-                  <select value={requestForm.styleDesign} onChange={(e) => setForm({ styleDesign: e.target.value })} className="input-field">
-                    <option value="">Select a style</option>
-                    {STYLE_DESIGNS.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <FormLabel>Fabric</FormLabel>
-                  <select value={requestForm.fabric} onChange={(e) => setForm({ fabric: e.target.value })} className="input-field">
-                    <option value="">Select a fabric</option>
-                    {fabrics.length > 0
-                      ? fabrics.map((f) => <option key={f.id} value={f.fabricName}>{f.fabricName}{f.tone ? ` — ${f.tone}` : ''} ({f.unit})</option>)
-                      : (item.fabrics || []).map((fabric) => <option key={fabric} value={fabric}>{fabric}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
-                <div>
-                  <FormLabel>Fabric quantity</FormLabel>
-                  <input type="number" min="0" step="0.5" value={requestForm.fabricQuantity} onChange={(e) => setForm({ fabricQuantity: e.target.value })} placeholder="2.5" className="input-field" />
-                </div>
-                <div>
-                  <FormLabel>Quantity</FormLabel>
-                  <input type="number" min="1" value={requestForm.quantity} onChange={(e) => setForm({ quantity: parseInt(e.target.value) || 1 })} className="input-field" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
-                <div>
-                  <FormLabel>When will you visit for measuring?</FormLabel>
-                  <input type="date" min={new Date().toISOString().slice(0, 10)} value={requestForm.measuringVisitDate} onChange={(e) => setForm({ measuringVisitDate: e.target.value })} className="input-field" />
-                </div>
-                <div>
-                  <FormLabel>Preferred completion date</FormLabel>
-                  <input required type="date" value={requestForm.targetCompletionDate} onChange={(e) => setForm({ targetCompletionDate: e.target.value })} className="input-field" />
-                </div>
-                <div>
-                  <FormLabel>Garment preview</FormLabel>
-                  <div className="flex items-center gap-3 rounded-xl px-4 py-3 border" style={{ borderColor: 'var(--line)', background: 'var(--paper)' }}>
-                    <img src={item.image} alt={requestForm.garmentType} className="h-16 w-14 rounded-md object-cover" />
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold" style={{ fontFamily: "'Fraunces', serif", color: 'var(--ink)' }}>{requestForm.garmentType}</p>
-                      <p className="mt-0.5 text-[11px] uppercase tracking-[0.08em]" style={{ color: 'var(--muted)' }}>{requestForm.uniformCategory}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <FormLabel>Special instructions</FormLabel>
-                <textarea value={requestForm.specialInstructions} onChange={(e) => setForm({ specialInstructions: e.target.value })} rows={2} placeholder="Fit, event date, preferred details..." className="input-field resize-none" />
-              </div>
-
-              <div className="rounded-lg p-4 space-y-2" style={{ border: '1px solid var(--line)', background: 'var(--paper)' }}>
-                <div className="flex justify-between text-sm"><span style={{ color: 'var(--muted)' }}>Estimated total</span><span className="font-semibold" style={{ color: 'var(--ink)' }}>{formatPeso(totalAmount)}</span></div>
-                <div className="flex justify-between text-sm"><span style={{ color: 'var(--muted)' }}>Deposit due (50%)</span><span className="font-semibold" style={{ color: 'var(--brass)' }}>{formatPeso(depositRequired)}</span></div>
-                <div className="flex justify-between text-sm"><span style={{ color: 'var(--muted)' }}>Balance after deposit</span><span className="font-semibold" style={{ color: 'var(--ink)' }}>{formatPeso(remainingBalance)}</span></div>
-              </div>
-
-              <div className="mt-6 flex gap-3 justify-end pt-3" style={{ borderTop: '1px solid var(--line)' }}>
-                <button type="button" onClick={() => setSelected(null)} className="rounded-md px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.13em]" style={{ color: 'var(--muted)' }}>
-                  Cancel
-                </button>
-                <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 rounded-md px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.13em] text-white disabled:opacity-60" style={{ background: 'var(--navy)' }}>
-                  {submitting ? 'Submitting…' : 'Submit order'}
-                </button>
-              </div>
-            </div>
-            </>
-            )}
-          </div>
-        </form>
-      </div>}
-    </div>
-  );
-}
-
-/* ============================================================
    ORDERS VIEW
 ============================================================= */
 /* Maps a real order row from the backend into the card shape this view renders. */
@@ -926,7 +572,7 @@ function customerOrderFromRow(row) {
   };
 }
 
-function OrdersView({ orders = [], onBrowseGarments }) {
+function OrdersView({ orders = [] }) {
   const [openId, setOpenId] = useState(null);
   const open = orders.find((o) => o.id === openId);
 
@@ -937,10 +583,7 @@ function OrdersView({ orders = [], onBrowseGarments }) {
         <div className="atelier-card p-10 text-center">
           <Shirt className="w-8 h-8 mx-auto" style={{ color: 'var(--brass)' }} />
           <Display as="h3" className="text-lg mt-3" style={{ color: 'var(--ink)', fontWeight: 600 }}>No orders yet</Display>
-          <p className="text-[13px] mt-1" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>When you request a garment it will appear here so you can follow it from measurement to pickup.</p>
-          {onBrowseGarments && (
-            <button onClick={onBrowseGarments} className="mt-5 px-5 py-2.5 rounded-full text-[12px] tracking-[0.08em] uppercase" style={{ background: 'var(--brass)', color: '#fff', fontFamily: "'IBM Plex Mono', monospace" }}>Browse garments</button>
-          )}
+          <p className="text-[13px] mt-1" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>Orders created with the Front Desk will appear here so you can follow them from measurement to pickup.</p>
         </div>
       ) : (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -1017,8 +660,13 @@ function Detail({ label, value }) {
 /* ============================================================
    MEASUREMENTS VIEW
 ============================================================= */
-function MeasurementsView() {
-  const radarData = MEASUREMENTS.map((m) => ({ subject: m.label, value: Math.round((m.value / m.max) * 100), cm: m.value }));
+function MeasurementsView({ measurements = [] }) {
+  const live = measurements || [];
+  const verifiedAt = live.map((m) => m.updated_at).filter(Boolean).sort().pop();
+  const verifiedLabel = verifiedAt && !Number.isNaN(new Date(verifiedAt).getTime())
+    ? new Date(verifiedAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
+    : null;
+  const radarData = live.map((m) => ({ subject: m.label, value: Math.max(5, Math.min(100, Math.round(((Number(m.value) || 0) / 130) * 100))), cm: Math.round((Number(m.value) || 0) * 10) / 10 }));
 
   return (
     <div className="space-y-6">
@@ -1046,21 +694,12 @@ function MeasurementsView() {
 
         <div className="rise atelier-card p-7" style={{ animationDelay: '0.12s' }}>
           <Eyebrow>Trend</Eyebrow>
-          <Display as="h2" className="text-lg mt-1" style={{ color: 'var(--ink)', fontWeight: 600 }}>Key measurements over time</Display>
-          <div className="h-[220px] mt-3 -ml-3">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={MEASUREMENT_HISTORY} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="var(--line)" />
-                <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fill: 'var(--muted)', fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' }} />
-                <YAxis tickLine={false} axisLine={false} width={32} tick={{ fill: 'var(--muted)', fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' }} />
-                <Tooltip content={<HistoryTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11, fontFamily: "'IBM Plex Mono', monospace" }} />
-                <Line type="monotone" dataKey="chest" stroke="var(--brass)" strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="waist" stroke="var(--navy)" strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="hip" stroke="var(--rust)" strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <Display as="h2" className="text-lg mt-1" style={{ color: 'var(--ink)', fontWeight: 600 }}>Measurement history</Display>
+          <p className="mt-3 text-[13px]" style={{ color: 'var(--muted)' }}>
+            {live.length
+              ? 'Your latest verified values are shown below. History is recorded at each fitting visit by your tailor and the Front Desk.'
+              : 'No measurements on file yet. Measurements are taken in person at the Front Desk during your first visit, then kept on file for your tailor.'}
+          </p>
         </div>
       </div>
 
@@ -1070,11 +709,11 @@ function MeasurementsView() {
             <Eyebrow>On file</Eyebrow>
             <Display as="h2" className="text-lg mt-1" style={{ color: 'var(--ink)', fontWeight: 600 }}>Primary profile</Display>
           </div>
-          <Eyebrow>Verified {MEASUREMENTS_UPDATED}</Eyebrow>
+          <Eyebrow>{verifiedLabel ? `Verified ${verifiedLabel}` : 'Awaiting verification'}</Eyebrow>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {MEASUREMENTS.map((m) => {
-            const delta = m.value - m.prev;
+          {live.map((m) => {
+            const delta = 0;
             return (
               <div key={m.label} className="p-4 rounded-lg" style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}>
                 <Eyebrow>{m.label}</Eyebrow>
@@ -1101,24 +740,21 @@ function MeasurementsView() {
 ============================================================= */
 function AppointmentsView() {
   const [appointments, setAppointments] = useState([]);
-  const [schedulable, setSchedulable] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [actionMsg, setActionMsg] = useState('');
-  const [schedJob, setSchedJob] = useState(null);
-  const [form, setForm] = useState({ date: '', time: '', type: 'First Fitting' });
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState('');
+  const [openId, setOpenId] = useState(null);
+  const [showContact, setShowContact] = useState(false);
 
   const loadAppointments = async () => {
+    setLoading(true);
     try {
       const res = await fetch(`${API_URL}/auth/customer/my-appointments`, { headers: { Authorization: `Bearer ${authToken()}` } });
       const data = await res.json();
       if (!res.ok) { if (res.status === 401) { setError('Your session has expired. Please sign in again.'); return; } throw new Error(data.message || 'Unable to load appointments.'); }
-      setAppointments(data.appointments || []);
-      setSchedulable(data.schedulable || []);
+      setAppointments(Array.isArray(data.appointments) ? data.appointments : []);
       setError('');
     } catch (e) {
+      setAppointments([]);
       setError(e.message || 'Unable to load appointments.');
     } finally {
       setLoading(false);
@@ -1132,133 +768,94 @@ function AppointmentsView() {
     if (Number.isNaN(d.getTime())) return { date: '—', time: '—', day: '', month: '' };
     return {
       date: d.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' }),
-      time: d.toLocaleTime(['en-US'], { hour: '2-digit', minute: '2-digit' }),
+      time: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
       day: d.getDate().toString().padStart(2, '0'),
       month: d.toLocaleDateString('en-PH', { month: 'short' }).toUpperCase(),
     };
   };
 
-  const openSchedule = (job) => { setSchedJob(job); setForm({ date: '', time: '', type: job.stage === 'Final Alterations' ? 'Final Fitting' : 'First Fitting' }); setFormError(''); setActionMsg(''); };
-  const closeSchedule = () => { setSchedJob(null); setSubmitting(false); setFormError(''); };
-
-  const submitSchedule = async (e) => {
-    e.preventDefault();
-    if (!form.date || !form.time) { setFormError('Pick a date and time for the fitting.'); return; }
-    setSubmitting(true);
-    setFormError('');
-    try {
-      const res = await fetch(`${API_URL}/auth/customer/my-appointments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
-        body: JSON.stringify({ jobCardNumber: schedJob.id, appointmentDate: form.date, appointmentTime: form.time, appointmentType: form.type }),
-      });
-      const data = await res.json();
-      if (!res.ok) { if (res.status === 401) { setFormError('Your session expired. Please sign in again.'); return; } throw new Error(data.message || 'Unable to schedule the fitting.'); }
-      setActionMsg(data.message || 'Fitting scheduled. You can confirm it below when you arrive.');
-      closeSchedule();
-      await loadAppointments();
-    } catch (err) {
-      setFormError(err.message || 'Unable to schedule the fitting.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const confirmAttendance = async (id) => {
-    try {
-      const res = await fetch(`${API_URL}/auth/customer/my-appointments/${id}/confirm`, { method: 'POST', headers: { Authorization: `Bearer ${authToken()}` } });
-      const data = await res.json();
-      if (!res.ok) { if (res.status === 401) { setError('Your session expired. Please sign in again.'); return; } throw new Error(data.message || 'Unable to confirm.'); }
-      await loadAppointments();
-    } catch (err) {
-      setActionMsg(err.message || 'Unable to confirm attendance.');
-    }
-  };
-
+  // Walk-in policy: Front Desk owns every appointment decision, so the portal
+  // is strictly view-only. Visits are suggested automatically when production
+  // reaches a fitting or pickup milestone; the customer reads the confirmed
+  // details (type, date, time, status, assigned tailor, notes) and contacts the
+  // counter for any change. There is nothing to book, confirm or cancel here.
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Fitting calendar" title="Appointments" sub="Schedule and confirm your fitting appointments so the tailor knows when you will be in." icon={CalendarClock} />
-      {error && <div className="px-4 py-3 rounded-lg text-[13px]" style={{ background: 'rgba(160,82,45,0.08)', color: 'var(--rust)', border: '1px solid rgba(160,82,45,0.25)' }}>{error}</div>}
-      {schedulable.length > 0 && (
-        <div className="rise atelier-card p-6" style={{ animationDelay: '0.04s', borderColor: 'var(--line)' }}>
-          <Eyebrow tone="var(--brass)">Ready for a fitting</Eyebrow>
-          <Display as="h2" className="text-lg mt-1" style={{ color: 'var(--ink)', fontWeight: 600 }}>Schedule a fitting</Display>
-          <div className="space-y-3 mt-3">
-            {schedulable.map((job) => (
-              <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-lg" style={{ border: '1px solid var(--line)', background: 'var(--paper)' }}>
-                <div>
-                  <div className="flex items-center gap-2"><Eyebrow>{job.id}</Eyebrow><StatusPill status={job.stage} /></div>
-                  <Display as="div" className="text-[15px] mt-0.5" style={{ color: 'var(--ink)', fontWeight: 600 }}>{job.garment}</Display>
-                  <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{job.fabric}</p>
-                </div>
-                <button onClick={() => openSchedule(job)} className="px-4 py-2 rounded-md text-[10px] font-semibold uppercase tracking-[0.12em] text-white" style={{ background: 'var(--ink)' }}>Schedule fitting</button>
-              </div>
-            ))}
-          </div>
+      <PageHeader
+        eyebrow="Visit schedule"
+        title="Appointments"
+        sub="Front Desk confirms your fitting and pickup visits once the workshop reports your garment is ready. Your visits are view-only here — our counter staff handles every change."
+        icon={CalendarClock}
+      />
+      {error && (
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-lg text-[13px]" style={{ border: '1px solid rgba(160,82,45,0.25)', background: 'rgba(160,82,45,0.06)', color: 'var(--ink)' }}>
+          <span>{error}</span>
+          <button onClick={loadAppointments} className="px-4 py-2 rounded-md text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ border: '1px solid rgba(160,82,45,0.4)', color: 'var(--ink)' }}>Retry</button>
         </div>
       )}
+      <div className="rise atelier-card p-6 flex flex-wrap items-center justify-between gap-3" style={{ animationDelay: '0.04s', borderColor: 'var(--line)' }}>
+        <div>
+          <Eyebrow tone="var(--brass)">Front Desk</Eyebrow>
+          <Display as="div" className="text-[15px] mt-0.5" style={{ color: 'var(--ink)', fontWeight: 600 }}>Need a different date or time?</Display>
+          <p className="text-[13px] mt-1" style={{ color: 'var(--muted)' }}>Only the Front Desk can move or cancel a visit. Call or visit the counter and our staff will re-book it for you.</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => setShowContact((v) => !v)} className="px-4 py-2 rounded-md text-[10px] font-semibold uppercase tracking-[0.12em] text-white" style={{ background: 'var(--ink)' }}>Contact Front Desk</button>
+          <button onClick={loadAppointments} className="px-4 py-2 rounded-md text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--muted)', border: '1px solid var(--line)' }}>Refresh</button>
+        </div>
+      </div>
+
+      {showContact && (
+        <div className="p-4 rounded-lg text-[13px]" style={{ border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--muted)' }}>
+          The Front Desk counter is open <strong style={{ color: 'var(--ink)' }}>Monday to Saturday, 9:00 AM – 6:00 PM</strong> (closed Sundays). Please call or visit the shop so we can adjust, cancel or re-book your visit.
+        </div>
+      )}
+
       <div className="rise atelier-card divide-y" style={{ animationDelay: '0.08s', borderColor: 'var(--line)' }}>
         {loading && <div className="p-6 text-[13px]" style={{ color: 'var(--muted)' }}>Loading…</div>}
-        {!loading && appointments.length === 0 && <div className="p-6 text-[13px]" style={{ color: 'var(--muted)' }}>No appointments yet. Schedule one above once a garment is ready.</div>}
+        {!loading && appointments.length === 0 && (
+          <div className="p-6 text-[13px]" style={{ color: 'var(--muted)' }}>
+            {error ? 'Your appointments could not be loaded. Use Retry above.' : 'No fitting or pickup visit has been confirmed yet. Front Desk will notify you once your garment is ready — you may also visit or call the shop for an update.'}
+          </div>
+        )}
         {appointments.map((a, i) => {
-          const fd = fmt(a.appointment_at);
-          const canConfirm = a.status === 'Scheduled' || a.status === 'Rescheduled';
+          const when = fmt(a.appointment_at);
+          const open = openId === a.id;
           return (
-            <div key={a.id ?? i} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-6" style={{ borderBottom: i !== appointments.length - 1 ? '1px solid var(--line)' : 'none' }}>
-              <div className="flex gap-5">
-                <div className="text-center pr-5" style={{ borderRight: '1px solid var(--line)' }}>
-                  <Display as="span" className="block text-2xl" style={{ color: 'var(--ink)', fontWeight: 600 }}>{fd.day}</Display><Eyebrow>{fd.month}</Eyebrow>
+            <div key={a.id ?? i} className="flex flex-col gap-4 p-6" style={{ borderBottom: i !== appointments.length - 1 ? '1px solid var(--line)' : 'none' }}>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex gap-5">
+                  <div className="text-center pr-5" style={{ borderRight: '1px solid var(--line)' }}>
+                    <Display as="span" className="block text-2xl" style={{ color: 'var(--ink)', fontWeight: 600 }}>{when.day}</Display><Eyebrow>{when.month}</Eyebrow>
+                  </div>
+                  <div>
+                    <Eyebrow>{a.appointment_number || a.job_card_number}</Eyebrow>
+                    <Display as="h2" className="text-lg mt-0.5" style={{ color: 'var(--ink)', fontWeight: 600 }}>{a.appointment_type}</Display>
+                    <p className="text-[13px] mt-0.5" style={{ color: 'var(--muted)' }}>{when.date} · {when.time}{a.garment ? ` · ${a.garment}` : ''}</p>
+                    <p className="text-[12px] mt-1 flex items-center gap-1" style={{ color: 'var(--muted)' }}><MapPin className="w-3.5 h-3.5" />Please visit the shop at your scheduled time.</p>
+                  </div>
                 </div>
-                <div>
-                  <Eyebrow>{a.job_card_number}</Eyebrow>
-                  <Display as="h2" className="text-lg mt-0.5" style={{ color: 'var(--ink)', fontWeight: 600 }}>{a.appointment_type}</Display>
-                  <p className="text-[13px] mt-0.5" style={{ color: 'var(--muted)' }}>{fd.date} · {fd.time}</p>
+                <div className="flex items-center gap-3 shrink-0">
+                  <StatusPill status={a.status} />
+                  <button onClick={() => setOpenId(open ? null : a.id)} className="px-4 py-2 rounded-md text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--ink)', border: '1px solid var(--line)' }}>{open ? 'Hide details' : 'View appointment details'}</button>
                 </div>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <StatusPill status={a.status} />
-                {canConfirm ? (
-                  <button onClick={() => confirmAttendance(a.id)} className="px-4 py-2 rounded-md text-[10px] font-semibold uppercase tracking-[0.12em] text-white" style={{ background: 'var(--ink)' }}>Confirm</button>
-                ) : a.status === 'Confirmed' ? (
-                  <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: 'var(--success)' }}><Check className="w-4 h-4" /> Confirmed</span>
-                ) : null}
-              </div>
+              {open && (
+                <dl className="grid gap-3 pt-4 sm:grid-cols-2" style={{ borderTop: '1px solid var(--line)' }}>
+                  <div><dt><Eyebrow>Appointment type</Eyebrow></dt><dd className="text-[13px] mt-0.5" style={{ color: 'var(--ink)' }}>{a.appointment_type}</dd></div>
+                  <div><dt><Eyebrow>Date and time</Eyebrow></dt><dd className="text-[13px] mt-0.5" style={{ color: 'var(--ink)' }}>{when.date} · {when.time}</dd></div>
+                  <div><dt><Eyebrow>Status</Eyebrow></dt><dd className="text-[13px] mt-0.5" style={{ color: 'var(--ink)' }}>{a.status}</dd></div>
+                  <div><dt><Eyebrow>Job card</Eyebrow></dt><dd className="text-[13px] mt-0.5" style={{ color: 'var(--ink)' }}>{a.job_card_number}</dd></div>
+                  <div><dt><Eyebrow>Assigned tailor</Eyebrow></dt><dd className="text-[13px] mt-0.5" style={{ color: 'var(--ink)' }}>{a.assigned_tailor_name || 'Assigned by the shop'}</dd></div>
+                  <div><dt><Eyebrow>Notes</Eyebrow></dt><dd className="text-[13px] mt-0.5" style={{ color: 'var(--ink)' }}>{a.notes || '—'}</dd></div>
+                </dl>
+              )}
             </div>
           );
         })}
       </div>
-      {schedJob && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(20,23,31,0.5)' }} onClick={closeSchedule}>
-          <div className="w-full max-w-md atelier-card p-6" style={{ background: 'var(--card)' }} onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <Eyebrow tone="var(--brass)">Fitting for {schedJob.id}</Eyebrow>
-                <Display as="h2" className="text-lg mt-1" style={{ color: 'var(--ink)', fontWeight: 600 }}>{schedJob.garment}</Display>
-                <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{schedJob.fabric} · {schedJob.stage}</p>
-              </div>
-              <button onClick={closeSchedule} aria-label="Close" style={{ color: 'var(--muted)' }}><X className="w-5 h-5" /></button>
-            </div>
-            <form onSubmit={submitSchedule} className="mt-5 space-y-4">
-              <label className="block">
-                <Eyebrow>Appointment type</Eyebrow>
-                <select className="input-field mt-1.5" value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}>
-                  <option value="First Fitting">First Fitting</option>
-                  <option value="Final Fitting">Final Fitting</option>
-                </select>
-              </label>
-              <div className="grid grid-cols-2 gap-4">
-                <label className="block"><Eyebrow>Date</Eyebrow><input type="date" className="input-field mt-1.5" value={form.date} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} /></label>
-                <label className="block"><Eyebrow>Time</Eyebrow><input type="time" className="input-field mt-1.5" value={form.time} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} /></label>
-              </div>
-              {formError && <div className="px-3 py-2.5 rounded-md text-[12.5px]" style={{ background: 'rgba(160,82,45,0.08)', color: 'var(--rust)', border: '1px solid rgba(160,82,45,0.25)' }}>{formError}</div>}
-              <div className="flex justify-end gap-3 pt-1">
-                <button type="button" onClick={closeSchedule} className="px-4 py-2 rounded-md text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--muted)', border: '1px solid var(--line)' }}>Cancel</button>
-                <button type="submit" disabled={submitting} className="px-4 py-2 rounded-md text-[10px] font-semibold uppercase tracking-[0.12em] text-white disabled:opacity-60" style={{ background: 'var(--ink)' }}>{submitting ? 'Scheduling…' : 'Schedule fitting'}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+
+      <p className="text-[11px] text-center" style={{ color: 'var(--muted)' }}>Front Desk schedules and confirms every visit after coordinating with the workshop. You will receive a notification once a visit is confirmed.</p>
     </div>
   );
 }
@@ -1590,7 +1187,6 @@ export default function CustomerDashboard() {
   const [profile, setProfile] = useState(() => sessionUser());
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileLoadError, setProfileLoadError] = useState('');
-  const [catalog, setCatalog] = useState(() => getCatalog());
   const [customerOrders, setCustomerOrders] = useState([]);
   const [customerPayments, setCustomerPayments] = useState<any[]>([]);
   const [customerMeasurements, setCustomerMeasurements] = useState<any[]>([]);
@@ -1618,10 +1214,6 @@ export default function CustomerDashboard() {
       })
       .catch(() => setProfileLoadError('Unable to load your saved profile details. Please refresh after the server is running.'));
     loadCustomerData();
-    fetch(`${API_URL}/auth/catalog`, { headers: { Authorization: `Bearer ${authToken()}` } })
-      .then(async (response) => { if (!response.ok) throw new Error('Unable to load catalog.'); return response.json(); })
-      .then((data) => { if (Array.isArray(data.catalog)) setCatalog(data.catalog); })
-      .catch(() => { /* Keep the bundled catalog if the server is unavailable. */ });
   }, [navigate]);
 
   // Re-fetch the customer's live data (orders, payments, measurements,
@@ -1663,10 +1255,9 @@ export default function CustomerDashboard() {
 
   function renderView() {
     switch (view) {
-      case 'dashboard': return <DashboardView catalog={catalog} onBrowseGarments={() => setView('catalog')} payments={customerPayments} orders={customerOrders} measurements={customerMeasurements} appointments={customerAppointments} onViewPayments={() => setView('payments')} customerName={customerName} />;
-      case 'catalog': return <CatalogView catalog={catalog} onOrderPlaced={loadCustomerData} />;
-      case 'orders': return <OrdersView orders={customerOrders} onBrowseGarments={() => setView('catalog')} />;
-      case 'measurements': return <MeasurementsView />;
+      case 'dashboard': return <DashboardView payments={customerPayments} orders={customerOrders} measurements={customerMeasurements} appointments={customerAppointments} onViewPayments={() => setView('payments')} customerName={customerName} />;
+      case 'orders': return <OrdersView orders={customerOrders} />;
+      case 'measurements': return <MeasurementsView measurements={customerMeasurements} />;
       case 'appointments': return <AppointmentsView />;
       case 'payments': return <PaymentsView payments={customerPayments} orders={customerOrders} customerName={customerName} />;
       case 'settings': return <SettingsView profile={profile} onProfileSaved={(updated) => { setProfile(updated); const storage = localStorage.getItem('authToken') ? localStorage : sessionStorage; storage.setItem('currentUser', JSON.stringify(updated)); }} onUnauthorized={() => signOut()} />;

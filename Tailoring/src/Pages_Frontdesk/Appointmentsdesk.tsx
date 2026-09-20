@@ -19,7 +19,10 @@ import frontDeskApi, { type Appointment, type Customer, type Order } from '../..
 import { dedupeAppointments, stageBadgeStyle } from '../utils/appointmentDisplay';
 import { FITTING_JOURNEY, determineStageForJob, findActiveAppointmentForJob, nextFittingStage } from '../utils/appointmentWorkflow';
 
-type AppointmentStatus = 'Scheduled' | 'Confirmed' | 'Completed' | 'Rescheduled' | 'Cancelled';
+// Walk-in, production-driven status model. A visit starts as Suggested (the
+// workshop reached a milestone), then the Front Desk decides: Approved,
+// Rescheduled, Completed or Cancelled. Legacy values are display-only.
+type AppointmentStatus = 'Suggested' | 'Approved' | 'Rescheduled' | 'Completed' | 'Cancelled' | 'Scheduled' | 'Confirmed';
 
 function Label({ children }: { children: React.ReactNode }) {
   return <span className="text-[10px] uppercase tracking-[0.2em] text-[#8C7E74]" style={{ fontFamily: "'Space Mono', monospace" }}>{children}</span>;
@@ -27,13 +30,13 @@ function Label({ children }: { children: React.ReactNode }) {
 
 function StatusBadge({ status }: { status: AppointmentStatus }) {
   const classes = status === 'Completed' ? 'border-[#B9DDD0] bg-[#E7F4EE] text-[#277257]' : 
-    status === 'Confirmed' ? 'border-[#C7DDD3] bg-[#EDF5F0] text-[#4E7357]' : 
-    status === 'Scheduled' ? 'border-[#ECD8A7] bg-[#FFF7E3] text-[#8A6618]' :
+    (status === 'Approved' || status === 'Confirmed') ? 'border-[#C7DDD3] bg-[#EDF5F0] text-[#4E7357]' : 
+    status === 'Suggested' ? 'border-[#ECD8A7] bg-[#FFF7E3] text-[#8A6618]' :
     status === 'Rescheduled' ? 'border-[#E6C8C2] bg-[#FDF0ED] text-[#9E5B4B]' :
     'border-[#D9C8B7] bg-[#F8F3EB] text-[#766A62]';
   const dot = status === 'Completed' ? 'bg-[#277257]' : 
-    status === 'Confirmed' ? 'bg-[#4E7357]' : 
-    status === 'Scheduled' ? 'bg-[#8A6618]' :
+    (status === 'Approved' || status === 'Confirmed') ? 'bg-[#4E7357]' : 
+    status === 'Suggested' ? 'bg-[#8A6618]' :
     status === 'Rescheduled' ? 'bg-[#9E5B4B]' : 'bg-[#766A62]';
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] uppercase tracking-[0.08em] shadow-sm ${classes}`}>
@@ -72,7 +75,7 @@ const STEP_COLORS: Record<string, string> = {
   'Final Fitting': '#8C6F3E',
   Pickup: '#4E7357',
 };
-const PRODUCTION_STAGES = ['Measuring', 'Pattern Cutting', 'Initial Assembly', 'Ready for First Fitting', 'Final Alterations', 'Completed', 'Ready for Pickup'];
+const PRODUCTION_STAGES = ['Draft', 'Measuring', 'Pattern Cutting', 'Initial Assembly', 'First Fitting', 'Final Alterations', 'Quality Review', 'Completed', 'Ready for Pickup'];
 
 /** Smooth 0→100 readiness curve between the order start and its due date. */
 function readinessPct(t: number, start: number, end: number): number {
@@ -302,7 +305,7 @@ function FittingTracker({ appointment, order, relatedAppointments = [] }: { appo
   );
 }
 
-function AppointmentDetails({ appointment, order, relatedAppointments, onClose, onComplete, onNextStage }: { appointment: Appointment; order?: Order; relatedAppointments?: Appointment[]; onClose: () => void; onComplete: () => void; onNextStage: () => void }) {
+function AppointmentDetails({ appointment, order, relatedAppointments, onClose, onComplete }: { appointment: Appointment; order?: Order; relatedAppointments?: Appointment[]; onClose: () => void; onComplete: () => void }) {
   const nextStage = nextFittingStage(appointment.appointment_type);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -335,9 +338,9 @@ function AppointmentDetails({ appointment, order, relatedAppointments, onClose, 
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             {nextStage && (
-              <button onClick={onNextStage} title={`Book the ${nextStage} visit for this job card`} className="inline-flex items-center gap-2 rounded-lg bg-[#2A211D] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white shadow-sm hover:-translate-y-0.5 transition-transform">
-                <CalendarClock className="h-4 w-4" /> Schedule {nextStage}
-              </button>
+              <span className="max-w-xs text-right text-[11px] leading-relaxed text-[#8C7E74]">
+                The {nextStage} visit is suggested automatically once the workshop records that production milestone.
+              </span>
             )}
             {appointment.appointment_type === 'Final Fitting' &&
               appointment.status !== 'Completed' &&
@@ -387,7 +390,7 @@ function AppointmentEditor({
   useEffect(() => {
     if (!initial?.customerId || form.orderId) return;
     const pool = orders.filter(
-      (o) => String(o.customer_id) === String(initial.customerId) && o.production_status !== 'Released'
+      (o) => String(o.customer_id) === String(initial.customerId) && ['First Fitting', 'Final Alterations', 'Quality Review', 'Completed', 'Ready for Pickup'].includes(o.production_status)
     );
     if (pool.length) setForm((f) => ({ ...f, orderId: pool[0].order_id }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -401,7 +404,7 @@ function AppointmentEditor({
   const filteredOrders = orders.filter(
     (o) =>
       o.customer_id === form.customerId &&
-      o.production_status !== 'Released' &&
+      ['First Fitting', 'Final Alterations', 'Quality Review', 'Completed', 'Ready for Pickup'].includes(o.production_status) &&
       !findActiveAppointmentForJob(appointments, o.job_card_id)
   );
   const selectedOrder = orders.find(o => o.order_id === form.orderId);
@@ -411,11 +414,15 @@ function AppointmentEditor({
   const activeVisit = useMemo(() => findActiveAppointmentForJob(appointments, form.orderId), [appointments, form.orderId]);
   const plannedType = useMemo(() => {
     if (initial?.appointmentType) return initial.appointmentType;
-    // Fresh booking ("+ Schedule appointment", no job order attached yet):
-    // the first visit on the journey is always a Consultation.
-    if (!form.orderId) return 'Consultation';
+    // Walk-in measuring happens during intake, so the first schedulable visit
+    // is the First Fitting, never an online consultation.
+    if (!form.orderId) return 'First Fitting';
+    // Moving an active booking changes only its date/time. Advancing to the
+    // next visit is allowed only after Front Desk marks the current visit
+    // Completed, preserving the real fitting history.
+    if (activeVisit) return activeVisit.appointment_type;
     return determineStageForJob(appointments, form.orderId);
-  }, [appointments, form.orderId, initial?.appointmentType]);
+  }, [appointments, form.orderId, initial?.appointmentType, activeVisit]);
 
   // Appointment-type graph: every visit on record grouped by fitting stage.
   const typeChart = useMemo(
@@ -444,7 +451,7 @@ function AppointmentEditor({
     try {
       await onSchedule({
         ...form,
-        appointmentType: plannedType || activeVisit?.appointment_type || 'Consultation',
+        appointmentType: plannedType || activeVisit?.appointment_type || 'First Fitting',
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to schedule appointment.');
@@ -458,8 +465,8 @@ function AppointmentEditor({
       <button onClick={onClose} className="absolute inset-0 bg-[#1F1916]/45 backdrop-blur-sm" />
       <form onSubmit={handleSubmit} className="relative w-full max-w-xl rounded-xl border border-[#E2D7C7] bg-[#FFFCF8] p-7 shadow-2xl">
         <button type="button" onClick={onClose} className="absolute right-5 top-5 text-[#766A62]"><X className="h-5 w-5" /></button>
-        <Label>Fitting scheduler</Label>
-        <h2 className="mt-1 text-3xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Schedule appointment</h2>
+        <Label>Exception visit</Label>
+        <h2 className="mt-1 text-3xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Manual exception appointment</h2>
         
         {error && <div className="mt-4 border border-[#C86A58]/30 bg-[#FDF4F2] px-4 py-3 rounded-lg text-sm text-[#9A3B2A]">{error}</div>}
         {selectedOrder && (
@@ -473,7 +480,7 @@ function AppointmentEditor({
             ) : (
               <>
                 Next visit for <span className="font-semibold uppercase tracking-[0.08em]">{selectedOrder.job_card_id}</span> is booked automatically as{' '}
-                <span className="font-semibold uppercase tracking-[0.08em]">{plannedType || 'Consultation'}</span>. Just pick a date and time.
+                <span className="font-semibold uppercase tracking-[0.08em]">{plannedType || 'First Fitting'}</span>. Just pick a date and time.
               </>
             )}
           </p>
@@ -600,17 +607,202 @@ function AppointmentEditor({
   );
 }
 
-const STAGES = ['Measuring', 'Pattern Cutting', 'Initial Assembly', 'Ready for First Fitting', 'Final Alterations', 'Completed', 'Ready for Pickup'];
-const STAGE_SHORT: Record<string, string> = {
-  Measuring: 'Measure',
-  'Pattern Cutting': 'Pattern',
-  'Initial Assembly': 'Assembly',
-  'Ready for First Fitting': 'Fitting',
-  'Final Alterations': 'Alter',
-  Completed: 'Done',
-  'Ready for Pickup': 'Pickup'
-};
+// (stage ladder constants removed: the appointment pipeline is production-driven)
 const STAGE_CHART_COLORS = ['#C9BBA6', '#8FAF9E', '#C9A15C', '#A8644A', '#B89255', '#6E8F72', '#4E7357'];
+
+/* ============================================================
+   PENDING APPOINTMENT APPROVALS — the Front Desk's primary surface.
+   Production milestones create Suggested visits; only the Front Desk
+   approves, reschedules, cancels or completes them.
+============================================================= */
+function PendingApprovals({
+  items,
+  busyId,
+  onApprove,
+  onReschedule,
+  onCancel,
+  onComplete,
+  onViewDetails,
+}: {
+  items: Appointment[];
+  busyId: string | null;
+  onApprove: (appointment: Appointment) => void;
+  onReschedule: (appointment: Appointment, data: { appointmentDate: string; appointmentTime: string; notes: string }) => void;
+  onCancel: (appointment: Appointment) => void;
+  onComplete: (appointment: Appointment) => void;
+  onViewDetails: (appointment: Appointment) => void;
+}) {
+  const [target, setTarget] = useState<Appointment | null>(null);
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
+  const [notes, setNotes] = useState('');
+
+  const openReschedule = (appointment: Appointment) => {
+    setTarget(appointment);
+    setDate(appointment.appointment_date || '');
+    setTime((appointment.appointment_time || '').slice(0, 5));
+    setNotes(appointment.notes || '');
+  };
+
+  return (
+    <section className="dash-in dash-card overflow-hidden rounded-xl">
+      <div className="flex flex-col gap-3 border-b border-[#E8DFD3] p-6 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <Label>Production suggestions</Label>
+          <h2 className="mt-1 text-2xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Pending appointment approvals</h2>
+          <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-[#766A62]">
+            Each visit below was suggested automatically when a job card reached a production milestone. The customer,
+            job card, visit type and assigned tailor always come from that job card. Nothing is sent to the customer or
+            tailor until you approve or reschedule the visit.
+          </p>
+        </div>
+        <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-[#ECD8A7] bg-[#FFF7E3] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#8A6618]">
+          <Sparkles className="h-3 w-3" /> {items.length} awaiting decision
+        </span>
+      </div>
+
+      {!items.length && (
+        <p className="p-8 text-center text-sm text-[#766A62]">
+          No suggested visits are waiting. A First Fitting, Final Fitting or Pickup visit appears here automatically as
+          soon as the workshop records the matching production milestone.
+        </p>
+      )}
+
+      {items.map((appointment) => {
+        const busy = busyId === appointment.appointment_id;
+        return (
+          <article key={appointment.appointment_id} className="border-b border-[#F0EAE2] p-6 last:border-b-0">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] text-[#8C7E74]" style={{ fontFamily: "'Space Mono', monospace" }}>{appointment.appointment_number || `APT-${appointment.appointment_id}`}</span>
+                  <StageBadge type={appointment.appointment_type} />
+                  <StatusBadge status={appointment.status as AppointmentStatus} />
+                </div>
+                <p className="mt-2 text-[15px] font-medium text-[#2A211D]">{appointment.customer_name || 'Customer on file'}</p>
+                <p className="text-[12.5px] text-[#8C7E74]">
+                  {appointment.suggested_reason || (appointment.appointment_type === 'Pickup' ? 'Garment passed production and is ready for pickup' : 'Garment is ready for the next fitting')}
+                  {appointment.generated_from_stage ? ` · from ${appointment.generated_from_stage}` : ''}
+                </p>
+              </div>
+              <div className="flex flex-shrink-0 items-center gap-3">
+                <div className="rounded-lg border border-[#E2D7C7] bg-white px-3 py-2 text-center">
+                  <Label>Suggested</Label>
+                  <div className="mt-0.5 text-sm font-medium text-[#2A211D]">{new Date(appointment.appointment_date).toLocaleDateString()}</div>
+                  <div className="text-[11px] text-[#8C7E74]">{(appointment.appointment_time || '').slice(0, 5)}</div>
+                </div>
+              </div>
+            </div>
+            <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                ['Customer', appointment.customer_name || '—'],
+                ['Job card', appointment.job_card_id || '—'],
+                ['Garment', appointment.garment || '—'],
+                ['Assigned tailor', appointment.assigned_tailor_name || 'Unassigned'],
+                ['Suggested date', new Date(appointment.appointment_date).toLocaleDateString()],
+                ['Suggested time', (appointment.appointment_time || '').slice(0, 5)],
+                ['Reason', appointment.suggested_reason || '—'],
+                ['Notes', appointment.notes || '—'],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-lg border border-[#E2D7C7] bg-[#FCFAF7] p-3">
+                  <Label>{label}</Label>
+                  <div className="mt-1 text-[13px] text-[#2A211D]">{value}</div>
+                </div>
+              ))}
+            </dl>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                disabled={busy}
+                onClick={() => onApprove(appointment)}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#2A211D] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white shadow-sm transition-transform hover:-translate-y-0.5 disabled:opacity-50"
+              >
+                <Check className="h-4 w-4" />{busy ? 'Saving…' : 'Approve'}
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => openReschedule(appointment)}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#E2D7C7] bg-white px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048] disabled:opacity-50"
+              >
+                <CalendarClock className="h-4 w-4" />Reschedule
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => onViewDetails(appointment)}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#E2D7C7] bg-white px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048] disabled:opacity-50"
+              >
+                <Search className="h-4 w-4" />View details
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => onComplete(appointment)}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#C7DDD3] bg-[#EDF5F0] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#4E7357] disabled:opacity-50"
+              >
+                <Package className="h-4 w-4" />Mark completed
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => onCancel(appointment)}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#E6C8C2] bg-[#FDF0ED] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#9E5B4B] disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />Cancel
+              </button>
+            </div>
+          </article>
+        );
+      })}
+      {target && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button onClick={() => setTarget(null)} className="absolute inset-0 bg-[#1F1916]/45 backdrop-blur-sm" />
+          <form
+            onSubmit={(e) => { e.preventDefault(); onReschedule(target, { appointmentDate: date, appointmentTime: time, notes }); setTarget(null); }}
+            className="relative w-full max-w-lg rounded-xl border border-[#E2D7C7] bg-[#FFFCF8] p-7 shadow-2xl"
+          >
+            <button type="button" onClick={() => setTarget(null)} className="absolute right-5 top-5 text-[#766A62]"><X className="h-5 w-5" /></button>
+            <Label>Front Desk decision</Label>
+            <h2 className="mt-1 text-2xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Reschedule visit</h2>
+            <p className="mt-2 text-[12px] leading-relaxed text-[#8C7E74]">
+              Only the date, time and notes can change. Customer, job card, visit type and assigned tailor belong to the
+              job card and stay locked.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {[
+                ['Customer', target.customer_name || '—'],
+                ['Job card', target.job_card_id || '—'],
+                ['Appointment type', target.appointment_type],
+                ['Assigned tailor', target.assigned_tailor_name || 'Unassigned'],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-lg border border-[#E2D7C7] bg-[#F8F3EB] p-3">
+                  <Label>{label}</Label>
+                  <div className="mt-1 text-[13px] text-[#5E5048]">{value}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <Label>New date</Label>
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 w-full rounded-lg border border-[#E2D7C7] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#A46B48]" />
+              </label>
+              <label className="block">
+                <Label>New time</Label>
+                <input type="time" step={1800} value={time} onChange={(e) => setTime(e.target.value)} className="mt-1 w-full rounded-lg border border-[#E2D7C7] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#A46B48]" />
+              </label>
+            </div>
+            <label className="mt-3 block">
+              <Label>Notes</Label>
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-[#E2D7C7] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#A46B48]" />
+            </label>
+            <p className="mt-3 text-[11px] text-[#8C7E74]">Visits run Monday–Saturday, 9:00 AM–6:00 PM, in 30-minute slots. The shop is closed on Sundays.</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setTarget(null)} className="rounded-lg border border-[#E2D7C7] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048]">Cancel</button>
+              <button type="submit" className="rounded-lg bg-[#2A211D] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white">Save new schedule</button>
+            </div>
+          </form>
+        </div>
+      )}
+    </section>
+  );
+}
 
 export function FrontDeskAppointmentsView() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -622,17 +814,24 @@ export function FrontDeskAppointmentsView() {
   const [editorPreset, setEditorPreset] = useState<{ customerId: string; orderId: string; appointmentType?: string; customerName?: string; jobCardId?: string } | null>(null);
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
+  // PENDING APPOINTMENT APPROVALS: visits the system suggested when a job
+  // card reached a production milestone, waiting for a Front Desk decision.
+  const [pending, setPending] = useState<Appointment[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [details, setDetails] = useState<Appointment | null>(null);
 
   const loadData = useCallback(async () => {
     try {
-      const [appointmentsData, customersData, ordersData] = await Promise.all([
+      const [appointmentsData, customersData, ordersData, pendingData] = await Promise.all([
         frontDeskApi.getAppointments(),
         frontDeskApi.searchCustomers(''),
         frontDeskApi.getAllOrders(),
+        frontDeskApi.getPendingAppointments(),
       ]);
       setAppointments(appointmentsData);
       setCustomers(customersData);
       setOrders(ordersData);
+      setPending(pendingData);
     } catch (err) {
       console.error('Failed to load data:', err);
       setNotice('Failed to load appointment data.');
@@ -652,8 +851,12 @@ export function FrontDeskAppointmentsView() {
   useEffect(() => {
     const id = setInterval(async () => {
       try {
-        const appointmentsData = await frontDeskApi.getAppointments();
+        const [appointmentsData, pendingData] = await Promise.all([
+          frontDeskApi.getAppointments(),
+          frontDeskApi.getPendingAppointments(),
+        ]);
         setAppointments(appointmentsData);
+        setPending(pendingData);
       } catch {
         // transient failure — keep showing the last good data
       }
@@ -680,17 +883,30 @@ export function FrontDeskAppointmentsView() {
     return a.appointment_date === todayStr;
   });
 
-  const stageChart = useMemo(() => 
-    STAGES.map((stage) => ({
-      stage: STAGE_SHORT[stage] || stage,
-      count: visibleAppointments.filter((a) => a.appointment_type.includes(stage) || a.appointment_type === 'First Fitting' && stage === 'Ready for First Fitting').length,
+  // Appointment pipeline by visit type. In the production-driven model a visit
+  // exists because a milestone was reached, so the chart counts live visits per
+  // production visit type instead of a per-stage ladder.
+  const stageChart = useMemo(() =>
+    ['First Fitting', 'Final Fitting', 'Pickup'].map((type) => ({
+      stage: type === 'Pickup' ? 'Pickup' : type.replace(' Fitting', ''),
+      count: visibleAppointments.filter((a) => a.appointment_type === type && ['Suggested', 'Approved', 'Rescheduled', 'Scheduled', 'Confirmed'].includes(a.status)).length,
     })),
     [visibleAppointments]
   );
 
-  // One submission path for every scheduling flow. If the job order already
-  // has a live appointment, that SAME record is updated in place (new date,
-  // time and next fitting stage) — a duplicate row is never created.
+  // First Fitting / Final Fitting / Pickup counts for the pipeline card.
+  const typeCounts = useMemo(() => {
+    const live = visibleAppointments.filter((a) => ['Suggested', 'Approved', 'Rescheduled', 'Scheduled', 'Confirmed'].includes(a.status));
+    return live.reduce<Record<string, number>>((acc, a) => {
+      acc[a.appointment_type] = (acc[a.appointment_type] || 0) + 1;
+      return acc;
+    }, {});
+  }, [visibleAppointments]);
+
+  // MANUAL EXCEPTION APPOINTMENT (special follow-ups only). Normal fitting and
+  // pickup visits are suggested automatically when production reaches a
+  // milestone. An existing job card is required; its customer and assigned
+  // tailor are derived from that card and never picked here.
   const handleScheduleAppointment = async (data: {
     customerId: string;
     orderId: string;
@@ -699,71 +915,123 @@ export function FrontDeskAppointmentsView() {
     appointmentType: string;
     notes: string;
   }) => {
-    const existing = findActiveAppointmentForJob(appointments, data.orderId);
-    if (existing) {
-      const updated = await frontDeskApi.rescheduleAppointment(existing.appointment_id, {
-        appointmentDate: data.appointmentDate,
-        appointmentTime: data.appointmentTime,
-        appointmentType: data.appointmentType,
-      });
-      setAppointments(prev => prev.map(a => a.appointment_id === updated.appointment_id ? { ...a, ...updated } : a));
-      setEditorOpen(false);
-      setEditorPreset(null);
-      setNotice(`${updated.customer_name}'s ${existing.appointment_type} visit moved to ${updated.appointment_type} — same appointment updated.`);
-      setTimeout(() => setNotice(''), 4000);
-      return;
-    }
-    const newAppointment = await frontDeskApi.createAppointment({
-      customerId: data.customerId,
-      orderId: data.orderId,
+    const order = orders.find((o) => String(o.order_id) === String(data.orderId))
+      || orders.find((o) => String(o.customer_id) === String(data.customerId));
+    const jobCardNumber = order?.job_card_id || '';
+    if (!jobCardNumber) throw new Error('This customer has no job card yet. An exception visit must belong to an existing job card.');
+    const existing = findActiveAppointmentForJob(appointments, jobCardNumber);
+    if (existing) throw new Error(`Job card ${jobCardNumber} already has a live ${existing.appointment_type} visit. Reschedule that visit instead.`);
+    const created = await frontDeskApi.createExceptionAppointment({
+      jobCardNumber,
       appointmentDate: data.appointmentDate,
       appointmentTime: data.appointmentTime,
       appointmentType: data.appointmentType,
       notes: data.notes,
     });
-    setAppointments(prev => [...prev, newAppointment]);
+    setAppointments(prev => [...prev, created]);
     setEditorOpen(false);
     setEditorPreset(null);
-    setNotice(`Appointment scheduled for ${newAppointment.customer_name}.`);
+    setNotice(`Exception visit scheduled for ${created.customer_name || 'the customer'} (${jobCardNumber}).`);
     setTimeout(() => setNotice(''), 4000);
+    await loadData();
   };
 
   const handleCompleteAppointment = async () => {
     if (!selected) return;
     try {
-      const updated = await frontDeskApi.updateAppointmentStatus(selected.appointment_id, 'Completed');
+      const updated = await frontDeskApi.completeAppointment(selected.appointment_id);
       setAppointments(prev => prev.map(a => a.appointment_id === updated.appointment_id ? updated : a));
       setSelected(updated);
-      setNotice(`${updated.customer_name}'s appointment was completed.`);
+      setNotice(`${updated.customer_name || 'The customer'} - ${updated.appointment_type} visit marked completed.`);
       setTimeout(() => setNotice(''), 4000);
+      await loadData();
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : 'Failed to complete appointment.');
+      setNotice(err instanceof Error ? err.message : 'Failed to complete the visit.');
       setTimeout(() => setNotice(''), 4000);
     }
   };
 
-  // Opens the scheduler pre-filled with the SAME customer + job order and the
-  // automatically determined next fitting stage — nothing to pick again.
-  const handleNextStage = () => {
-    if (!selected) return;
-    const nextType = nextFittingStage(selected.appointment_type);
-    if (!nextType) return;
-    // Attach the SAME customer + job order directly — resolve the order from
-    // the appointment's order id, its job card number, or failing both, the
-    // customer's most recent active order. The staff never picks anything.
-    const linkedOrder =
-      orders.find((o) => String(o.order_id) === String(selected.order_id)) ||
-      orders.find((o) => o.job_card_id === selected.job_card_id) ||
-      orders.find((o) => String(o.customer_id) === String(selected.customer_id) && o.production_status !== 'Released');
-    setEditorPreset({
-      customerId: selected.customer_id,
-      orderId: selected.order_id ?? linkedOrder?.order_id ?? '',
-      appointmentType: nextType,
-      customerName: selected.customer_name,
-      jobCardId: selected.job_card_id,
-    });
-    setSelected(null);
-    setEditorOpen(true);
+  // ---- Front Desk decisions on production-suggested visits -------------------
+  const applyDecision = (updated: Appointment) => {
+    setAppointments(prev => prev.map(a => a.appointment_id === updated.appointment_id ? { ...a, ...updated } : a));
+    setPending(prev => prev.filter(a => a.appointment_id !== updated.appointment_id));
+    setSelected(prev => (prev && prev.appointment_id === updated.appointment_id ? { ...prev, ...updated } : prev));
+  };
+
+  const handleApprove = async (appointment: Appointment) => {
+    setBusyId(appointment.appointment_id);
+    try {
+      const updated = await frontDeskApi.approveAppointment(appointment.appointment_id);
+      applyDecision(updated);
+      setNotice(`${updated.appointment_type} for ${updated.customer_name || 'the customer'} approved. The customer and ${updated.assigned_tailor_name || 'the assigned tailor'} were notified.`);
+      setTimeout(() => setNotice(''), 4000);
+      await loadData();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : 'The visit could not be approved.');
+      setTimeout(() => setNotice(''), 5000);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleCancel = async (appointment: Appointment) => {
+    setBusyId(appointment.appointment_id);
+    try {
+      const updated = await frontDeskApi.cancelAppointment(appointment.appointment_id, 'Cancelled at the Front Desk.');
+      applyDecision(updated);
+      setNotice(`${updated.appointment_type} for ${updated.customer_name || 'the customer'} was cancelled. Both parties were notified.`);
+      setTimeout(() => setNotice(''), 4000);
+      await loadData();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : 'The visit could not be cancelled.');
+      setTimeout(() => setNotice(''), 5000);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleMarkCompleted = async (appointment: Appointment) => {
+    setBusyId(appointment.appointment_id);
+    try {
+      const updated = await frontDeskApi.completeAppointment(appointment.appointment_id);
+      applyDecision(updated);
+      setNotice(`${updated.appointment_type} for ${updated.customer_name || 'the customer'} was marked completed.`);
+      setTimeout(() => setNotice(''), 4000);
+      await loadData();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : 'The visit could not be completed.');
+      setTimeout(() => setNotice(''), 5000);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleRescheduleDecision = async (appointment: Appointment, data: { appointmentDate: string; appointmentTime: string; notes: string }) => {
+    setBusyId(appointment.appointment_id);
+    try {
+      const updated = await frontDeskApi.rescheduleAppointment(appointment.appointment_id, data);
+      applyDecision(updated);
+      setNotice(`${updated.appointment_type} for ${updated.customer_name || 'the customer'} moved to ${data.appointmentDate} ${data.appointmentTime}. The customer and ${updated.assigned_tailor_name || 'the assigned tailor'} were notified.`);
+      setTimeout(() => setNotice(''), 4500);
+      await loadData();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : 'The visit could not be rescheduled.');
+      setTimeout(() => setNotice(''), 5000);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleViewDetails = async (appointment: Appointment) => {
+    setBusyId(appointment.appointment_id);
+    try {
+      setDetails(await frontDeskApi.getAppointmentDetails(appointment.appointment_id));
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : 'The appointment details could not be loaded.');
+      setTimeout(() => setNotice(''), 4000);
+    } finally {
+      setBusyId(null);
+    }
   };
 
   if (loading) {
@@ -778,12 +1046,12 @@ export function FrontDeskAppointmentsView() {
     <div className="space-y-7">
       <div className="dash-in flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <Label>Fitting scheduler</Label>
+          <Label>Appointment approvals</Label>
           <h1 className="mt-1 text-2xl text-[#2A211D] sm:text-3xl" style={{ fontFamily: "'DM Serif Display', serif" }}>Appointments</h1>
-          <p className="mt-2 text-sm text-[#766A62]">Schedule fittings and keep every customer visit on track.</p>
+          <p className="mt-2 text-sm text-[#766A62]">Front Desk approves, reschedules or cancels the visits the workshop suggests when a job card reaches a fitting or pickup milestone.</p>
         </div>
-        <button onClick={() => { setEditorPreset(null); setEditorOpen(true); }} className="inline-flex items-center gap-2 rounded-lg bg-[#2A211D] px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white shadow-[0_10px_26px_-14px_rgba(42,33,29,0.55)] hover:-translate-y-0.5 hover:bg-[#3D312B] transition-all">
-          <Plus className="h-4 w-4" /> Schedule appointment
+        <button onClick={() => { setEditorPreset(null); setEditorOpen(true); }} className="inline-flex items-center gap-2 rounded-lg border border-[#E2D7C7] bg-white px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048] shadow-sm transition-colors hover:bg-[#FCFAF7]">
+          <Plus className="h-4 w-4" /> Manual exception appointment
         </button>
       </div>
 
@@ -793,7 +1061,23 @@ export function FrontDeskAppointmentsView() {
         </div>
       )}
 
-      <div className="dash-in grid grid-cols-2 gap-4 lg:grid-cols-3">
+      {/* PENDING APPOINTMENT APPROVALS — production milestone suggestions. */}
+      <PendingApprovals
+        items={pending}
+        busyId={busyId}
+        onApprove={handleApprove}
+        onReschedule={handleRescheduleDecision}
+        onCancel={handleCancel}
+        onComplete={handleMarkCompleted}
+        onViewDetails={handleViewDetails}
+      />
+
+      <div className="dash-in grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <Metric label="Suggested" value={pending.length} icon={<Sparkles className="h-4 w-4" strokeWidth={1.6} />} />
+        <Metric label="Approved" value={visibleAppointments.filter(a => a.status === 'Approved' || a.status === 'Confirmed' || a.status === 'Scheduled').length} icon={<Check className="h-4 w-4" strokeWidth={1.6} />} tone="good" />
+        <Metric label="Rescheduled" value={visibleAppointments.filter(a => a.status === 'Rescheduled').length} icon={<CalendarClock className="h-4 w-4" strokeWidth={1.6} />} />
+        <Metric label="Completed" value={visibleAppointments.filter(a => a.status === 'Completed').length} icon={<Package className="h-4 w-4" strokeWidth={1.6} />} tone="good" />
+        <Metric label="Cancelled" value={visibleAppointments.filter(a => a.status === 'Cancelled').length} icon={<X className="h-4 w-4" strokeWidth={1.6} />} />
         <Metric label="Today's fittings" value={today.length} icon={<CalendarClock className="h-4 w-4" strokeWidth={1.6} />} />
         <Metric label="Confirmed" value={visibleAppointments.filter(a => a.status === 'Confirmed').length} icon={<Check className="h-4 w-4" strokeWidth={1.6} />} tone="good" />
         <Metric label="Upcoming" value={visibleAppointments.filter(a => a.status !== 'Completed' && a.status !== 'Cancelled').length} icon={<Sparkles className="h-4 w-4" strokeWidth={1.6} />} />
@@ -801,12 +1085,16 @@ export function FrontDeskAppointmentsView() {
 
       <section className="dash-in dash-card rounded-xl p-6 sm:p-7">
         <div className="flex items-start justify-between gap-3 mb-1">
-          <div><Label>Booked pipeline</Label><h2 className="text-xl font-normal mt-0.5 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Appointments by stage</h2></div>
+          <div>
+            <Label>Appointment pipeline</Label>
+            <h2 className="text-xl font-normal mt-0.5 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>Live visits by type</h2>
+            <p className="mt-1 text-[12px] text-[#8C7E74]">First Fitting {typeCounts['First Fitting'] || 0} · Final Fitting {typeCounts['Final Fitting'] || 0} · Pickup {typeCounts['Pickup'] || 0}</p>
+          </div>
           <span className="inline-flex items-center gap-1 rounded-full bg-[#F1F5F0] border border-[#C7DDD3] px-2.5 py-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-[#4E7357] flex-shrink-0">
             <TrendingUp className="w-3 h-3" /> {visibleAppointments.length} total
           </span>
         </div>
-        <p className="text-[12.5px] text-[#8C7E74] mb-5">Where every booked fitting currently sits in the workflow</p>
+        <p className="text-[12.5px] text-[#8C7E74] mb-5">Each visit exists because the workshop reached that production milestone</p>
         <div className="h-44 -ml-2">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={stageChart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -850,10 +1138,55 @@ export function FrontDeskAppointmentsView() {
         ))}
         {!filtered.length && <p className="p-12 text-center text-sm text-[#766A62]">No appointment matches your search.</p>}
         <p className="border-t border-[#F0EAE2] bg-[#FCFAF7]/60 px-6 py-3 text-[11px] leading-relaxed text-[#8C7E74]">
-          One row per job order: each job card keeps a single live appointment that advances through Consultation → First Fitting → Final Fitting → Pickup. Scheduling the next visit updates this same record instead of creating duplicates, and the fitting stage is always determined automatically.
+          Every visit below exists because the workshop reached a production milestone (First Fitting, Final Fitting or Pickup). Front Desk approves, reschedules, cancels or completes each one; nothing is booked by hand except documented exceptions.
         </p>
       </section>
 
+      {/* View Details — read-only, with the append-only decision history. */}
+      {details && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button onClick={() => setDetails(null)} className="absolute inset-0 bg-[#1F1916]/45 backdrop-blur-sm" />
+          <section className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-[#E2D7C7] bg-[#FFFCF8] p-7 shadow-2xl">
+            <button onClick={() => setDetails(null)} className="absolute right-5 top-5 text-[#766A62]"><X className="h-5 w-5" /></button>
+            <Label>Appointment details</Label>
+            <h2 className="mt-1 text-2xl text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{details.appointment_number || `APT-${details.appointment_id}`}</h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {[
+                ['Type', details.appointment_type],
+                ['Status', details.status],
+                ['Customer', details.customer_name || '-'],
+                ['Job card', details.job_card_id || '-'],
+                ['Garment', details.garment || '-'],
+                ['Assigned tailor', details.assigned_tailor_name || 'Unassigned'],
+                ['Date', details.appointment_date ? new Date(details.appointment_date).toLocaleDateString() : '-'],
+                ['Time', (details.appointment_time || '').slice(0, 5)],
+                ['Reason', details.suggested_reason || '-'],
+                ['Generated from', details.generated_from_stage || '-'],
+                ['Origin', details.appointment_origin === 'manual_exception' ? 'Manual exception' : 'Production milestone'],
+                ['Notes', details.notes || '-'],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-lg border border-[#E2D7C7] bg-[#FCFAF7] p-3">
+                  <Label>{label}</Label>
+                  <div className="mt-1 text-[13px] text-[#2A211D]">{value}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5">
+              <Label>Decision history (read-only)</Label>
+              <ol className="mt-2 space-y-2">
+                {(details.history || []).map((h, i) => (
+                  <li key={i} className="rounded-lg border border-[#E8DFD3] bg-white px-4 py-3 text-[12.5px] text-[#5E5048]">
+                    <span className="font-semibold text-[#2A211D]">{h.from_status || 'Created'} {'->'} {h.to_status}</span>
+                    <span className="text-[#8C7E74]"> · {h.actor_name || 'System'}{h.created_at ? ` · ${new Date(h.created_at).toLocaleString()}` : ''}</span>
+                    {h.notes ? <div className="mt-1 text-[12px] text-[#8C7E74]">{h.notes}</div> : null}
+                  </li>
+                ))}
+                {!(details.history || []).length && <li className="text-[12.5px] text-[#8C7E74]">No decisions recorded yet.</li>}
+              </ol>
+            </div>
+          </section>
+        </div>
+      )}
       {selected && (
         <AppointmentDetails
           appointment={selected}
@@ -861,7 +1194,6 @@ export function FrontDeskAppointmentsView() {
           relatedAppointments={visibleAppointments.filter(a => a.job_card_id === selected.job_card_id)}
           onClose={() => setSelected(null)}
           onComplete={handleCompleteAppointment}
-          onNextStage={handleNextStage}
         />
       )}
       {editorOpen && (
