@@ -4,6 +4,7 @@ import {
   COLORS, FONT_IMPORT, PageHeader, StatCard, SearchField, FilterPill, Card, TableHeadRow, EmptyState,
   ModalShell, EyebrowLabel, Badge,
 } from './Theme';
+import { formatPHP as peso } from '../utils/currency';
 
 type PaymentStatus = 'Paid' | 'Partial' | 'Balance due';
 type Payment = { receipt: string; customer: string; job: string; garment: string; method: string; type: string; amount: number; balance: number; date: string; status: PaymentStatus; };
@@ -18,7 +19,6 @@ const PAYMENTS: Payment[] = [
 ];
 
 const STATUS_TONE: Record<PaymentStatus, 'success' | 'info' | 'danger'> = { Paid: 'success', Partial: 'info', 'Balance due': 'danger' };
-const peso = (value: number) => `₱${value.toLocaleString()}`;
 
 export function AdminPaymentsView() {
   const [query, setQuery] = useState('');

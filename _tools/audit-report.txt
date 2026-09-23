@@ -1,0 +1,57 @@
+
+===== RAW-PESO-TEMPLATE-₱${ (8) =====
+Tailoring\src\dashboard\Frontdeskdashboard.before-intake-refactor.txt:100  |  return `₱${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+Tailoring\src\utils\currency.ts:63  |  if (Math.abs(n) >= 1_000_000) return `₱${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}m`;
+Tailoring\src\utils\currency.ts:64  |  if (Math.abs(n) >= 1_000) return `₱${Math.round(n / 1_000)}k`;
+..\TAILORING_MS_SERVER\Server\lib\formatPHP.js:39  |  if (Math.abs(n) >= 1_000_000) return `₱${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}m`;
+..\TAILORING_MS_SERVER\Server\lib\formatPHP.js:40  |  if (Math.abs(n) >= 1_000) return `₱${Math.round(n / 1_000)}k`;
+..\TAILORING_MS_SERVER\Server\routes\customerOrders.js:156  |  message: `A deposit of ₱${depositRequired.toLocaleString('en-PH')} (50% of ₱${total.toLocaleString('en-PH')}) must be recorded before scheduling. ₱${paid.toLocaleString('en-PH')} o
+..\TAILORING_MS_SERVER\Server\routes\customerOrders.js:173  |  await db.query(`INSERT INTO notifications (recipient_role, job_card_number, title, message, type) SELECT 'front_desk', ?, 'Balance due at fitting', ?, 'payment' FROM users WHERE ro
+..\TAILORING_MS_SERVER\Server\routes\customerOrders.js:176  |  await db.query(`INSERT INTO notifications (recipient_user_id, recipient_role, job_card_number, title, message, type) VALUES (?, 'customer', ?, 'Balance due at fitting', ?, 'payment
+
+===== RAW-PESO-CONCAT (0) =====
+  (none)
+
+===== DASH-RANGE-COPY (2) =====
+Tailoring\src\utils\productionTime.ts:7  |  // "7–10 days" are normalised automatically.
+Tailoring\src\utils\productionTime.ts:24  |  * "7–10 days" -> "7–10 Business Days", "5 - 7 days" -> "5–7 Business Days".
+
+===== PRODUCTION-TIME-LABEL (14) =====
+Tailoring\src\Pages_Frontdesk\garmentCatalogData.ts:119  |  // PRODUCTION TIME — the shop's usual turnaround per garment type.
+Tailoring\src\Pages_Frontdesk\GarmentCatalogdesk.tsx:366  |  <Label>Estimated Production Time</Label>
+Tailoring\src\Pages_Frontdesk\GarmentCatalogdesk.tsx:948  |  <Clock className="h-3.5 w-3.5" strokeWidth={1.8} /> Estimated production time · {card.productionTime}
+Tailoring\src\Pages_Frontdesk\GarmentCatalogdesk.tsx:1054  |  <Clock className="h-3.5 w-3.5" strokeWidth={1.8} /> Estimated production time · {card.productionTime} · deposit typically {peso(Math.round(card.startingPrice * 0.5))} at the counte
+Tailoring\src\Pages_Frontdesk\GarmentCatalogdesk.tsx:1420  |  <Clock className="h-3.5 w-3.5" strokeWidth={1.8} /> Estimated production time · {card.productionTime}
+Tailoring\src\Pages_Tailor\TailorJobCards.tsx:6  |  measurement verification, production timeline (append-only audit
+Tailoring\src\Pages_Tailor\TailorJobCards.tsx:158  |  visible production timeline on top, a 3-column body (job information /
+Tailoring\src\Pages_Tailor\TailorJobCards.tsx:275  |  // Compact glassmorphism KPI tile used by the production timeline strip.
+Tailoring\src\Pages_Tailor\TailorJobCards.tsx:810  |  {/* ============ TOP: PRODUCTION TIMELINE — the primary focus, always visible ============ */}
+Tailoring\src\Pages_Tailor\TailorJobCards.tsx:1010  |  TOP SECTION — PRODUCTION TIMELINE
+Tailoring\src\Pages_Tailor\TailorJobCards.tsx:1895  |  <p className="text-sm text-[#6D6A60]">This job card is at “{stage || 'an unrecognised stage'}”. No production form applies — use the production timeline above to move it forward.</
+Tailoring\src\utils\productionTime.ts:12  |  export const ESTIMATED_PRODUCTION_TIME_LABEL = 'Estimated Production Time';
+..\TAILORING_MS_SERVER\Server\routes\tailorRoutes.js:19  |  // The canonical production timeline (includes Quality Review before Completed).
+..\TAILORING_MS_SERVER\Server\routes\tailorRoutes.js:389  |  //  PRODUCTION WORKFLOW — advance a job card through the production timeline.
+
+===== FROM-PESO (22) =====
+Tailoring\services\frontDeskApi.ts:22  |  /** Legacy display label such as "From ₱6,500" (storefront card only). */
+Tailoring\src\dashboard\Frontdeskdashboard.before-intake-refactor.txt:318  |  /** "From ₱6,500" → 6500 (display only; real pricing still comes from the API). */
+Tailoring\src\Pages_Admin\GarmentCatalog.tsx:85  |  { name: 'Barong Tagalog', price: 'From ₱6,500', description: 'Hand-finished formal wear for weddings and ceremonies.', fabrics: ['Piña Jusi — Ivory', 'Cocoon Silk — Natural'], colo
+Tailoring\src\Pages_Admin\GarmentCatalog.tsx:89  |  { name: 'Two-piece Suit', price: 'From ₱12,000', description: 'A tailored jacket and trousers, cut to your measurements.', fabrics: ['Italian Wool — Charcoal', 'Wool Blend — Navy']
+Tailoring\src\Pages_Admin\GarmentCatalog.tsx:93  |  { name: 'Filipiniana Dress', price: 'From ₱9,500', description: 'Custom occasion dress with a silhouette made for you.', fabrics: ['Silk Habotai — Wine', 'Satin — Blush'], colors: 
+Tailoring\src\Pages_Admin\GarmentCatalog.tsx:97  |  { name: 'School Uniform Set', price: 'From ₱2,800', description: 'Durable uniforms tailored for everyday wear.', fabrics: ['Cotton Twill — Navy', 'Cotton Poplin — White'], colors: 
+Tailoring\src\Pages_Admin\GarmentCatalog.tsx:914  |  <Field label="Starting price" hint="Displayed as “From ₱…”">
+Tailoring\src\Pages_Admin\GarmentCatalog.tsx:915  |  <input value={form.price} onChange={(e) => update('price', e.target.value)} required placeholder="From ₱5,000" style={fieldStyle} onFocus={(e) => focusRing(e, true)} onBlur={(e) =>
+Tailoring\src\Pages_Admin\GarmentCatalog.tsx:1377  |  <span className="whitespace-nowrap text-[13px] font-semibold" style={{ color: COLORS.brassDeep }}>{form.price || 'From ₱0'}</span>
+Tailoring\src\Pages_Frontdesk\garmentCatalogData.ts:425  |  { name: 'Barong Tagalog', price: 'From ₱6,500', description: '', fabrics: [], colors: [], image: '',
+Tailoring\src\Pages_Frontdesk\garmentCatalogData.ts:429  |  { name: 'Two-piece Suit', price: 'From ₱12,000', description: '', fabrics: [], colors: [], image: '',
+Tailoring\src\Pages_Frontdesk\garmentCatalogData.ts:433  |  { name: "Women's Coat", price: 'From ₱6,500', description: '', fabrics: [], colors: [], image: '',
+Tailoring\src\Pages_Frontdesk\garmentCatalogData.ts:437  |  { name: 'Filipiniana Dress', price: 'From ₱9,500', description: '', fabrics: [], colors: [], image: '',
+Tailoring\src\Pages_Frontdesk\garmentCatalogData.ts:441  |  { name: 'School Uniform Set', price: 'From ₱1,800', description: '', fabrics: [], colors: [], image: '',
+Tailoring\src\Pages_Frontdesk\garmentCatalogData.ts:445  |  { name: 'Department Uniform', price: 'From ₱2,200', description: '', fabrics: [], colors: [], image: '',
+Tailoring\src\Pages_Frontdesk\garmentCatalogData.ts:449  |  { name: 'PE Uniform', price: 'From ₱1,500', description: '', fabrics: [], colors: [], image: '',
+Tailoring\src\Pages_Frontdesk\garmentCatalogData.ts:453  |  { name: 'Sports Jersey', price: 'From ₱1,600', description: '', fabrics: [], colors: [], image: '',
+..\TAILORING_MS_SERVER\Server\routes\garmentCatalog.js:24  |  // Legacy display label, kept for the storefront card ("From ₱...").
+..\TAILORING_MS_SERVER\Server\server.js:446  |  { name: 'Barong Tagalog', price: 'From ₱6,500', description: 'Hand-finished formal wear for weddings, ceremonies, and special occasions.', fabrics: ['Piña Jusi — Ivory', 'Cocoon Si
+..\TAILORING_MS_SERVER\Server\server.js:447  |  { name: 'Two-piece Suit', price: 'From ₱12,000', description: 'A tailored jacket and trousers, cut to your measurements.', fabrics: ['Italian Wool — Charcoal', 'Wool Blend — Navy']
+..\TAILORING_MS_SERVER\Server\server.js:448  |  { name: 'Filipiniana Dress', price: 'From ₱9,500', description: 'Custom occasion dress with a silhouette made for you.', fabrics: ['Silk Habotai — Wine', 'Satin — Blush'], colors: 
+..\TAILORING_MS_SERVER\Server\server.js:449  |  { name: 'School Uniform Set', price: 'From ₱1,800', description: 'Durable, comfortable uniforms tailored for everyday wear.', fabrics: ['Cotton Twill — Navy', 'Cotton Poplin — Whit

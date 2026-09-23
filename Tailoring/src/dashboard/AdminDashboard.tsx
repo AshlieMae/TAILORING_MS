@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { formatPHP as peso } from '../utils/currency';
 import type { ReactNode } from 'react';
 import {
   LayoutDashboard,
@@ -176,7 +177,6 @@ function DashboardView({ onGoToInventory, onGoToProduction, onGoToOrders }: { on
   const lowStock: typeof LOW_STOCK = (data?.lowStock && data.lowStock.length ? data.lowStock : LOW_STOCK);
   const maxRevenue = Math.max(1, ...weekRevenue.map((d) => d.amount));
   const totalStageCount = stages.reduce((s: number, x: any) => s + Number(x.count || 0), 0);
-  const peso = (n: number) => `₱${Number(n || 0).toLocaleString('en-PH')}`;
 
   return (
     <div className="space-y-8">
@@ -220,7 +220,7 @@ function DashboardView({ onGoToInventory, onGoToProduction, onGoToOrders }: { on
               <h2 className="text-lg mt-1 italic" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, color: INK }}>Revenue</h2>
             </div>
             <span className="text-xl" style={{ fontFamily: "'IBM Plex Mono', monospace", color: INK }}>
-              ₱{weekRevenue.reduce((s, d) => s + d.amount, 0).toLocaleString()}
+              {peso(weekRevenue.reduce((s, d) => s + d.amount, 0))}
             </span>
           </div>
           <div className="flex items-end gap-3 sm:gap-5 h-40">

@@ -2,12 +2,13 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Banknote, Check, ChevronRight, Plus, Search, X, Loader2, Printer, Package, Ban } from 'lucide-react';
 import frontDeskApi, { type Payment, type Order } from '../../services/frontDeskApi';
+import { formatPHP } from '../utils/currency';
 
 function Label({ children }: { children: React.ReactNode }) {
   return <span className="text-[10px] uppercase tracking-[0.2em] text-[#8C7E74]" style={{ fontFamily: "'Space Mono', monospace" }}>{children}</span>;
 }
 
-const peso = (amount: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(amount);
+const peso = (amount: number) => formatPHP(amount);
 
 function Badge({ status }: { status: string }) {
   const isPaid = status === 'Fully Paid' || status === 'Paid';

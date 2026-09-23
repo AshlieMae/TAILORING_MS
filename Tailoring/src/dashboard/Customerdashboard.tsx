@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { useEffect, useState } from 'react';
+import { formatPHPExact, formatPHPCompact } from '../utils/currency';
 import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Shirt, Ruler, CalendarClock, Wallet, Settings, Bell, Search,
@@ -107,7 +108,6 @@ const NAV = [
   { key: 'settings', label: 'Settings', icon: Settings },
 ];
 
-const formatPeso = (n) => `₱${n.toLocaleString('en-PH')}`;
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 function dateForInput(value) {
   if (!value) return '';
@@ -391,7 +391,7 @@ function DashboardView({ payments = [], onViewPayments, customerName = '', order
                 </defs>
                 <CartesianGrid vertical={false} stroke="var(--line)" />
                 <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: 'var(--muted)', fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' }} />
-                <YAxis tickLine={false} axisLine={false} width={44} tick={{ fill: 'var(--muted)', fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' }} tickFormatter={(v) => `₱${v / 1000}k`} />
+                <YAxis tickLine={false} axisLine={false} width={44} tick={{ fill: 'var(--muted)', fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' }} tickFormatter={(v) => formatPHPCompact(v as number)} />
                 <Tooltip content={<SpendTooltip />} />
                 <Area type="monotone" dataKey="amount" stroke="var(--brass)" strokeWidth={2} fill="url(#brassFill)" dot={{ r: 3, fill: 'var(--ink)', strokeWidth: 0 }} activeDot={{ r: 5 }} />
               </AreaChart>
@@ -491,7 +491,7 @@ function PaymentLedger({ payments, title, showViewAll, onViewAll, customerName =
       <div class="row"><span>Description</span><span>${row.label}</span></div>
       <div class="row"><span>Customer</span><span>${customerName || '—'}</span></div>
       <div class="row"><span>Date</span><span>${dateStr}</span></div>
-      <div class="amt">₱${row.amount.toLocaleString('en-PH')}</div>
+      <div class="amt">${formatPHPExact(row.amount)}</div>
       <div class="foot">Thank you for your business!</div>
     </div>
     </body></html>`);
@@ -893,7 +893,7 @@ function PaymentsView({ payments = [], orders = [], customerName = '' }) {
             <BarChart data={byJob} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid vertical={false} stroke="var(--line)" />
               <XAxis dataKey="job" tickLine={false} axisLine={false} tick={{ fill: 'var(--muted)', fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' }} />
-              <YAxis tickLine={false} axisLine={false} width={44} tick={{ fill: 'var(--muted)', fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' }} tickFormatter={(v) => `₱${v / 1000}k`} />
+              <YAxis tickLine={false} axisLine={false} width={44} tick={{ fill: 'var(--muted)', fontSize: 10, fontFamily: 'IBM Plex Mono, monospace' }} tickFormatter={(v) => formatPHPCompact(v as number)} />
               <Tooltip content={<BarTooltip />} />
               <Bar dataKey="paid" fill="var(--brass)" radius={[6, 6, 0, 0]} />
             </BarChart>

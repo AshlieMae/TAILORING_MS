@@ -10,6 +10,7 @@
 //   garment is being cut against. A customer can only ever read their own.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { formatPHPExact as formatPeso } from '../utils/currency';
 import { AlertCircle, ChevronRight, Loader2, PackageCheck, Ruler, X } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -37,11 +38,6 @@ interface MeasurementRow {
   label: string;
   value: string;
   updated_at?: string;
-}
-
-function formatPeso(value: number | string): string {
-  const n = Number(value || 0);
-  return `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatDate(value: string | null): string {

@@ -3,7 +3,7 @@ import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Check, ChevronDown, ChevronRight, Package, Ruler, Search, X, Loader2 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
 import frontDeskApi, { type Customer, type Order } from '../../services/frontDeskApi';
-
+import { formatPHPExact as formatPeso } from '../utils/currency';
 function Label({ children }: { children: React.ReactNode }) {
   return <span className="text-[10px] uppercase tracking-[0.2em] text-[#8C7E74]" style={{ fontFamily: "'Space Mono', monospace" }}>{children}</span>;
 }
@@ -33,11 +33,6 @@ function rowsToValues(rows: MeasurementRow[]): Record<string, string> {
     if (field && row.value !== null && row.value !== undefined && row.value !== '') map[field] = String(row.value);
   });
   return map;
-}
-
-function formatPeso(value: number | string): string {
-  const n = Number(value || 0);
-  return `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatDate(value?: string | null): string {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Boxes, Check, Minus, PackagePlus, Plus, X } from 'lucide-react';
+import { formatPHP } from '../utils/currency';
 import {
   COLORS, FONT_IMPORT, PageHeader, StatCard, SearchField, FilterPill, Card, TableHeadRow, EmptyState,
   EyebrowLabel, PrimaryButton, shadowModal,
@@ -198,8 +199,8 @@ function FabricRow({ fabric, delay, onAdjust }: { fabric: Fabric; delay: number;
         </div>
       </div>
       <span className="mono text-sm" style={{ color: COLORS.ink }}>
-        {typeof fabric.unitCost === 'number' ? `₱${fabric.unitCost.toLocaleString('en-PH')}/${fabric.unit || 'm'}` : fabric.unitCost}
-        {typeof fabric.unitCost === 'number' && <span className="block text-[10px] font-normal" style={{ color: COLORS.faint }}>value: ₱{(fabric.stock * fabric.unitCost).toLocaleString('en-PH')}</span>}
+        {typeof fabric.unitCost === 'number' ? `${formatPHP(fabric.unitCost)}/${fabric.unit || 'm'}` : fabric.unitCost}
+        {typeof fabric.unitCost === 'number' && <span className="block text-[10px] font-normal" style={{ color: COLORS.faint }}>value: {formatPHP(fabric.stock * fabric.unitCost)}</span>}
       </span>
     </div>
   );

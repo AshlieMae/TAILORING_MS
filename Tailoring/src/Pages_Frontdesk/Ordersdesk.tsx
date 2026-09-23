@@ -1,6 +1,7 @@
 // Pages_Frontdesk/Ordersdesk.tsx
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Check, ChevronRight, Search, TrendingUp, X, Loader2 } from 'lucide-react';
+import { formatPHP } from '../utils/currency';
 import {
   ResponsiveContainer,
   BarChart,
@@ -62,7 +63,15 @@ function ChartTooltip({ active, payload, label }: any) {
   );
 }
 
-const peso = (amount: number) => `₱${Number(amount || 0).toLocaleString()}`;
+const peso = (amount: number) => formatPHP(amount);
+
+function referenceFiles(value?: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [value];
+  } catch { return [value]; }
+}
 
 function OrderDetails({ order, onClose, onHandoff }: { order: Order; onClose: () => void; onHandoff?: () => void }) {
   const [barsIn, setBarsIn] = useState(false);
@@ -79,6 +88,7 @@ function OrderDetails({ order, onClose, onHandoff }: { order: Order; onClose: ()
   const balance = Number(order.remaining_balance) || 0;
   const paidPct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
   const stageIdx = STAGE_ORDER.indexOf(order.production_status);
+  const references = referenceFiles(order.reference_image);
 
   const donutData = [
     { name: 'Paid', value: paid || 0.0001, color: '#4E7357' },
@@ -115,10 +125,18 @@ function OrderDetails({ order, onClose, onHandoff }: { order: Order; onClose: ()
             </div>
           )}
           {/* Reference photo preference */}
-          {order.reference_image && (
+          {references.length > 0 && (
             <div className="mb-5">
-              <Label>Reference photo</Label>
-              <img src={order.reference_image} alt="Garment style reference" className="mt-2 max-h-56 w-full rounded-xl border border-[#E2D7C7] object-cover" />
+              <Label>Attached design references</Label>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {references.map((reference, index) => reference.toLowerCase().includes('.pdf') ? (
+                  <a key={reference} href={reference} target="_blank" rel="noreferrer" className="flex min-h-24 items-center justify-center rounded-xl border border-[#E2D7C7] bg-white px-3 text-center text-[11px] font-semibold text-[#8C6F3E]">Open PDF sketch {index + 1}</a>
+                ) : (
+                  <a key={reference} href={reference} target="_blank" rel="noreferrer" className="overflow-hidden rounded-xl border border-[#E2D7C7] bg-white">
+                    <img src={reference} alt={`Garment reference ${index + 1}`} className="h-28 w-full object-cover" />
+                  </a>
+                ))}
+              </div>
             </div>
           )}
 
@@ -355,7 +373,7 @@ export function FrontDeskOrdersView() {
             <span className="text-sm text-[#5E5048]">{order.garment_type}</span>
             <span><span className={`inline-block rounded-md border px-2 py-1 text-[10px] uppercase tracking-[0.08em] ${stageStyle[order.production_status] || 'border-[#D9C8B7] bg-[#F8F3EB] text-[#766A62]'}`}>{order.production_status}</span></span>
             <span className={`text-sm ${order.remaining_balance > 0 ? 'text-[#9E5B4B]' : 'text-[#4E7357]'}`}>
-              {order.remaining_balance > 0 ? `Balance: ₱${order.remaining_balance}` : 'Paid'}
+              {order.remaining_balance > 0 ? `Balance: ${peso(Number(order.remaining_balance))}` : 'Paid'}
             </span>
             <span className="text-sm text-[#5E5048]">{new Date(order.target_completion_date).toLocaleDateString()}</span>
             <ChevronRight className="hidden h-4 w-4 text-[#A46B48] md:block" />

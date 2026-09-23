@@ -12,6 +12,40 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Tab content transition — used by the Garment Catalog consultation tabs. */
+@keyframes tabIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Thin scrollbars for horizontally scrollable tab strips and scrolling panels,
+   so long tab rows never hide a tab at any browser zoom level. */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #d8dce3 transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #d8dce3;
+  border-radius: 999px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #c3c9d3;
+}
+
+
 body {
   margin: 0;
   min-width: 20rem;

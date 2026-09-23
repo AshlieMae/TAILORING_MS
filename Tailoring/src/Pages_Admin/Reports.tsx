@@ -5,11 +5,12 @@ import {
   COLORS, FONT_IMPORT, PageHeader, StatCard, Card, EyebrowLabel, PrimaryButton,
   BarChartPanel, AreaLineChart, DonutChart,
 } from './Theme';
+import { formatPHP, formatPHPCompact } from '../utils/currency';
 
 const monthlyRevenue = [{ label: 'Mar', value: 118000 }, { label: 'Apr', value: 142000 }, { label: 'May', value: 126000 }, { label: 'Jun', value: 168000 }, { label: 'Jul', value: 194000 }, { label: 'Aug', value: 121500 }];
 const turnaroundTrend = [{ label: 'Wk 1', value: 9.6 }, { label: 'Wk 2', value: 9.1 }, { label: 'Wk 3', value: 8.7 }, { label: 'Wk 4', value: 8.4 }];
 const garments = [{ name: 'Barong Tagalog', orders: 32, percent: 82 }, { name: 'Two-piece Suit', orders: 26, percent: 67 }, { name: 'Filipiniana Dress', orders: 21, percent: 54 }, { name: 'School Uniform Set', orders: 18, percent: 46 }];
-const fabricUsage = [{ fabric: 'PiÃ±a Jusi â€” Ivory', usage: '16.5 m' }, { fabric: 'Italian Wool â€” Charcoal', usage: '12.0 m' }, { fabric: 'Silk Habotai â€” Wine', usage: '9.5 m' }, { fabric: 'Cotton Poplin â€” White', usage: '8.0 m' }];
+const fabricUsage = [{ fabric: 'Piña Jusi — Ivory', usage: '16.5 m' }, { fabric: 'Italian Wool — Charcoal', usage: '12.0 m' }, { fabric: 'Silk Habotai — Wine', usage: '9.5 m' }, { fabric: 'Cotton Poplin — White', usage: '8.0 m' }];
 
 
 type RevenuePoint = { label: string; value: number };
@@ -22,7 +23,7 @@ const REPORT_PERIODS = {
   'This year': { revenue: 1094500, ordersReceived: 386, completedOrders: 328, outstandingBalance: 92400, revenueTrend: '+18.7% vs last year', ordersTrend: '386 received', completionTrend: '85% completion', balanceTrend: '31 open balances', revenueData: monthlyRevenue.map((item) => ({ ...item, value: item.value * 8 })) },
 };
 
-const peso = (amount: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(amount);
+const peso = (amount: number) => formatPHP(amount);
 
 export function AdminReportsView() {
   const [period, setPeriod] = useState<keyof typeof REPORT_PERIODS>('This month');
@@ -76,11 +77,11 @@ export function AdminReportsView() {
         cell.alignment = { vertical: 'middle', horizontal: columnNumber === 2 ? 'right' : 'left' };
       });
       row.getCell(2).font = { bold: true, color: { argb: navy } };
-      if (currency) row.getCell(2).numFmt = 'â‚±#,##0';
+      if (currency) row.getCell(2).numFmt = '₱#,##0';
     };
 
     worksheet.mergeCells('A1:B1');
-    worksheet.getCell('A1').value = "ASHLIE'S TAILOR â€” BUSINESS REPORT";
+    worksheet.getCell('A1').value = "ASHLIE'S TAILOR — BUSINESS REPORT";
     worksheet.getCell('A1').font = { bold: true, size: 16, color: { argb: 'FFFFFF' } };
     worksheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: navy } };
     worksheet.getCell('A1').alignment = { vertical: 'middle' };
@@ -138,7 +139,7 @@ export function AdminReportsView() {
         context.fillStyle = '#334155'; context.font = '16px Arial';
         context.textAlign = 'center'; context.fillText(label, x + barWidth / 2, chart.top + chart.height + 28);
         context.fillStyle = '#17324D'; context.font = 'bold 14px Arial';
-        context.fillText(`â‚±${Math.round(value / 1000)}k`, x + barWidth / 2, y - 10);
+        context.fillText(formatPHPCompact(value), x + barWidth / 2, y - 10);
       });
       context.textAlign = 'left';
       const image = workbook.addImage({ base64: canvas.toDataURL('image/png'), extension: 'png' });

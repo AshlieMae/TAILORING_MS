@@ -1,12 +1,16 @@
 // Pages/FrontDesk/FrontDeskDashboard.tsx
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { formatPHPExact as formatPeso } from '../utils/currency';
 import { FrontDeskCustomersExactView } from '../Pages_Frontdesk/CustomersdeskExact';
 import { FrontDeskOrdersView } from '../Pages_Frontdesk/Ordersdesk';
 import { FrontDeskMeasurementsView } from '../Pages_Frontdesk/Measurementsdesk';
 import { FrontDeskAppointmentsView } from '../Pages_Frontdesk/Appointmentsdesk';
 import { FrontDeskPaymentsView } from '../Pages_Frontdesk/Paymentsdesk';
 import { FrontDeskSettingsView } from '../Pages_Frontdesk/Settingsdesk';
+import { FrontDeskGarmentCatalogView } from '../Pages_Frontdesk/GarmentCatalogdesk';
+import { GarmentIntakeModal, type GarmentIntakeData, type IntakeCreationResult, type IntakeMode } from '../Pages_Frontdesk/GarmentIntakeModal';
+import { type CatalogDesign } from '../Pages_Frontdesk/garmentCatalogData';
 import frontDeskApi, { authToken, type Order, type Appointment, type Customer } from '../../services/frontDeskApi';
 import { RegisterCustomerModal, type NewCustomerForm } from '../pages/FrontDesk/FrontDeskModals';
 import { dedupeAppointments, stageBadgeStyle } from '../utils/appointmentDisplay';
@@ -36,11 +40,9 @@ import {
   LogOut,
   ArrowUpRight,
   AlertCircle,
-  Loader2,
-  Scissors,
-  User,
-  DollarSign,
   BarChart3,
+  Loader2,
+  LayoutGrid,
 } from 'lucide-react';
 
 function LiveDateTime() {
@@ -92,603 +94,23 @@ function MonoLabel({ children, className = '' }: { children: ReactNode; classNam
   );
 }
 
-function formatPeso(amount: number) {
-  return `₱${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-}
-
 function currentUser() {
   const stored = localStorage.getItem('currentUser') || sessionStorage.getItem('currentUser');
   try { return stored ? JSON.parse(stored) : null; } catch { return null; }
 }
 
-type ViewKey = 'dashboard' | 'customers' | 'orders' | 'measurements' | 'appointments' | 'payments' | 'settings';
+type ViewKey = 'dashboard' | 'customers' | 'catalog' | 'orders' | 'measurements' | 'appointments' | 'payments' | 'settings';
 
 const NAV: { label: string; icon: typeof LayoutDashboard; view: ViewKey }[] = [
   { label: 'Dashboard', icon: LayoutDashboard, view: 'dashboard' },
   { label: 'Customers', icon: Users, view: 'customers' },
+  { label: 'Garment Catalog', icon: LayoutGrid, view: 'catalog' },
   { label: 'Orders', icon: Shirt, view: 'orders' },
   { label: 'Measurements', icon: Ruler, view: 'measurements' },
   { label: 'Appointments', icon: CalendarClock, view: 'appointments' },
   { label: 'Payments', icon: Wallet, view: 'payments' },
   { label: 'Settings', icon: Settings, view: 'settings' },
 ];
-
-// ============================================================
-// CREATE ORDER MODAL
-// ============================================================
-interface CreateOrderFormData {
-  orderCategory: string;
-  customerId: string;
-  customerName: string;
-  garmentType: string;
-  styleDesign: string;
-  fabric: string;
-  fabricQuantity: string;
-  quantity: number;
-  specialInstructions: string;
-  targetCompletionDate: string;
-  assignedTailorId: string;
-  depositAmount: string;
-  collectDeposit: boolean;
-  depositPaymentMethod: 'Cash' | 'Card' | 'Bank Transfer' | 'GCash' | 'Other';
-  depositReferenceNumber: string;
-  referenceImage: string;
-}
-
-// --- ORDER CATEGORY -> GARMENT TYPE cascade -------------------------------
-// The Front Desk picks the Order Category first, then the exact Garment Type
-// within that category. The Garment Type alone drives pricing, measurement
-// requirements, the illustration preview, and the production workflow.
-const ORDER_CATEGORIES: { name: string; garments: string[] }[] = [
-  { name: 'School Uniform', garments: ['Regular Uniform', 'Department Uniform', 'PE Uniform', 'Sports Jersey'] },
-  { name: 'Corporate Uniform', garments: ['Office Uniform', 'Polo Shirt', 'Long Sleeve Uniform', 'Blazer'] },
-  { name: 'Formal Wear', garments: ['Barong Tagalog', 'Two-Piece Suit', 'Three-Piece Suit', "Women's Coat", 'Evening Gown', 'Wedding Gown'] },
-  { name: 'Casual Wear', garments: ['Polo Shirt', 'Long Sleeve', 'Dress', 'Jacket'] },
-  { name: 'Sportswear', garments: ['Sports Jersey', 'Team Uniform', 'Training Uniform'] },
-  { name: 'Custom/Bespoke', garments: ['Custom Shirt', 'Custom Pants', 'Custom Dress', 'Custom Coat', 'Other Custom Garment'] },
-];
-
-const GARMENTS_BY_CATEGORY: Record<string, string[]> = ORDER_CATEGORIES.reduce(
-  (acc, category) => { acc[category.name] = category.garments; return acc; },
-  {} as Record<string, string[]>,
-);
-
-// Flat union of every garment — keeps category-less lookups working.
-const GARMENT_TYPES = Array.from(new Set(ORDER_CATEGORIES.flatMap((c) => c.garments)));
-
-const FALLBACK_PRICES: Record<string, number> = {
-  'Barong Tagalog': 2500, 'Two-Piece Suit': 4800, 'Three-Piece Suit': 5800, 'Blazer': 3200,
-  "Women's Coat": 3500, 'Polo Shirt': 1200, 'Long Sleeve Polo': 1500, 'Dress': 2800,
-  'Evening Gown': 5000, 'Wedding Gown': 8000, 'School Uniform': 1800, 'PE Uniform': 1400,
-  'Sports Jersey': 1300, 'Scrub Suit': 1600, 'Chef Uniform': 1700, 'Corporate Uniform': 2000,
-  'Department Uniform': 1900, 'Custom/Bespoke Apparel': 3000,
-};
-const STYLE_DESIGNS = ['Classic', 'Modern', 'Embroidered', 'Minimalist', 'Traditional', 'Ruffled', 'Fitted', 'Loose fit'];
-
-/** Hand-drawn style SVG illustration for each garment type — shown live in the order form. */
-function GarmentIllustration({ type, className }: { type: string; className?: string }) {
-  const line = { fill: 'none', stroke: '#8C6F3E', strokeWidth: 2.4, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-  const body = (d: string, fill: string) => <path d={d} {...line} fill={fill} />;
-  switch (type) {
-    case 'Barong Tagalog':
-      return (
-        <svg viewBox="0 0 120 140" className={className} aria-label="Barong Tagalog illustration">
-          <rect x="6" y="6" width="108" height="128" rx="10" fill="#F8F3EB" />
-          {body('M38 34 L20 44 L24 96 L38 90', '#FAF7F2')}
-          {body('M82 34 L100 44 L96 96 L82 90', '#FAF7F2')}
-          {body('M38 34 Q60 26 82 34 L84 118 Q60 126 36 118 Z', '#FAF7F2')}
-          <path d="M48 30 Q60 40 72 30" {...line} />
-          <path d="M52 50 V110 M60 46 V114 M68 50 V110" stroke="#C9A15C" strokeWidth="1.6" strokeLinecap="round" />
-          <circle cx="60" cy="54" r="1.8" fill="#8C6F3E" /><circle cx="60" cy="68" r="1.8" fill="#8C6F3E" /><circle cx="60" cy="82" r="1.8" fill="#8C6F3E" />
-        </svg>
-      );
-    case 'Two-Piece Suit':
-    case 'Three-Piece Suit':
-    case 'Blazer':
-    case 'Two-piece Suit':
-      return (
-        <svg viewBox="0 0 120 140" className={className} aria-label="Two-piece suit illustration">
-          <rect x="6" y="6" width="108" height="128" rx="10" fill="#F8F3EB" />
-          {body('M40 30 L60 40 L80 30 L86 100 L34 100 Z', '#E8DFD3')}
-          <path d="M40 30 L32 42 L36 96" {...line} />
-          <path d="M80 30 L88 42 L84 96" {...line} />
-          <path d="M52 32 L60 46 L68 32" stroke="#2A211D" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx="60" cy="58" r="1.8" fill="#2A211D" /><circle cx="60" cy="72" r="1.8" fill="#2A211D" />
-          <path d="M44 104 L40 132 M76 104 L80 132" stroke="#2A211D" strokeWidth="2.4" strokeLinecap="round" />
-          <path d="M42 104 H78" stroke="#2A211D" strokeWidth="2.4" strokeLinecap="round" />
-        </svg>
-      );
-    case "Women's Coat":
-      return (
-        <svg viewBox="0 0 120 140" className={className} aria-label="Women's coat illustration">
-          <rect x="6" y="6" width="108" height="128" rx="10" fill="#F8F3EB" />
-          {body('M38 34 L20 44 L24 96 L38 90', '#FAF7F2')}
-          {body('M82 34 L100 44 L96 96 L82 90', '#FAF7F2')}
-          {body('M42 32 Q60 24 78 32 L84 118 Q60 126 36 118 Z', '#FAF7F2')}
-          <path d="M50 30 L60 54 L70 30" stroke="#A46B48" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-          <rect x="38" y="72" width="44" height="6" rx="3" fill="#C9A15C" />
-          <circle cx="60" cy="88" r="1.8" fill="#A46B48" /><circle cx="60" cy="100" r="1.8" fill="#A46B48" />
-        </svg>
-      );
-    case 'Dress':
-    case 'Wedding Gown':
-    case 'Evening Gown':
-      return (
-        <svg viewBox="0 0 120 140" className={className} aria-label="Evening gown illustration">
-          <rect x="6" y="6" width="108" height="128" rx="10" fill="#F8F3EB" />
-          {body('M46 30 Q60 24 74 30 L78 70 Q92 110 84 128 Q60 136 36 128 Q28 110 42 70 Z', '#FDF0ED')}
-          <path d="M48 30 L46 20 M72 30 L74 20" stroke="#A46B48" strokeWidth="2" strokeLinecap="round" />
-          <path d="M44 68 Q60 74 76 68" stroke="#A46B48" strokeWidth="1.8" fill="none" />
-          <path d="M52 84 Q60 88 68 84 M48 100 Q60 106 72 100" stroke="#C9A15C" strokeWidth="1.4" fill="none" strokeLinecap="round" />
-        </svg>
-      );
-    case 'Polo Shirt':
-    case 'Long Sleeve Polo':
-    case 'School Uniform':
-    case 'PE Uniform':
-    case 'Sports Jersey':
-    case 'Scrub Suit':
-    case 'Chef Uniform':
-    case 'Corporate Uniform':
-    case 'Department Uniform':
-    case 'School Uniform Set':
-      return (
-        <svg viewBox="0 0 120 140" className={className} aria-label="School uniform set illustration">
-          <rect x="6" y="6" width="108" height="128" rx="10" fill="#F8F3EB" />
-          {body('M40 30 L60 38 L80 30 L82 78 L38 78 Z', '#FAF7F2')}
-          <path d="M52 28 L60 40 L68 28" stroke="#4E7357" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M60 40 L56 48 L60 70 L64 48 Z" fill="#8A6618" />
-          {body('M40 82 L80 82 L86 118 L34 118 Z', '#E8DFD3')}
-          <path d="M50 84 V116 M60 84 V118 M70 84 V116" stroke="#4E7357" strokeWidth="1.2" />
-        </svg>
-      );
-    default:
-      return (
-        <svg viewBox="0 0 120 140" className={className} aria-label="Custom garment illustration">
-          <rect x="6" y="6" width="108" height="128" rx="10" fill="#F8F3EB" />
-          {body('M44 34 Q60 26 76 34 L80 70 Q76 92 60 94 Q44 92 40 70 Z', '#FAF7F2')}
-          <path d="M54 26 Q60 22 66 26" {...line} />
-          <path d="M60 94 V124 M46 128 H74" stroke="#8C6F3E" strokeWidth="2.4" strokeLinecap="round" />
-          <path d="M28 58 Q60 76 92 58" stroke="#C9A15C" strokeWidth="1.6" strokeDasharray="4 3" fill="none" strokeLinecap="round" />
-        </svg>
-      );
-  }
-}
-
-function CreateOrderModal({ 
-  onClose, 
-  onCreate, 
-  customers,
-  orders
-}: { 
-  onClose: () => void; 
-  onCreate: (data: CreateOrderFormData) => Promise<void>;
-  customers: Customer[];
-  orders: Order[];
-}) {
-  const [form, setForm] = useState<CreateOrderFormData>({
-    orderCategory: '',
-    customerId: '',
-    customerName: '',
-    garmentType: GARMENT_TYPES[0],
-    styleDesign: '',
-    fabric: '',
-    fabricQuantity: '',
-    quantity: 1,
-    specialInstructions: '',
-    targetCompletionDate: '',
-    assignedTailorId: '',
-    depositAmount: '',
-    collectDeposit: true,
-    depositPaymentMethod: 'Cash',
-    depositReferenceNumber: '',
-    referenceImage: '',
-  });
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [fabricOptions, setFabricOptions] = useState<{ id: number; fabricName: string; tone: string; unit: string }[]>([]);
-  const [tailorOptions, setTailorOptions] = useState<{ id: number; full_name: string; position: string }[]>([]);
-  const [priceCalculation, setPriceCalculation] = useState<{
-    laborCost: number;
-    fabricCost: number;
-    additionalCharges: number;
-    discount: number;
-    totalAmount: number;
-    depositRequired: number;
-    remainingBalance: number;
-  } | null>(null);
-  const [calculating, setCalculating] = useState(false);
-
-  const selectedCustomer = customers.find(c => c.customer_id === form.customerId);
-
-  // Business rule: settle previous job cards before opening a new one.
-  const unpaidOrders = useMemo(
-    () => orders.filter((o) => String(o.customer_id) === String(form.customerId) && Number(o.remaining_balance) > 0),
-    [orders, form.customerId]
-  );
-  const unsettledTotal = unpaidOrders.reduce((sum, o) => sum + Number(o.remaining_balance), 0);
-
-  const calculatePrice = async () => {
-    if (!form.garmentType) return;
-    setCalculating(true);
-    try {
-      const result = await frontDeskApi.calculatePrice({
-        garmentType: form.garmentType,
-        fabric: form.fabric || 'Standard',
-        fabricQuantity: parseFloat(form.fabricQuantity) || 0,
-        quantity: form.quantity || 1,
-        additionalCharges: 0,
-        discount: 0,
-      });
-      setPriceCalculation(result);
-    } catch (err) {
-      console.error('Price calculation failed:', err);
-      // Fallback calculation
-      const basePrice = FALLBACK_PRICES[form.garmentType] || 3000;
-      const total = basePrice * (form.quantity || 1);
-      setPriceCalculation({
-        laborCost: total * 0.6,
-        fabricCost: total * 0.3,
-        additionalCharges: 0,
-        discount: 0,
-        totalAmount: total,
-        depositRequired: total * 0.5,
-        remainingBalance: total * 0.5,
-      });
-    } finally {
-      setCalculating(false);
-    }
-  };
-
-  useEffect(() => {
-    if (form.garmentType) {
-      calculatePrice();
-    }
-  }, [form.garmentType, form.quantity, form.fabricQuantity]);
-
-  // Load the fabric catalogue from the shared inventory so the Front Desk picks
-  // fabric that actually exists on the shelf.
-  useEffect(() => {
-    frontDeskApi.getFabricCatalog()
-      .then((data) => setFabricOptions(data.fabrics || []))
-      .catch(() => setFabricOptions([]));
-  }, []);
-
-  // Load approved Master Tailors so the Front Desk can pick who gets the job.
-  useEffect(() => {
-    frontDeskApi.getTailors()
-      .then((tailors) => setTailorOptions(tailors.map((t) => ({ id: t.id, full_name: t.full_name, position: t.position || '' }))))
-      .catch(() => setTailorOptions([]));
-  }, []);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.customerId) {
-      setError('Please select a customer.');
-      return;
-    }
-    if (!form.orderCategory) {
-      setError('Please select an order category.');
-      return;
-    }
-    if (!form.garmentType) {
-      setError('Please select a garment type.');
-      return;
-    }
-    if (!form.targetCompletionDate) {
-      setError('Please set a target completion date.');
-      return;
-    }
-    setSaving(true);
-    setError('');
-    try {
-      await onCreate(form);
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create order.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const totalAmount = priceCalculation?.totalAmount || 0;
-  const depositRequired = priceCalculation?.depositRequired || (totalAmount * 0.5);
-  const remainingBalance = priceCalculation?.remainingBalance || (totalAmount * 0.5);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#1F1916]/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
-      <div className="relative w-full max-w-3xl bg-[#FFFFFF] border border-[#E8DFD3] rounded-xl shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-7 sm:px-10 pt-8 pb-2">
-          <MonoLabel>New order</MonoLabel>
-          <button onClick={onClose} className="text-[#A3958B] hover:text-[#2A211D] transition-colors p-1 rounded-full hover:bg-[#F2ECE1]">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="px-7 sm:px-10 pb-9 pt-2">
-          <h2 className="text-3xl leading-tight mb-2 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>
-            Create Custom Order
-          </h2>
-          <p className="text-[14px] text-[#766A62] font-light mb-6 leading-relaxed">
-            Create a new job card for a custom garment order. You can collect and save the initial deposit before you finish.
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="border border-[#C86A58]/30 bg-[#FDF4F2] px-4 py-3 rounded-lg text-sm text-[#9A3B2A]">
-                {error}
-              </div>
-            )}
-
-            {/* Customer Selection */}
-            <div>
-              <label className="block mb-1.5"><MonoLabel>Customer</MonoLabel></label>
-              <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D] transition-colors">
-                <User className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                <select
-                  value={form.customerId}
-                  onChange={(e) => {
-                    const customer = customers.find(c => c.customer_id === e.target.value);
-                    setForm(f => ({ 
-                      ...f, 
-                      customerId: e.target.value,
-                      customerName: customer?.full_name || ''
-                    }));
-                  }}
-                  className="w-full bg-transparent text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
-                >
-                  <option value="">Select a customer</option>
-                  {customers.map(c => (
-                    <option key={c.customer_id} value={c.customer_id}>{c.full_name} ({c.customer_id})</option>
-                  ))}
-                </select>
-              </div>
-              {selectedCustomer && (
-                <div className="mt-2 text-xs text-[#766A62]">
-                  {selectedCustomer.email} · {selectedCustomer.contact_number}
-                </div>
-              )}
-              {unpaidOrders.length > 0 && (
-                <div className="mt-3 rounded-lg border border-[#ECD8A7] bg-[#FFF7E3] p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8A6618]">Unsettled balance — review before creating a new draft</p>
-                  <ul className="mt-2 space-y-1">
-                    {unpaidOrders.map(o => (
-                      <li key={o.order_id} className="flex items-center justify-between gap-3 text-[12px] text-[#8A6618]">
-                        <span className="truncate">{o.job_card_id} · {o.garment_type}</span>
-                        <span className="flex-shrink-0 font-semibold" style={{ fontFamily: "'Space Mono', monospace" }}>₱{Number(o.remaining_balance).toLocaleString()}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-2 text-[11px] leading-relaxed text-[#8A6618]">
-                    Total outstanding: <span className="font-bold">₱{unsettledTotal.toLocaleString()}</span>. The customer may still place a new walk-in order; use the Payments desk to collect or review the earlier balance.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Order Classification — Category first, then Garment Type */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
-              <div>
-                <label className="block mb-1.5"><MonoLabel>Order category</MonoLabel></label>
-                <select
-                  value={form.orderCategory}
-                  onChange={(e) => setForm(f => {
-                    const list = GARMENTS_BY_CATEGORY[e.target.value] || GARMENT_TYPES;
-                    return { ...f, orderCategory: e.target.value, garmentType: list.includes(f.garmentType) ? f.garmentType : list[0] };
-                  })}
-                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-                >
-                  {ORDER_CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block mb-1.5"><MonoLabel>Garment type</MonoLabel></label>
-                <select
-                  value={form.garmentType}
-                  onChange={(e) => setForm(f => ({ ...f, garmentType: e.target.value }))}
-                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-                >
-                  {(GARMENTS_BY_CATEGORY[form.orderCategory] || GARMENT_TYPES).map(g => <option key={g} value={g}>{g}</option>)}
-                </select>
-              </div>
-              
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
-              <div>
-                <label className="block mb-1.5"><MonoLabel>Style/Design</MonoLabel></label>
-                <select
-                  value={form.styleDesign}
-                  onChange={(e) => setForm(f => ({ ...f, styleDesign: e.target.value }))}
-                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-                >
-                  <option value="">Select a style</option>
-                  {STYLE_DESIGNS.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block mb-1.5"><MonoLabel>Fabric</MonoLabel></label>
-                <select
-                  value={form.fabric}
-                  onChange={(e) => setForm(f => ({ ...f, fabric: e.target.value }))}
-                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-                >
-                  <option value="">Select a fabric</option>
-                  {fabricOptions.map((f) => (
-                    <option key={f.id} value={f.fabricName}>{f.fabricName}{f.tone ? ` — ${f.tone}` : ''} ({f.unit})</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
-              <div>
-                <label className="block mb-1.5"><MonoLabel>Fabric quantity (yards)</MonoLabel></label>
-                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
-                  <Scissors className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={form.fabricQuantity}
-                    onChange={(e) => setForm(f => ({ ...f, fabricQuantity: e.target.value }))}
-                    placeholder="2.5"
-                    className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block mb-1.5"><MonoLabel>Quantity</MonoLabel></label>
-                <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
-                  <Package className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                  <input
-                    type="number"
-                    min="1"
-                    value={form.quantity}
-                    onChange={(e) => setForm(f => ({ ...f, quantity: parseInt(e.target.value) || 1 }))}
-                    className="w-full bg-transparent text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
-              <div>
-                <label className="block mb-1.5"><MonoLabel>Target completion date</MonoLabel></label>
-                <input
-                  type="date"
-                  value={form.targetCompletionDate}
-                  onChange={(e) => setForm(f => ({ ...f, targetCompletionDate: e.target.value }))}
-                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-                />
-              </div>
-              <div>
-                <label className="block mb-1.5"><MonoLabel>Preferred tailor (confirmed at handoff)</MonoLabel></label>
-                <select
-                  value={form.assignedTailorId}
-                  onChange={(e) => setForm(f => ({ ...f, assignedTailorId: e.target.value }))}
-                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-                >
-                  <option value="">Select at production handoff</option>
-                  {tailorOptions.map((t) => (
-                    <option key={t.id} value={String(t.id)}>{t.full_name}{t.position ? ` — ${t.position}` : ''}</option>
-                  ))}
-                </select>
-                {tailorOptions.length === 0 && (
-                  <span className="mt-1 block text-[10px]" style={{ color: '#A3958B' }}>No approved tailors found — the job will be auto-assigned to the least-loaded tailor.</span>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <label className="block mb-1.5"><MonoLabel>Special instructions</MonoLabel></label>
-              <textarea
-                value={form.specialInstructions}
-                onChange={(e) => setForm(f => ({ ...f, specialInstructions: e.target.value }))}
-                placeholder="Any special requests or notes for the tailor..."
-                rows={2}
-                className="w-full border-b border-[#E2D7C7] bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D] resize-none"
-              />
-            </div>
-
-            {/* Garment preview — follows the selected garment type */}
-            <div>
-              <label className="block mb-1.5"><MonoLabel>Garment preview</MonoLabel></label>
-              <div className="flex items-center gap-4 rounded-xl border border-[#E2D7C7] bg-gradient-to-br from-[#F8F3EB] to-[#FFFCF8] p-4">
-                <div className="flex h-28 w-24 flex-shrink-0 items-center justify-center rounded-lg border border-[#E2D7C7] bg-white">
-                  <GarmentIllustration type={form.garmentType} className="h-24 w-20" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{form.garmentType}</p>
-                  <p className="mt-2 text-[11px] leading-relaxed text-[#766A62]">
-                    The illustration follows the selected garment type. Pricing, measurement requirements, and the production workflow all follow it.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Price Breakdown */}
-            {priceCalculation && (
-              <div className="rounded-lg border border-[#E8DFD3] bg-[#FCFAF7] p-4 space-y-2">
-                <div className="flex items-center gap-2 mb-2">
-                  <DollarSign className="w-4 h-4 text-[#8C6F3E]" />
-                  <h3 className="text-sm font-semibold text-[#2A211D]">Price Breakdown</h3>
-                  {calculating && <Loader2 className="w-4 h-4 animate-spin text-[#8C6F3E] ml-auto" />}
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex justify-between"><span className="text-[#766A62]">Labor Cost:</span><span className="font-medium">{formatPeso(priceCalculation.laborCost)}</span></div>
-                  <div className="flex justify-between"><span className="text-[#766A62]">Fabric Cost:</span><span className="font-medium">{formatPeso(priceCalculation.fabricCost)}</span></div>
-                  <div className="flex justify-between"><span className="text-[#766A62]">Additional Charges:</span><span className="font-medium">{formatPeso(priceCalculation.additionalCharges)}</span></div>
-                  <div className="flex justify-between"><span className="text-[#766A62]">Discount:</span><span className="font-medium text-[#4E7357]">-{formatPeso(priceCalculation.discount)}</span></div>
-                  <div className="col-span-2 border-t border-dashed border-[#E2D7C7] pt-2 flex justify-between font-semibold">
-                    <span>Total Amount:</span>
-                    <span className="text-[#2A211D]">{formatPeso(priceCalculation.totalAmount)}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Initial deposit is recorded automatically with the new job card. */}
-            <div className="rounded-lg border border-[#E8DFD3] bg-[#FCFAF7] p-4">
-              <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-[#2A211D]">
-                <input
-                  type="checkbox"
-                  checked={form.collectDeposit}
-                  onChange={(e) => setForm(f => ({ ...f, collectDeposit: e.target.checked }))}
-                  className="h-4 w-4 accent-[#8C6F3E]"
-                />
-                Collect initial deposit now (recorded automatically when this order is created)
-              </label>
-              {form.collectDeposit && (
-                <div className="mt-4">
-                  <label className="block mb-1.5"><MonoLabel>Deposit amount (₱)</MonoLabel></label>
-                  <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
-                    <Banknote className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={form.depositAmount}
-                      onChange={(e) => setForm(f => ({ ...f, depositAmount: e.target.value }))}
-                      placeholder={String(depositRequired)}
-                      className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
-                    />
-                  </div>
-                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <label className="block"><MonoLabel>Payment method</MonoLabel><select value={form.depositPaymentMethod} onChange={(e) => setForm(f => ({ ...f, depositPaymentMethod: e.target.value as CreateOrderFormData['depositPaymentMethod'] }))} className="mt-1.5 w-full border-b border-[#E2D7C7] bg-transparent py-2.5 text-[14px] text-[#2A211D] outline-none"><option>Cash</option><option>GCash</option><option>Card</option><option>Bank Transfer</option><option>Other</option></select></label>
-                    <label className="block"><MonoLabel>Reference no. (optional)</MonoLabel><input value={form.depositReferenceNumber} onChange={(e) => setForm(f => ({ ...f, depositReferenceNumber: e.target.value }))} placeholder="GCash, card, or bank ref." className="mt-1.5 w-full border-b border-[#E2D7C7] bg-transparent py-2.5 text-[14px] text-[#2A211D] outline-none" /></label>
-                  </div>
-                  <p className="text-[11px] text-[#A3958B] mt-2">
-                    Enter the amount collected now. It will be saved as the initial payment for this new job card. Suggested deposit: {formatPeso(depositRequired)} · Balance after deposit: {formatPeso(remainingBalance)}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={saving}
-                className="flex-1 px-4 py-3 rounded-lg border border-[#E2D7C7] text-[#766A62] text-[11px] font-semibold tracking-[0.14em] uppercase hover:bg-[#F2ECE1] transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex-1 px-4 py-3 rounded-lg bg-[#2A211D] text-[#FAF7F2] text-[11px] font-semibold tracking-[0.14em] uppercase hover:bg-[#3D312B] transition-colors shadow-md disabled:opacity-50"
-              >
-                {saving ? 'Creating...' : 'Create Intake Draft'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ============================================================
 // RECORD PAYMENT MODAL
@@ -1175,7 +597,17 @@ function ScheduleFittingModal({
 // DASHBOARD VIEW
 // ============================================================
 
-function DashboardView() {
+function DashboardView({
+  pendingDesign,
+  onDesignConsumed,
+  onOpenCatalogPage,
+}: {
+  /** Garment chosen on the Garment Catalog page — opens intake pre-filled. */
+  pendingDesign?: CatalogDesign | null;
+  onDesignConsumed?: () => void;
+  /** Switch to the standalone Garment Catalog page. */
+  onOpenCatalogPage?: () => void;
+}) {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     todayCustomers: 0,
@@ -1193,6 +625,8 @@ function DashboardView() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<null | 'customer' | 'order' | 'payment' | 'fitting'>(null);
+  // Garment handed to the intake form (from the catalog page or the picker).
+  const [intakeDesign, setIntakeDesign] = useState<CatalogDesign | null>(null);
   const [banner, setBanner] = useState('');
   // Same display rules as the Appointments page: merge duplicate records
   // (same appointment ID) and keep only the latest active booking per
@@ -1255,6 +689,15 @@ function DashboardView() {
     return () => clearInterval(timer);
   }, [loadDashboardData]);
 
+  // A garment chosen on the Garment Catalog page re-opens the intake form with
+  // the design already loaded.
+  useEffect(() => {
+    if (!pendingDesign) return;
+    setIntakeDesign(pendingDesign);
+    setActiveModal('order');
+    onDesignConsumed?.();
+  }, [pendingDesign, onDesignConsumed]);
+
   const handleRegisterCustomer = async (form: NewCustomerForm) => {
     try {
       await frontDeskApi.registerCustomer({
@@ -1281,48 +724,107 @@ function DashboardView() {
     }
   };
 
-  const handleCreateOrder = async (data: CreateOrderFormData) => {
-    try {
-      const newOrder = await frontDeskApi.createOrder({
-        customerId: data.customerId,
-        garmentType: data.garmentType,
-        uniformCategory: data.orderCategory || undefined,
-        styleDesign: data.styleDesign,
-        fabric: data.fabric,
-        fabricQuantity: parseFloat(data.fabricQuantity) || 0,
-        quantity: data.quantity,
-        specialInstructions: data.specialInstructions,
-        targetCompletionDate: data.targetCompletionDate,
-        assignedTailorId: data.assignedTailorId,
-        measurementSnapshotId: '',
-        orderNotes: '',
-        referenceImage: data.referenceImage,
-      });
+  /**
+   * Write the walk-in job card.
+   *
+   * mode 'draft'   — job card only (no payment recorded).
+   * mode 'confirm' — job card + the deposit collected at the counter, and the
+   *                  fresh measurements are saved to the customer's profile.
+   * Returns the receipt figures so the intake form can print immediately.
+   */
+  const handleCreateOrder = async (data: GarmentIntakeData, mode: IntakeMode): Promise<IntakeCreationResult> => {
+    const depositAmount = mode === 'confirm' && data.collectDeposit ? (parseFloat(data.depositAmount) || 0) : 0;
 
-      if (data.collectDeposit && data.depositAmount) {
-        const depositAmount = parseFloat(data.depositAmount);
-        if (depositAmount > 0) {
-          await frontDeskApi.recordPayment({
-            orderId: newOrder.order_id,
-            amount: depositAmount,
-            paymentType: 'Deposit',
-            paymentMethod: data.depositPaymentMethod,
-            referenceNumber: data.depositReferenceNumber,
-            notes: 'Initial deposit recorded at Front Desk',
-          });
-          setBanner('Order created successfully. Deposit payment has been recorded.');
-        } else {
-          setBanner(`Order ${newOrder.job_card_id} created successfully.`);
-        }
-      } else {
-        setBanner(`Order ${newOrder.job_card_id} created successfully.`);
+    // 1. Fresh measurements go onto the customer's profile (the Measurements
+    //    desk reads the same record, so nothing is duplicated).
+    if (data.saveMeasurements && !data.useExistingMeasurements) {
+      const measurements = data.measurements;
+      const hasAny = Object.values(measurements).some((value) => String(value).trim() !== '');
+      if (hasAny) {
+        await frontDeskApi.createMeasurement({
+          customerId: data.customerId,
+          chest: parseFloat(measurements.Chest) || null,
+          waist: parseFloat(measurements.Waist) || null,
+          hip: parseFloat(measurements.Hips) || null,
+          sleeve: parseFloat(measurements.Sleeve) || null,
+          inseam: parseFloat(measurements.Inseam) || null,
+          shoulder: parseFloat(measurements.Shoulder) || null,
+          neck: null,
+          measurementDate: new Date().toISOString().slice(0, 10),
+          notes: measurements.Height ? `Height: ${measurements.Height}` : '',
+        });
       }
-      setActiveModal(null);
-      loadDashboardData();
-      setTimeout(() => setBanner(''), 5000);
-    } catch (err) {
-      throw err;
     }
+
+    // 2. The job card itself (created as a Draft — the tailor preference is
+    //    saved and the card is sent to production from the Orders desk).
+    //    Pricing is computed server-side by the Pricing Engine and snapshotted;
+    //    the structured customizations go in as real database columns.
+    const newOrder = await frontDeskApi.createOrder({
+      customerId: data.customerId,
+      garmentType: data.garmentType,
+      uniformCategory: data.orderCategory || undefined,
+      styleDesign: data.styleDesign,
+      fabric: data.fabric,
+      fabricQuantity: parseFloat(data.fabricQuantity) || 0,
+      quantity: data.quantity,
+      specialInstructions: data.specialInstructions,
+      targetCompletionDate: data.targetCompletionDate,
+      assignedTailorId: data.assignedTailorId,
+      measurementSnapshotId: '',
+      orderNotes: '',
+      orderType: data.orderType,
+      catalogItemId: data.catalogItemId ?? null,
+      customizations: {
+        collar_type: data.collarStyle || undefined,
+        sleeve_type: data.sleeveStyle || undefined,
+        embroidery: data.embroidery && data.embroidery !== 'None' ? data.embroidery : undefined,
+        lining: data.lining || undefined,
+        pocket_style: data.pocketStyle || undefined,
+        buttons: data.buttons || undefined,
+        monogram: data.monogram || undefined,
+        rush_order: data.rushOrder || undefined,
+      },
+      priority: data.priority,
+      additionalCharges: parseFloat(data.additionalCharges) || 0,
+      discount: parseFloat(data.discount) || 0,
+      referenceImage: (data.referenceImages && data.referenceImages.length > 0)
+        ? JSON.stringify(data.referenceImages)
+        : undefined,
+    });
+
+
+    // 3. The deposit collected at the counter.
+    let receiptReference = data.depositReferenceNumber || '';
+    if (depositAmount > 0) {
+      const payment = await frontDeskApi.recordPayment({
+        orderId: newOrder.order_id,
+        amount: depositAmount,
+        paymentType: 'Deposit',
+        paymentMethod: data.depositPaymentMethod,
+        referenceNumber: data.depositReferenceNumber,
+        notes: `Initial deposit collected at the Front Desk (${data.priority} priority)`,
+      });
+      receiptReference = data.depositReferenceNumber || payment?.receipt_number || '';
+    }
+
+    const totalAmount = Number(newOrder.total_amount) || 0;
+    setBanner(
+      mode === 'draft'
+        ? `Draft job card ${newOrder.job_card_id} saved — no deposit recorded yet.`
+        : `Job card ${newOrder.job_card_id} created${depositAmount > 0 ? ` with a ${formatPeso(depositAmount)} deposit` : ''}.`,
+    );
+    setActiveModal(null);
+    loadDashboardData();
+    setTimeout(() => setBanner(''), 5000);
+
+    return {
+      jobCardId: newOrder.job_card_id,
+      totalAmount: totalAmount || Number(newOrder.deposit_required || 0) * 2,
+      depositPaid: depositAmount,
+      remainingBalance: Math.max(0, (totalAmount || 0) - depositAmount),
+      receiptReference,
+    };
   };
 
   const handleRecordPayment = async (data: any) => {
@@ -1389,11 +891,12 @@ function DashboardView() {
         </div>
       )}
 
-      <div className="dash-in grid grid-cols-2 lg:grid-cols-4 gap-4" style={{ animationDelay: '0.04s' }}>
+      <div className="dash-in grid grid-cols-2 lg:grid-cols-5 gap-4" style={{ animationDelay: '0.04s' }}>
         <QuickAction icon={<UserPlus className="w-5 h-5" strokeWidth={1.6} />} label="Register customer" hint="New profile" onClick={() => setActiveModal('customer')} />
-        <QuickAction icon={<FilePlus2 className="w-5 h-5" strokeWidth={1.6} />} label="Create order" hint="New job card" helper="Create a new job card and optionally collect the initial deposit." onClick={() => setActiveModal('order')} />
+        <QuickAction icon={<LayoutGrid className="w-5 h-5" strokeWidth={1.6} />} label="Garment catalog" hint="Designs & fabrics" helper="Browse the shop's garments, uniform types, styles, fabrics and customization options with the customer — then start the order from there." onClick={() => { setActiveModal(null); onOpenCatalogPage?.(); }} />
+        <QuickAction icon={<FilePlus2 className="w-5 h-5" strokeWidth={1.6} />} label="New order" hint="Garment intake" helper="Guided intake: customer, garment, customization and measurements, pricing, then the deposit. Creates a new job card." onClick={() => { setIntakeDesign(null); setActiveModal('order'); }} />
         <QuickAction icon={<Banknote className="w-5 h-5" strokeWidth={1.6} />} label="Record payment" hint="Existing job card" helper="Record additional payments for existing job cards." onClick={() => setActiveModal('payment')} />
-            <QuickAction icon={<CalendarPlus className="w-5 h-5" strokeWidth={1.6} />} label="Manual exception" hint="Special follow-ups" helper="Only for exceptional follow-ups. Normal fitting and pickup visits are suggested automatically by production and approved on the Appointments page." onClick={() => setActiveModal('fitting')} />
+        <QuickAction icon={<CalendarPlus className="w-5 h-5" strokeWidth={1.6} />} label="Manual exception" hint="Special follow-ups" helper="Only for exceptional follow-ups. Normal fitting and pickup visits are suggested automatically by production and approved on the Appointments page." onClick={() => setActiveModal('fitting')} />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1551,11 +1054,13 @@ function DashboardView() {
         <RegisterCustomerModal onClose={() => setActiveModal(null)} onRegister={handleRegisterCustomer} />
       )}
       {activeModal === 'order' && (
-        <CreateOrderModal 
-          onClose={() => setActiveModal(null)} 
+        <GarmentIntakeModal
+          onClose={() => { setActiveModal(null); setIntakeDesign(null); }}
           onCreate={handleCreateOrder}
           customers={customers}
           orders={orders}
+          initial={intakeDesign}
+          onOpenCatalogPage={onOpenCatalogPage}
         />
       )}
       {activeModal === 'payment' && (
@@ -1619,6 +1124,8 @@ export default function FrontDeskDashboard({ initialView = 'dashboard' }: { init
   const [navOpen, setNavOpen] = useState(false);
   const [view, setView] = useState<ViewKey>(initialView);
   const [loading, setLoading] = useState(true);
+  // Garment picked on the Garment Catalog page, waiting for the intake form.
+  const [pendingDesign, setPendingDesign] = useState<CatalogDesign | null>(null);
 
   useEffect(() => {
     const token = authToken();
@@ -1659,9 +1166,22 @@ export default function FrontDeskDashboard({ initialView = 'dashboard' }: { init
   function renderView() {
     switch (view) {
       case 'dashboard':
-        return <DashboardView />;
+        return (
+          <DashboardView
+            pendingDesign={pendingDesign}
+            onDesignConsumed={() => setPendingDesign(null)}
+            onOpenCatalogPage={() => setView('catalog')}
+          />
+        );
       case 'customers':
         return <div className="module-customers"><FrontDeskCustomersExactView /></div>;
+      case 'catalog':
+        return (
+          <FrontDeskGarmentCatalogView
+            onStartOrder={(design) => { setPendingDesign(design); setView('dashboard'); }}
+            onOpenIntake={() => { setPendingDesign(null); setView('dashboard'); }}
+          />
+        );
       case 'orders':
         return <div className="module-orders"><FrontDeskOrdersView /></div>;
       case 'measurements':
@@ -1790,3 +1310,4 @@ export default function FrontDeskDashboard({ initialView = 'dashboard' }: { init
     </div>
   );
 }
+

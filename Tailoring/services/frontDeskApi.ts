@@ -15,6 +15,106 @@ export const handleResponse = async <T>(response: Response): Promise<T> => {
   return data;
 };
 
+/** Admin-managed storefront garment catalog entry (GET /api/auth/catalog). */
+export interface CatalogItem {
+  id?: number;
+  name: string;
+  /** Legacy display label such as "From ₱6,500" (storefront card only). */
+  price: string;
+  description: string;
+  /** Suggested fabric labels — informational only, NOT inventory stock. */
+  fabrics: string[];
+  image: string;
+  /** Suggested colour hex swatches shown to the customer. */
+  colors: string[];
+  // --- Structured business fields (single source of truth) ---
+  garment_category: string;
+  garment_type: string;
+  base_price: number | null;
+  production_workflow: string;
+  allowed_styles: string[];
+  allowed_fabrics: string[];
+  allowed_customizations: string[];
+  measurement_profile: string;
+  active: number;
+  // --- Image framing (Admin Live Preview → reused by every surface) ---
+  /** Display zoom for the storefront card: 1 = fit, up to 3 = magnified. */
+  image_zoom?: number;
+  /** Focal point as percentages of the image (object-position). */
+  image_pos_x?: number;
+  image_pos_y?: number;
+  /** 'contain' shows the whole photo; 'cover' fills the card and crops. */
+  image_crop_mode?: 'contain' | 'cover';
+}
+
+/** One garment pricing rule from the server Pricing Engine (Admin Rate Card). */
+export interface RateCardGarment {
+  garment_type: string;
+  garment_category: string;
+  base_price: number;
+  production_workflow: string;
+}
+
+/** The full rate card served by GET /api/auth/pricing. */
+export interface RateCard {
+  garment_types: RateCardGarment[];
+  style_adjustments: Record<string, { mode: 'none' | 'add' | 'percent'; amount: number }>;
+  customization_charges: Record<string, Record<string, number>>;
+  rush_order_fee: number;
+  discount_rules: Record<string, unknown>;
+  deposit_percent: number;
+}
+
+/** The authoritative quote breakdown returned by the Pricing Engine. */
+export interface QuoteBreakdown {
+  garment_type: string;
+  garment_category: string;
+  production_workflow: string;
+  quantity: number;
+  base_price: number;
+  base_total: number;
+  style_adjustment: number;
+  fabric_adjustment: number;
+  customization_cost: number;
+  customization_lines: { field: string; option: string; amount: number }[];
+  rush_fee: number;
+  additional_charges: number;
+  discount: number;
+  final_price: number;
+  deposit_required: number;
+}
+
+/** Quote request payload for the Pricing Engine. */
+export interface QuoteRequest {
+  garmentType: string;
+  styleDesign?: string;
+  customizations?: OrderCustomizations;
+  fabric?: string;
+  quantity?: number;
+  priority?: string;
+  additionalCharges?: number;
+  discount?: number;
+}
+
+/** Structured customization fields stored on the job card. */
+export interface OrderCustomizations {
+  collar_type?: string;
+  sleeve_type?: string;
+  embroidery?: string;
+  lining?: string;
+  pocket_style?: string;
+  buttons?: string;
+  monogram?: string;
+  rush_order?: boolean;
+}
+
+export interface UploadedReference {
+  name: string;
+  type: string;
+  url: string;
+}
+
+
 export interface Customer {
   customer_id: string;
   first_name: string;
@@ -81,6 +181,24 @@ export interface Order {
   production_status: 'Draft' | 'Measuring' | 'Pattern Cutting' | 'Initial Assembly' | 'First Fitting' | 'Final Alterations' | 'Quality Review' | 'Completed' | 'Ready for Pickup' | 'Released';
   measurement_snapshot_id: string;
   order_notes: string;
+  // --- Pricing architecture fields (quote snapshot on the job card) ---
+  order_type?: 'catalog' | 'bespoke';
+  catalog_item_id?: number | null;
+  collar_type?: string | null;
+  sleeve_type?: string | null;
+  embroidery?: string | null;
+  lining?: string | null;
+  pocket_style?: string | null;
+  buttons?: string | null;
+  monogram?: string | null;
+  rush_order?: number;
+  additional_charge?: number;
+  discount_amount?: number;
+  base_price?: number;
+  customization_cost?: number;
+  rush_fee?: number;
+  final_price?: number;
+  quote_snapshot?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -160,11 +278,17 @@ export interface DailySummary {
 export interface PriceCalculation {
   laborCost: number;
   fabricCost: number;
+  /** Structured customization charges subtotal (engine). */
+  customizationCost?: number;
+  /** Rush-order fee (engine). */
+  rushFee?: number;
   additionalCharges: number;
   discount: number;
   totalAmount: number;
   depositRequired: number;
   remainingBalance: number;
+  /** Full engine breakdown — snapshotted onto the job card at confirm. */
+  breakdown?: QuoteBreakdown;
 }
 
 const frontDeskApi = {
@@ -282,12 +406,19 @@ const frontDeskApi = {
     fabric: string;
     fabricQuantity: number;
     quantity: number;
-    referenceImage: string;
     specialInstructions: string;
     targetCompletionDate: string;
     assignedTailorId: string;
     measurementSnapshotId: string;
     orderNotes: string;
+    // --- Structured intake (catalog vs bespoke + pricing architecture) ---
+    orderType?: 'catalog' | 'bespoke';
+    catalogItemId?: number | null;
+    customizations?: OrderCustomizations;
+    priority?: 'Normal' | 'High' | 'Rush' | string;
+    additionalCharges?: number;
+    discount?: number;
+    referenceImage?: string;
   }): Promise<Order> => {
     const response = await fetch(`${API_URL}/orders`, {
       method: 'POST',
@@ -504,16 +635,10 @@ const frontDeskApi = {
     return handleResponse(response);
   },
 
-  // Price calculation
-  calculatePrice: async (data: {
-    garmentType: string;
-    uniformCategory?: string;
-    fabric: string;
-    fabricQuantity: number;
-    quantity: number;
-    additionalCharges: number;
-    discount: number;
-  }): Promise<PriceCalculation> => {
+  // Price calculation — always delegated to the server Pricing Engine.
+  // No frontend fallback prices exist anywhere; on failure the caller shows
+  // an error instead of inventing a number.
+  calculatePrice: async (data: QuoteRequest): Promise<PriceCalculation> => {
     const response = await fetch(`${API_URL}/orders/calculate-price`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
@@ -521,6 +646,43 @@ const frontDeskApi = {
     });
     return handleResponse(response);
   },
+
+  // The Admin Rate Card — served by the server Pricing Engine. The Pricing
+  // Guide renders from this only; when it is empty the guide is hidden.
+  getRateCard: async (): Promise<RateCard> => {
+    const response = await fetch(`${API_URL}/auth/pricing`, {
+      headers: { Authorization: `Bearer ${authToken()}` },
+    });
+    const data = await handleResponse<{ rate_card?: RateCard }>(response);
+    return data.rate_card || { garment_types: [], style_adjustments: {}, customization_charges: {}, rush_order_fee: 0, discount_rules: {}, deposit_percent: 0.5 };
+  },
+
+  // A single authoritative quote from the Pricing Engine.
+  getQuote: async (data: QuoteRequest): Promise<QuoteBreakdown> => {
+    const response = await fetch(`${API_URL}/auth/pricing/quote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify(data),
+    });
+    const payload = await handleResponse<{ quote?: QuoteBreakdown }>(response);
+    if (!payload.quote) throw new Error('The pricing engine returned no quote.');
+    return payload.quote;
+  },
+
+  // Store real customer inspiration files on the server. The returned URLs can
+  // safely be attached to a job card instead of embedding large base64 blobs.
+  uploadReferenceFiles: async (files: File[]): Promise<UploadedReference[]> => {
+    const form = new FormData();
+    files.forEach((file) => form.append('files', file));
+    const response = await fetch(`${API_URL}/uploads/references`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken()}` },
+      body: form,
+    });
+    const data = await handleResponse<{ files?: UploadedReference[] }>(response);
+    return Array.isArray(data.files) ? data.files : [];
+  },
+
 
     // Release order
   releaseOrder: async (orderId: string, release: { releasedToName: string; releasedToRelation?: string; releaseReference?: string; releaseAcknowledged: boolean }): Promise<Order> => {
@@ -582,11 +744,20 @@ const frontDeskApi = {
     });
     return handleResponse(response);
   },
-  getFabricCatalog: async (): Promise<{ fabrics: { id: number; fabricName: string; tone: string; unit: string }[] }> => {
+  getFabricCatalog: async (): Promise<{ fabrics: { id: number; fabricName: string; tone: string; unit: string; stockQuantity?: number; unitCost?: number }[] }> => {
     const response = await fetch(`${API_URL}/auth/catalog/fabrics`, {
       headers: { Authorization: `Bearer ${authToken()}` },
     });
     return handleResponse(response);
+  },
+  // Admin-managed garment catalog shown on the customer storefront.
+  // Used by the Front Desk "Browse Catalog" step of the New Order flow.
+  getGarmentCatalog: async (): Promise<CatalogItem[]> => {
+    const response = await fetch(`${API_URL}/auth/catalog`, {
+      headers: { Authorization: `Bearer ${authToken()}` },
+    });
+    const data = await handleResponse<{ catalog?: CatalogItem[] }>(response);
+    return Array.isArray(data?.catalog) ? data.catalog : [];
   },
   getTailors: async (): Promise<{ id: number; full_name: string; position: string; employee_id: string }[]> => {
     const response = await fetch(`${API_URL}/frontdesk/tailors`, {

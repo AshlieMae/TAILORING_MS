@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, ChevronRight, ClipboardList, MapPin, PackageCheck, Shirt } from 'lucide-react';
+import { formatPHP } from '../utils/currency';
 import {
   COLORS, FONT_IMPORT, PageHeader, StatCard, SearchField, Card, TableHeadRow, EmptyState,
   ModalShell, EyebrowLabel, Badge, shadowSm,
@@ -41,7 +42,7 @@ export function AdminOrdersView({ externalQuery = '' }: { externalQuery?: string
         const mapped: Order[] = (d.orders || []).map((o: any) => ({
           id: o.id, customer: o.customer, garment: o.garment, fabric: o.fabric,
           stage: o.stage, payment: o.payment === 'Paid' ? 'Paid' : 'Balance due',
-          total: `₱${Number(o.total || 0).toLocaleString('en-PH')}`, due: o.due, created: o.created,
+          total: formatPHP(Number(o.total || 0)), due: o.due, created: o.created,
           measurements: 'Real-time from customer profile',
         }));
         setRows(mapped);
@@ -67,7 +68,7 @@ export function AdminOrdersView({ externalQuery = '' }: { externalQuery?: string
         description="Every ticket on the workroom board — cut, stitched, fitted, and settled."
         action={
           <div className="border px-4 py-3" style={{ borderColor: COLORS.border, background: COLORS.surface, borderRadius: 10, boxShadow: shadowSm }}>
-            <span className="mono text-xl font-semibold" style={{ color: COLORS.ink }}>₱{typeof total === 'number' ? total.toLocaleString() : totalStr}</span>
+            <span className="mono text-xl font-semibold" style={{ color: COLORS.ink }}>{formatPHP(typeof total === 'number' ? total : Number(String(totalStr).replace(/[^0-9.]/g, '')) || 0)}</span>
             <span className="ml-2 text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: COLORS.muted }}>on the books</span>
           </div>
         }
