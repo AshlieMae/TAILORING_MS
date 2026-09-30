@@ -1,8 +1,8 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Archive, ArchiveRestore, Boxes, CheckCircle2, ChevronDown, Edit3, Eye, FileSpreadsheet, Image as ImageIcon,
-  LayoutGrid, List, LoaderCircle, Maximize2, PackagePlus, Palette, PenLine, Plus, Scissors, ShieldAlert, Shirt,
+  Archive, ArchiveRestore, ArrowUpDown, Boxes, CheckCircle2, ChevronDown, Edit3, Eye, FileSpreadsheet, Image as ImageIcon,
+  LayoutGrid, List, LoaderCircle, Maximize2, MoreVertical, PackagePlus, Palette, PenLine, Plus, Scissors, ShieldAlert, Shirt,
   Sparkles, SwatchBook, Tags, Trash2, UploadCloud, X, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import ExcelJS from 'exceljs';
@@ -13,11 +13,12 @@ import {
 import { buildDescriptionContext, generateGarmentDescription, type DescriptionEngine } from './garmentDescription';
 import { DEFAULT_IMAGE_FRAMING, normalizeFraming } from '../utils/imageFraming';
 import { formatPHP } from '../utils/currency';
+import { CatalogThumb } from '../utils/CatalogThumb';
 import { CatalogImage } from '../utils/CatalogImage';
 import { ChipSelect, FabricInventorySelect, OptionCard, type FabricOption } from './optionPickers';
 import { STYLE_DESIGNS, CUSTOMIZATION_OPTIONS } from '../Pages_Frontdesk/garmentCatalogData';
 import {
-  buildGarmentTypeRegistry, findGarmentType, hasRateCardRules, rateCardStatus, registryCategories,
+  buildGarmentTypeRegistry, findGarmentType, hasRateCardRules, rateCardPriceFor, rateCardStatus, registryCategories,
   type GarmentTypeEntry, type RateCardRow,
 } from '../utils/garmentTypes';
 
@@ -81,20 +82,82 @@ const PROFILE_LABELS: Record<string, string> = {
 
 const CATEGORIES = ['Formal Wear', 'School Uniform', 'Uniforms', "Women's Wear", 'Bespoke'];
 
+/**
+ * The management table's column template — shared by the header row and every
+ * record row so the two can never drift apart.
+ *
+ * Written twice on purpose. Tailwind compiles classes from the literal text in
+ * the source, so a variant glued onto a runtime value (`md:${TABLE_GRID}`) is
+ * never generated — the row would silently fall back to `grid-cols-2` at every
+ * width. Both the bare and the `md:` form therefore appear here as literals:
+ * the header (hidden below md) uses the bare one; the rows use the prefixed one.
+ */
+const TABLE_GRID = 'grid-cols-[68px_1.5fr_1fr_1.1fr_1fr_0.9fr_0.85fr_168px]';
+const TABLE_GRID_MD = 'md:grid-cols-[68px_1.5fr_1fr_1.1fr_1fr_0.9fr_0.85fr_168px]';
+
+/** Management-table sort orders. 'newest' is the default: the record the Admin
+    just added is the one most likely to need attention. */
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'price-desc', label: 'Price: High to Low' },
+  { value: 'price-asc', label: 'Price: Low to High' },
+  { value: 'name-asc', label: 'Name: A to Z' },
+] as const;
+type SortKey = (typeof SORT_OPTIONS)[number]['value'];
+
+/**
+ * The authoritative money figure for a record — `base_price`, which the server
+ * always overlays with the Admin Rate Card rule for the garment type, falling
+ * back to the storefront label ("Starting at ₱6,500") for legacy rows saved
+ * before the structured business fields existed, so price sorting and the price
+ * shown on a card always agree with what the Pricing Engine will quote.
+ */
+function numericPrice(garment: Garment): number {
+  const base = Number(garment.base_price);
+  if (Number.isFinite(base) && base > 0) return base;
+  const parsed = Number(String(garment.price || '').replace(/[^0-9.]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/**
+ * The Admin Rate Card figure for a record's garment type, or null when no rule
+ * prices it. The Rate Card is the ONLY place a price is edited; the catalog
+ * reads the rule and never owns a figure of its own.
+ */
+function startingPriceFor(garment: Garment, registry: GarmentTypeEntry[]): number | null {
+  return rateCardPriceFor(registry, garment.garment_type);
+}
+
+/** The storefront label for a Rate Card figure, always derived: "Starting at ₱6,500". */
+function storefrontLabelFor(price: number | null): string {
+  return price === null ? '' : `Starting at ${formatPHP(price)}`;
+}
+
+/** Fill the fixed thumbnail frame when a record has no usable photo. */
+function ThumbFallbackIcon() {
+  return (
+    <span className="flex flex-col items-center gap-1.5" style={{ color: COLORS.faint }}>
+      <ImageIcon className="h-5 w-5" strokeWidth={1.5} />
+      <span className="text-[9px] font-semibold uppercase tracking-[0.1em]">No photo</span>
+    </span>
+  );
+}
+
 const DEFAULT_CATALOG: Garment[] = [
-  { name: 'Barong Tagalog', price: 'From ₱6,500', description: 'Hand-finished formal wear for weddings and ceremonies.', fabrics: ['Piña Jusi — Ivory', 'Cocoon Silk — Natural'], colors: ['#F5EEDF', '#D8C9A7'], image: 'https://ibarrafilipino.com/cdn/shop/files/Barong_Tagalog_JV402_02.png?v=1769481827&width=1200',
+  { name: 'Barong Tagalog', price: 'Starting at ₱6,500', description: 'Hand-finished formal wear for weddings and ceremonies.', fabrics: ['Piña Jusi — Ivory', 'Cocoon Silk — Natural'], colors: ['#F5EEDF', '#D8C9A7'], image: 'https://ibarrafilipino.com/cdn/shop/files/Barong_Tagalog_JV402_02.png?v=1769481827&width=1200',
     garment_category: 'Formal Wear', garment_type: 'Barong Tagalog', base_price: '6500', production_workflow: 'formal_barong',
     allowed_styles: ["Classic","Modern","Minimalist"], allowed_fabrics: [], allowed_customizations: ["Embroidery","French Cuff","Custom Collar"],
     measurement_profile: 'upper_body', active: 1 },
-  { name: 'Two-piece Suit', price: 'From ₱12,000', description: 'A tailored jacket and trousers, cut to your measurements.', fabrics: ['Italian Wool — Charcoal', 'Wool Blend — Navy'], colors: ['#393B42', '#1D2A44'], image: 'https://images.pexels.com/photos/1043474/pexels-photo-1043474.jpeg?auto=compress&cs=tinysrgb&w=1200',
+  { name: 'Two-piece Suit', price: 'Starting at ₱12,000', description: 'A tailored jacket and trousers, cut to your measurements.', fabrics: ['Italian Wool — Charcoal', 'Wool Blend — Navy'], colors: ['#393B42', '#1D2A44'], image: 'https://images.pexels.com/photos/1043474/pexels-photo-1043474.jpeg?auto=compress&cs=tinysrgb&w=1200',
     garment_category: 'Formal Wear', garment_type: 'Two-Piece Suit', base_price: '12000', production_workflow: 'suit',
     allowed_styles: ["Classic","Modern","Fitted"], allowed_fabrics: [], allowed_customizations: ["Lining","Custom Collar","Pocket Style"],
     measurement_profile: 'full_body', active: 1 },
-  { name: 'Filipiniana Dress', price: 'From ₱9,500', description: 'Custom occasion dress with a silhouette made for you.', fabrics: ['Silk Habotai — Wine', 'Satin — Blush'], colors: ['#6A2737', '#D9A6A6'], image: 'https://www.kulturafilipino.com/cdn/shop/files/Copyof_IMG8614_1800x1800.jpg?v=1722242874',
+  { name: 'Filipiniana Dress', price: 'Starting at ₱9,500', description: 'Custom occasion dress with a silhouette made for you.', fabrics: ['Silk Habotai — Wine', 'Satin — Blush'], colors: ['#6A2737', '#D9A6A6'], image: 'https://www.kulturafilipino.com/cdn/shop/files/Copyof_IMG8614_1800x1800.jpg?v=1722242874',
     garment_category: 'Formal Wear', garment_type: 'Filipiniana Dress', base_price: '9500', production_workflow: 'gown',
     allowed_styles: ["Traditional","Modern","Ruffled"], allowed_fabrics: [], allowed_customizations: ["Embroidery","Lining","Sleeve Style"],
     measurement_profile: 'full_body', active: 1 },
-  { name: 'School Uniform Set', price: 'From ₱2,800', description: 'Durable uniforms tailored for everyday wear.', fabrics: ['Cotton Twill — Navy', 'Cotton Poplin — White'], colors: ['#233553', '#ECE9E0'], image: 'https://images.pexels.com/photos/5212345/pexels-photo-5212345.jpeg?auto=compress&cs=tinysrgb&w=1200',
+  { name: 'School Uniform Set', price: 'Starting at ₱2,800', description: 'Durable uniforms tailored for everyday wear.', fabrics: ['Cotton Twill — Navy', 'Cotton Poplin — White'], colors: ['#233553', '#ECE9E0'], image: 'https://images.pexels.com/photos/5212345/pexels-photo-5212345.jpeg?auto=compress&cs=tinysrgb&w=1200',
     garment_category: 'School Uniform', garment_type: 'Regular Uniform', base_price: '1800', production_workflow: 'uniform',
     allowed_styles: ["Classic","Loose Fit"], allowed_fabrics: [], allowed_customizations: ["Embroidery","Pocket Style"],
     measurement_profile: 'full_body', active: 1 },
@@ -162,6 +225,7 @@ export function AdminGarmentCatalogView() {
   const [workflowFilter, setWorkflowFilter] = useState('All Workflows');
   const [statusFilter, setStatusFilter] = useState('All Statuses');
   const [profileFilter, setProfileFilter] = useState('All Profiles');
+  const [sort, setSort] = useState<SortKey>('newest');
   const [details, setDetails] = useState<Garment | null>(null);
   // The Admin Rate Card (GET /api/auth/pricing) is the same source the Front
   // Desk quotes from — it names the pricing engine's garment types, so the
@@ -196,10 +260,21 @@ export function AdminGarmentCatalogView() {
     try {
       const editId = editing?.id;
       const isEdit = Boolean(editId);
+      // The Admin Rate Card owns the figure; the catalog mirrors it so sorting
+      // and the storefront label always quote the same number. Nothing is typed
+      // as a price on this page, and a garment the Rate Card does not price
+      // stores no figure at all.
+      const ratePrice = startingPriceFor(garment, registry);
+      const payload: Garment = {
+        ...garment,
+        // While the Rate Card is unreachable nothing stored is rewritten.
+        base_price: ratePrice !== null ? String(ratePrice) : (rateCardState === 'ready' ? '' : garment.base_price),
+        price: storefrontLabelFor(ratePrice) || (rateCardState === 'ready' ? 'No Starting Price set' : garment.price),
+      };
       const response = await fetch(`${API_URL}/auth/catalog${editId ? `/${editId}` : ''}`, {
         method: isEdit ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
-        body: JSON.stringify(garment),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
@@ -233,7 +308,7 @@ export function AdminGarmentCatalogView() {
       { header: 'Garment Name', key: 'name', width: 26 },
       { header: 'Category', key: 'category', width: 18 },
       { header: 'Type', key: 'type', width: 20 },
-      { header: 'Base Price', key: 'base', width: 14 },
+      { header: 'Starting Price', key: 'base', width: 14 },
       { header: 'Workflow', key: 'workflow', width: 16 },
       { header: 'Measurement Profile', key: 'profile', width: 20 },
       { header: 'Status', key: 'status', width: 10 },
@@ -265,9 +340,22 @@ export function AdminGarmentCatalogView() {
       && (profileFilter === 'All Profiles' || garment.measurement_profile === profileFilter);
   });
 
+  // Filter first, then order. Array.prototype.sort is stable, so records that
+  // carry no id keep the order the server returned them in.
+  const visible = [...filtered].sort((a, b) => {
+    switch (sort) {
+      case 'oldest': return (a.id ?? 0) - (b.id ?? 0);
+      case 'price-desc': return numericPrice(b) - numericPrice(a);
+      case 'price-asc': return numericPrice(a) - numericPrice(b);
+      case 'name-asc': return a.name.localeCompare(b.name);
+      default: return (b.id ?? 0) - (a.id ?? 0);
+    }
+  });
+
   // A record needs pricing attention when its type is missing from the rate
-  // card (the Front Desk could not quote it) or its base price has drifted from
-  // the rate-card figure. Without rate-card data we only flag the obvious gaps.
+  // card (the Front Desk could not quote it) or its stored price has drifted
+  // from the rate-card figure. Without rate-card data we only flag the obvious
+  // gaps.
   const rateCardReady = hasRateCardRules(registry);
   const pricingIssues = rateCardReady
     ? catalog.filter((garment) => rateCardStatus(registry, garment.garment_type, garment.base_price).state !== 'priced')
@@ -296,7 +384,7 @@ export function AdminGarmentCatalogView() {
           <CatalogKpi icon={<Archive />} label="Inactive Garments" value={catalog.filter((item) => !item.active).length} description="Hidden from customers" tone="info" />
           <CatalogKpi
             icon={<ShieldAlert />}
-            label="Pricing Review Required"
+            label="Pricing Review Needed"
             value={needsReview}
             description={rateCardState === 'ready'
               ? 'Not on the rate card, or price differs'
@@ -308,48 +396,86 @@ export function AdminGarmentCatalogView() {
         {notice && <div className="border px-4 py-3 text-sm" style={{ borderColor: COLORS.successBorder, background: COLORS.successBg, color: COLORS.success, borderRadius: 8 }}>{notice}</div>}
         {error && <div className="border px-4 py-3 text-sm" style={{ borderColor: COLORS.dangerBorder, background: COLORS.dangerBg, color: COLORS.danger, borderRadius: 8 }}>{error}</div>}
 
-        {/* Search + filter bar */}
+        {/* Management toolbar — find, narrow, order, then switch lens. */}
         <section className="border bg-white p-4" style={{ borderColor: COLORS.border, borderRadius: 16, boxShadow: '0 1px 3px rgba(16,24,40,0.06)' }}>
           <div className="flex flex-wrap items-center gap-3">
-            <SearchField value={query} onChange={setQuery} placeholder="Search Garments..." />
+            <SearchField value={query} onChange={setQuery} placeholder="Search garments..." />
             <div className="ml-auto flex items-center gap-1 border p-1" style={{ borderColor: COLORS.border, borderRadius: 8, background: COLORS.surfaceAlt }}>
               <ViewToggle active={view === 'table'} onClick={() => setView('table')} icon={<List className="h-3.5 w-3.5" />}>Table View</ViewToggle>
               <ViewToggle active={view === 'cards'} onClick={() => setView('cards')} icon={<LayoutGrid className="h-3.5 w-3.5" />}>Card View</ViewToggle>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <FilterSelect value={categoryFilter} onChange={setCategoryFilter}>
+            <FilterSelect value={categoryFilter} onChange={setCategoryFilter} label="Filter by category">
               <option>All Categories</option>
               {CATEGORIES.map((category) => <option key={category}>{category}</option>)}
               {catalog.map((garment) => garment.garment_category).filter((value, index, all) => value && !all.slice(0, index).includes(value) && !CATEGORIES.includes(value)).map((value) => <option key={value}>{value}</option>)}
             </FilterSelect>
-            <FilterSelect value={workflowFilter} onChange={setWorkflowFilter}>
+            <FilterSelect value={workflowFilter} onChange={setWorkflowFilter} label="Filter by production workflow">
               <option>All Workflows</option>
               {WORKFLOWS.map((workflow) => <option key={workflow} value={workflow}>{WORKFLOW_LABELS[workflow] || workflow}</option>)}
             </FilterSelect>
-            <FilterSelect value={statusFilter} onChange={setStatusFilter}>
+            <FilterSelect value={statusFilter} onChange={setStatusFilter} label="Filter by storefront status">
               <option>All Statuses</option>
               <option>Active</option>
               <option>Inactive</option>
             </FilterSelect>
-            <FilterSelect value={profileFilter} onChange={setProfileFilter}>
+            <FilterSelect value={profileFilter} onChange={setProfileFilter} label="Filter by measurement profile">
               <option>All Profiles</option>
               {MEASUREMENT_PROFILES.map((profile) => <option key={profile.value} value={profile.value}>{profile.label}</option>)}
             </FilterSelect>
-            <span className="ml-auto text-[11px]" style={{ color: COLORS.muted }}>{filtered.length} of {catalog.length} records</span>
+            <FilterSelect value={sort} onChange={(value) => setSort(value as SortKey)} label="Sort records" icon={<ArrowUpDown className="h-3.5 w-3.5" />}>
+              {SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </FilterSelect>
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-[11px]" style={{ color: COLORS.muted }}>
+                Showing <strong style={{ color: COLORS.ink }}>{visible.length}</strong> of {catalog.length} records
+              </span>
+              {(query || categoryFilter !== 'All Categories' || workflowFilter !== 'All Workflows' || statusFilter !== 'All Statuses' || profileFilter !== 'All Profiles') && (
+                <button
+                  type="button"
+                  onClick={() => { setQuery(''); setCategoryFilter('All Categories'); setWorkflowFilter('All Workflows'); setStatusFilter('All Statuses'); setProfileFilter('All Profiles'); }}
+                  className="border px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors hover:bg-black/[0.04]"
+                  style={{ borderColor: COLORS.border, borderRadius: 7, color: COLORS.inkSoft }}
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
           </div>
         </section>
 
         {view === 'table' ? (
           <section className="border bg-white" style={{ borderColor: COLORS.border, borderRadius: 16, boxShadow: '0 1px 3px rgba(16,24,40,0.06)', overflow: 'hidden' }}>
-            <TableHeadRow gridCols="grid-cols-[64px_1.4fr_1fr_1fr_0.9fr_1fr_0.8fr_180px]" columns={['Image', 'Garment Name', 'Category', 'Type', 'Base Price', 'Workflow', 'Status', 'Actions']} />
-            {filtered.map((garment) => <GarmentTableRow key={garment.id || garment.name} garment={garment} registry={registry} onEdit={() => setEditing(garment)} onArchive={() => toggleArchive(garment)} onDelete={() => remove(garment)} onDetails={() => setDetails(garment)} />)}
-            {!filtered.length && <div className="p-14 text-center text-sm" style={{ color: COLORS.muted }}>No garment records match the current filters.</div>}
+            {/* The header row is desktop-only and the inner block carries a
+                minimum width, so at 125–150% browser zoom the columns keep
+                their proportions and the table scrolls sideways instead of
+                crushing. Below md the rows stack and no width is forced. */}
+            <div className="md:scrollbar-thin md:overflow-x-auto">
+              <div className="md:min-w-[1080px]">
+                <TableHeadRow
+                  gridCols={TABLE_GRID}
+                  columns={['Image', 'Garment Name', 'Category', 'Garment Type', 'Starting Price', 'Workflow', 'Status', 'Actions']}
+                />
+                {visible.map((garment) => (
+                  <GarmentTableRow
+                    key={garment.id || garment.name}
+                    garment={garment}
+                    registry={registry}
+                    onEdit={() => setEditing(garment)}
+                    onArchive={() => toggleArchive(garment)}
+                    onDelete={() => remove(garment)}
+                    onDetails={() => setDetails(garment)}
+                  />
+                ))}
+                {!visible.length && <div className="p-14 text-center text-sm" style={{ color: COLORS.muted }}>No garment records match the current filters.</div>}
+              </div>
+            </div>
           </section>
         ) : (
-          <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((garment) => <GarmentCard key={garment.id || garment.name} garment={garment} registry={registry} onEdit={() => setEditing(garment)} onArchive={() => toggleArchive(garment)} onDelete={() => remove(garment)} onDetails={() => setDetails(garment)} />)}
-            {!filtered.length && <div className="p-14 text-center text-sm sm:col-span-2 xl:col-span-3" style={{ color: COLORS.muted }}>No garment records match the current filters.</div>}
+          <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {visible.map((garment) => <GarmentCard key={garment.id || garment.name} garment={garment} registry={registry} onEdit={() => setEditing(garment)} onArchive={() => toggleArchive(garment)} onDelete={() => remove(garment)} onDetails={() => setDetails(garment)} />)}
+            {!visible.length && <div className="p-14 text-center text-sm sm:col-span-2 xl:col-span-3 2xl:col-span-4" style={{ color: COLORS.muted }}>No garment records match the current filters.</div>}
           </section>
         )}
       </div>
@@ -386,10 +512,18 @@ function ViewToggle({ active, onClick, icon, children }: { active: boolean; onCl
   );
 }
 
-function FilterSelect({ value, onChange, children }: { value: string; onChange: (v: string) => void; children: React.ReactNode }) {
+function FilterSelect({ value, onChange, label, icon, children }: { value: string; onChange: (v: string) => void; label: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="relative inline-flex items-center">
-      <select value={value} onChange={(e) => onChange(e.target.value)} className="cursor-pointer appearance-none border bg-white py-2 pl-3 pr-8 text-[12px] outline-none transition-colors" style={{ borderColor: COLORS.border, borderRadius: 8, color: COLORS.inkSoft, maxWidth: 230 }}>
+      {icon && <span className="pointer-events-none absolute left-2.5" style={{ color: COLORS.faint }}>{icon}</span>}
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={label}
+        title={label}
+        className={`cursor-pointer appearance-none border bg-white py-2 text-[12px] outline-none transition-colors hover:border-[#D8DCE3] ${icon ? 'pl-8' : 'pl-3'} pr-8`}
+        style={{ borderColor: COLORS.border, borderRadius: 8, color: COLORS.inkSoft, maxWidth: 230 }}
+      >
         {children}
       </select>
       <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5" style={{ color: COLORS.faint }} />
@@ -423,12 +557,18 @@ function GarmentTableRow({ garment, registry, onEdit, onArchive, onDelete, onDet
   const pricing = rateCardStatus(registry, garment.garment_type, garment.base_price);
   const rateCardReady = hasRateCardRules(registry);
   return (
-    <div className="card-hover grid grid-cols-2 items-center gap-4 border-b px-6 py-4 md:grid-cols-[64px_1.4fr_1fr_1fr_0.9fr_1fr_0.8fr_180px]" style={{ borderColor: COLORS.border }}>
-      <div className="h-14 w-16 shrink-0 overflow-hidden" style={{ borderRadius: 8, background: COLORS.surfaceAlt, border: `1px solid ${COLORS.border}` }}>
-        {garment.image
-          ? <CatalogImage src={garment.image} alt={garment.name} framing={garment} className="h-full w-full" />
-          : <div className="flex h-full w-full items-center justify-center text-[9px]" style={{ color: COLORS.faint }}>No photo</div>}
-      </div>
+    <div className={`card-hover grid grid-cols-2 items-center gap-4 border-b px-6 py-4 transition-colors ${TABLE_GRID_MD}`} style={{ borderColor: COLORS.border }}>
+      {/* Fixed 64×56 frame — every row's photo occupies the same rectangle,
+          whatever the photo's own aspect ratio. */}
+      <CatalogThumb
+        src={garment.image}
+        alt={garment.name}
+        cropMode={garment.image_crop_mode}
+        className="h-14 w-16"
+        radius={8}
+        matPadding="p-1"
+        fallback={<ImageIcon className="h-4 w-4" strokeWidth={1.5} style={{ color: COLORS.faint }} />}
+      />
       <div className="min-w-0">
         <button type="button" onClick={onDetails} className="block max-w-full truncate text-left text-sm font-semibold hover:underline" style={{ color: COLORS.ink }} title="View details">{garment.name}</button>
         <span className="mono text-[10px]" style={{ color: COLORS.faint }}>#{garment.id ?? '—'}</span>
@@ -436,10 +576,10 @@ function GarmentTableRow({ garment, registry, onEdit, onArchive, onDelete, onDet
       <span className="truncate text-[12px]" style={{ color: COLORS.inkSoft }}>{garment.garment_category || '—'}</span>
       <div className="min-w-0">
         <span className="block truncate text-[12px]" style={{ color: COLORS.inkSoft }}>{garment.garment_type || '—'}</span>
-        {rateCardReady && pricing.state === 'unpriced' && <span className="mt-0.5 block text-[10px]" style={{ color: COLORS.warning }}>Not on rate card</span>}
+        {rateCardReady && pricing.state === 'unpriced' && <span className="mt-0.5 block text-[10px]" style={{ color: COLORS.warning }}>No Starting Price</span>}
       </div>
       <div className="min-w-0">
-        <span className="mono block text-[12px]" style={{ color: COLORS.ink }}>{peso(garment.base_price)}</span>
+        <span className="mono block text-[12px] font-semibold" style={{ color: COLORS.ink }}>{numericPrice(garment) > 0 ? peso(numericPrice(garment)) : '—'}</span>
         {rateCardReady && pricing.drift !== null && pricing.entry && (
           <span className="mt-0.5 block text-[10px]" style={{ color: COLORS.warning }} title="The Front Desk quotes the rate-card price">
             Rate card {peso(pricing.entry.basePrice)}
@@ -448,54 +588,244 @@ function GarmentTableRow({ garment, registry, onEdit, onArchive, onDelete, onDet
       </div>
       <span className="truncate text-[12px]" style={{ color: COLORS.inkSoft }}>{WORKFLOW_LABELS[garment.production_workflow] || garment.production_workflow || '—'}</span>
       <span><StatusBadge active={garment.active} /></span>
-      <div className="flex items-center justify-end gap-1.5">
-        <IconButton label="View details" onClick={onDetails}><Eye className="h-3.5 w-3.5" /></IconButton>
-        <IconButton label="Edit" onClick={onEdit}><Edit3 className="h-3.5 w-3.5" /></IconButton>
-        <IconButton label={garment.active ? 'Archive' : 'Restore'} onClick={onArchive}>
-          {garment.active ? <Archive className="h-3.5 w-3.5" /> : <ArchiveRestore className="h-3.5 w-3.5" />}
-        </IconButton>
-        <IconButton label="Delete" danger onClick={onDelete}><Trash2 className="h-3.5 w-3.5" /></IconButton>
+
+      {/* One grouped, right-aligned action cluster instead of scattered
+          buttons — the four record actions always stay together, and below lg
+          they collapse into a single ⋮ menu so the row never overflows. */}
+      <div className="col-span-2 flex justify-end md:col-span-1">
+        <RowActions garment={garment} onDetails={onDetails} onEdit={onEdit} onArchive={onArchive} onDelete={onDelete} />
       </div>
     </div>
   );
 }
 
-/** Compact management card — only the essentials; the rest lives in Details. */
+/** One button inside a grouped action cluster. `first` drops the left divider. */
+function GroupedAction({ label, onClick, first, danger, children }: {
+  label: string; onClick: () => void; first?: boolean; danger?: boolean; children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="inline-flex h-8 w-8 items-center justify-center transition-colors hover:bg-black/[0.05]"
+      style={{ borderLeft: first ? 'none' : `1px solid ${COLORS.border}`, color: danger ? COLORS.danger : COLORS.inkSoft }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * The record's four actions as ONE aligned group: View · Edit · Archive ·
+ * Delete. Wide screens get the full cluster (one click each); narrow screens
+ * get a single ⋮ menu with labelled items, so the Actions column is never the
+ * reason the table overflows.
+ */
+function RowActions({ garment, onDetails, onEdit, onArchive, onDelete }: {
+  garment: Garment; onDetails: () => void; onEdit: () => void; onArchive: () => void; onDelete: () => void;
+}) {
+  const menuItems: ActionMenuItem[] = [
+    { label: 'View record', icon: <Eye className="h-3.5 w-3.5" />, onSelect: onDetails },
+    { label: 'Edit record', icon: <Edit3 className="h-3.5 w-3.5" />, onSelect: onEdit },
+    { label: garment.active ? 'Archive — hide from storefront' : 'Restore to storefront', icon: garment.active ? <Archive className="h-3.5 w-3.5" /> : <ArchiveRestore className="h-3.5 w-3.5" />, onSelect: onArchive },
+    { label: 'Delete record', icon: <Trash2 className="h-3.5 w-3.5" />, onSelect: onDelete, tone: 'danger' },
+  ];
+  return (
+    <>
+      <div className="hidden items-center overflow-hidden border lg:inline-flex" style={{ borderColor: COLORS.border, borderRadius: 8, background: COLORS.surface }}>
+        <GroupedAction label="View record" onClick={onDetails} first><Eye className="h-3.5 w-3.5" /></GroupedAction>
+        <GroupedAction label="Edit record" onClick={onEdit}><Edit3 className="h-3.5 w-3.5" /></GroupedAction>
+        <GroupedAction label={garment.active ? 'Archive — hide from storefront' : 'Restore to storefront'} onClick={onArchive}>
+          {garment.active ? <Archive className="h-3.5 w-3.5" /> : <ArchiveRestore className="h-3.5 w-3.5" />}
+        </GroupedAction>
+        <GroupedAction label="Delete record" onClick={onDelete} danger><Trash2 className="h-3.5 w-3.5" /></GroupedAction>
+      </div>
+      <span className="lg:hidden"><ActionMenu items={menuItems} label={`Actions for ${garment.name}`} /></span>
+    </>
+  );
+}
+
+type ActionMenuItem = { label: string; icon: React.ReactNode; onSelect: () => void; tone?: 'default' | 'danger' };
+
+/**
+ * A ⋮ overflow menu. Rendered through a portal on `document.body` and placed
+ * against the trigger's own rectangle, so no ancestor `overflow: hidden`,
+ * transform or `backdrop-filter` in the dashboard shell can clip it — and it
+ * flips up/left when the viewport runs out of room, at any browser zoom.
+ */
+function ActionMenu({ items, label = 'More actions' }: { items: ActionMenuItem[]; label?: string }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  /** Anchor the menu to the trigger's own rectangle, flipping up/left near an edge. */
+  const placeAtTrigger = () => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = 232;
+    const height = items.length * 38 + 10;
+    const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+    const fitsBelow = rect.bottom + height + 10 <= window.innerHeight;
+    setPos({ top: fitsBelow ? rect.bottom + 6 : Math.max(8, rect.top - height - 6), left });
+  };
+
+  // Positioned once as the menu opens (in the click handler, so the first paint
+  // is already correct), then kept in place while the page scrolls or resizes.
+  const toggle = () => {
+    if (open) { setOpen(false); setPos(null); return; }
+    placeAtTrigger();
+    setOpen(true);
+  };
+  const close = () => { setOpen(false); setPos(null); };
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
+    window.addEventListener('scroll', placeAtTrigger, true);
+    window.addEventListener('resize', placeAtTrigger);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('scroll', placeAtTrigger, true);
+      window.removeEventListener('resize', placeAtTrigger);
+      window.removeEventListener('keydown', onKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- listeners only; placeAtTrigger reads refs
+  }, [open, items.length]);
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={toggle}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={label}
+        title={label}
+        className="inline-flex h-8 w-8 items-center justify-center border transition-colors hover:bg-black/[0.05]"
+        style={{
+          borderColor: open ? COLORS.borderStrong : COLORS.border,
+          background: open ? COLORS.surfaceAlt : COLORS.surface,
+          borderRadius: 8,
+          color: COLORS.inkSoft,
+        }}
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+      {open && pos && createPortal((
+        <div className="fixed inset-0 z-[70]" onClick={close} role="presentation">
+          <div
+            role="menu"
+            aria-label={label}
+            className="absolute min-w-[232px] overflow-hidden border bg-white py-1"
+            style={{ top: pos.top, left: pos.left, borderColor: COLORS.border, borderRadius: 10, boxShadow: shadowModal, animation: 'fadeScale 0.14s ease both' }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {items.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                role="menuitem"
+                onClick={() => { close(); item.onSelect(); }}
+                className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[12px] font-medium transition-colors hover:bg-black/[0.05]"
+                style={{ color: item.tone === 'danger' ? COLORS.danger : COLORS.inkSoft }}
+              >
+                <span className="shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{item.icon}</span>
+                <span className="truncate">{item.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ), document.body)}
+    </>
+  );
+}
+
+/**
+ * The optional card lens on the catalog. Every card is built as a stretched
+ * flex column — fixed photo frame, flexible body, action bar pinned to the
+ * bottom — so a card carrying a rate-card warning is exactly as tall as its
+ * neighbours and no row of the grid ever looks ragged.
+ */
 function GarmentCard({ garment, registry, onEdit, onArchive, onDelete, onDetails }: {
   garment: Garment; registry: GarmentTypeEntry[]; onEdit: () => void; onArchive: () => void; onDelete: () => void; onDetails: () => void;
 }) {
   const pricing = rateCardStatus(registry, garment.garment_type, garment.base_price);
+  const rateCardReady = hasRateCardRules(registry);
+  const needsAttention = rateCardReady && pricing.state !== 'priced';
   return (
-    <article className="card-hover overflow-hidden border bg-white" style={{ borderColor: COLORS.border, borderRadius: 16, boxShadow: '0 1px 3px rgba(16,24,40,0.06)' }}>
-      <div className="relative">
-        <CatalogImage src={garment.image} alt={garment.name} framing={garment} className="h-40 w-full" />
+    <article className="card-hover flex h-full min-w-0 flex-col overflow-hidden border bg-white" style={{ borderColor: COLORS.border, borderRadius: 16, boxShadow: '0 1px 3px rgba(16,24,40,0.06)' }}>
+      {/* One fixed 224px frame for every record: a portrait photo, a landscape
+          photo and a transparent PNG product shot all occupy the same rectangle,
+          so nothing is stretched, cropped by surprise or letterboxed. */}
+      <div className="relative shrink-0">
+        <CatalogThumb
+          src={garment.image}
+          alt={garment.name}
+          cropMode={garment.image_crop_mode}
+          className="h-56 w-full"
+          fallback={<ThumbFallbackIcon />}
+        />
         <span className="absolute left-3 top-3"><StatusBadge active={garment.active} /></span>
+        {needsAttention && (
+          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold" style={{ background: COLORS.warningBg, color: COLORS.warning }}>
+            <ShieldAlert className="h-3 w-3" />Review
+          </span>
+        )}
       </div>
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-2">
-          <h2 className="text-[15px] font-semibold">{garment.name}</h2>
-          <span className="whitespace-nowrap text-sm font-semibold" style={{ color: COLORS.brassDeep }}>{garment.price || peso(garment.base_price)}</span>
-        </div>
-        <p className="mt-1 text-[11px]" style={{ color: COLORS.muted }}>{garment.garment_type || garment.garment_category || 'Uncategorised'}</p>
-        {hasRateCardRules(registry) && pricing.state !== 'priced' && (
-          <p className="mt-1 text-[10px]" style={{ color: COLORS.warning }}>
-            {pricing.state === 'unpriced' ? 'Not on the rate card — Front Desk cannot quote it' : 'Base price differs from the rate card'}
+
+      {/* Body — name, category, then the money figure anchored above the
+          action bar so the price is never the reason a card looks misaligned. */}
+      <div className="flex min-w-0 flex-1 flex-col p-5">
+        <h2 className="truncate text-[15px] font-semibold leading-snug" style={{ color: COLORS.ink }} title={garment.name}>{garment.name}</h2>
+        <p className="mt-1 truncate text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: COLORS.muted }}>{garment.garment_category || 'Uncategorised'}</p>
+        {needsAttention && (
+          <p className="mt-2 text-[10px] leading-relaxed" style={{ color: COLORS.warning }}>
+            {pricing.state === 'unpriced' ? 'No Starting Price set — add this garment to the Rate Card.' : 'Starting price differs from the Rate Card.'}
           </p>
         )}
-        <div className="mt-4 flex items-center gap-2">
-          <button type="button" onClick={onDetails} className="inline-flex items-center gap-1.5 border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors hover:bg-black/[0.04]" style={{ borderColor: COLORS.border, borderRadius: 7, color: COLORS.inkSoft }}>
-            Details
-          </button>
-          <button type="button" onClick={onEdit} className="inline-flex items-center gap-1.5 border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors hover:bg-black/[0.04]" style={{ borderColor: COLORS.border, borderRadius: 7, color: COLORS.inkSoft }}>
-            <Edit3 className="h-3.5 w-3.5" />Edit
-          </button>
-          <div className="ml-auto flex items-center gap-1.5">
-            <IconButton label={garment.active ? 'Archive' : 'Restore'} onClick={onArchive}>{garment.active ? <Archive className="h-3.5 w-3.5" /> : <ArchiveRestore className="h-3.5 w-3.5" />}</IconButton>
-            <IconButton label="Delete" danger onClick={onDelete}><Trash2 className="h-3.5 w-3.5" /></IconButton>
+        <dl className="mt-auto flex items-end justify-between gap-3 border-t pt-3.5" style={{ borderColor: COLORS.border }}>
+          <div className="min-w-0">
+            <dt className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: COLORS.faint }}>Starting Price</dt>
+            <dd className="mono mt-1 truncate text-[20px] font-semibold leading-none tabular-nums" style={{ color: COLORS.brassDeep }}>{numericPrice(garment) > 0 ? formatPHP(numericPrice(garment)) : '—'}</dd>
           </div>
-        </div>
+          <span className="mono shrink-0 text-[10px]" style={{ color: COLORS.faint }}>#{garment.id ?? '—'}</span>
+        </dl>
+      </div>
+
+      {/* Grouped action bar — the record's four actions share one aligned strip,
+          so they can never scatter across the card or wrap onto a new line. */}
+      <div className="flex shrink-0 items-stretch border-t" style={{ borderColor: COLORS.border, background: COLORS.surfaceAlt }}>
+        <CardActionButton label="View" icon={<Eye className="h-3.5 w-3.5" />} onClick={onDetails} first />
+        <CardActionButton label="Edit" icon={<Edit3 className="h-3.5 w-3.5" />} onClick={onEdit} />
+        <CardActionButton
+          label={garment.active ? 'Archive' : 'Restore'}
+          icon={garment.active ? <Archive className="h-3.5 w-3.5" /> : <ArchiveRestore className="h-3.5 w-3.5" />}
+          onClick={onArchive}
+        />
+        <CardActionButton label="Delete" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={onDelete} danger />
       </div>
     </article>
+  );
+}
+
+/** One labelled button of a card's action bar — each takes an equal share. */
+function CardActionButton({ label, icon, onClick, first, danger }: {
+  label: string; icon: React.ReactNode; onClick: () => void; first?: boolean; danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="flex min-w-0 flex-1 items-center justify-center gap-1.5 px-1.5 py-2.5 text-[11px] font-semibold transition-colors hover:bg-black/[0.05]"
+      style={{ borderLeft: first ? 'none' : `1px solid ${COLORS.border}`, color: danger ? COLORS.danger : COLORS.inkSoft }}
+    >
+      {icon}<span className="truncate">{label}</span>
+    </button>
   );
 }
 
@@ -530,17 +860,22 @@ function GarmentDetailsDrawer({ garment, registry, onClose, onEdit, onArchive, o
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-[12px]">
             <Detail label="Category" value={garment.garment_category || '—'} />
             <Detail label="Type" value={garment.garment_type || '—'} />
-            <Detail label="Base price" value={peso(garment.base_price)} />
-            <Detail label="Starting price" value={garment.price || '—'} />
+            {/* Read-only: the Admin Rate Card owns the figure. There is no second
+                pricing field on the record to keep in step with. */}
+            <Detail
+              label="Starting Price (₱)"
+              value={numericPrice(garment) > 0 ? formatPHP(numericPrice(garment)) : 'No Starting Price set — add this garment to the Rate Card.'}
+            />
+            {garment.price && <Detail label="Storefront label" value={garment.price} />}
             <Detail label="Workflow" value={WORKFLOW_LABELS[garment.production_workflow] || garment.production_workflow || '—'} />
             <Detail label="Measurement profile" value={PROFILE_LABELS[garment.measurement_profile] || garment.measurement_profile || '—'} />
             {rateCardReady && (
               <Detail
-                label="Rate card"
+                label="Admin Rate Card"
                 value={pricing.state === 'priced'
                   ? `Priced — ${peso(pricing.entry?.basePrice)} (${pricing.entry?.workflow || 'standard'})`
-                  : pricing.state === 'drifted' ? `Record ${peso(garment.base_price)} · rate card ${peso(pricing.entry?.basePrice)}`
-                    : 'Not on the rate card'}
+                  : pricing.state === 'drifted' ? `Starting Price ${peso(pricing.entry?.basePrice)} — update the rule to change it`
+                    : 'No Starting Price set — add this garment to the Rate Card'}
               />
             )}
             {rateCardReady && <Detail label="Front Desk availability" value={pricing.state === 'priced' ? 'Quotable at intake' : 'No pricing rule — intake cannot quote'} />}
@@ -686,7 +1021,7 @@ function GarmentForm({ garment, registry, rateCardState, onClose, onSave }: {
    * Garment type is chosen from the shared registry, never typed by hand, so
    * the value always matches what the Front Desk intake offers and what the
    * Pricing Engine keys its rules on. Selecting a type also pulls its category,
-   * base price and production workflow across from the rate card.
+   * Starting Price and production workflow across from the Rate Card.
    */
   const chooseGarmentType = (type: string) => {
     const entry = findGarmentType(registry, type);
@@ -751,20 +1086,21 @@ function GarmentForm({ garment, registry, rateCardState, onClose, onSave }: {
       : { ...current, garment_category: category, garment_type: '', base_price: '', production_workflow: 'standard' });
   };
 
-  /** Re-applies the rate-card category / base price / workflow to the record. */
-  const syncFromRateCard = () => {
-    const entry = findGarmentType(registry, form.garment_type);
-    if (!entry) return;
-    setForm((current) => ({
-      ...current,
-      garment_category: entry.category || current.garment_category,
-      base_price: entry.basePrice !== null ? String(entry.basePrice) : current.base_price,
-      production_workflow: entry.workflow || current.production_workflow,
-    }));
-  };
+  // Category, Starting Price and workflow are read from the Admin Rate Card the
+  // moment the garment type is chosen (chooseGarmentType). There is deliberately
+  // no manual "sync price" step: the catalog holds no price of its own, so there
+  // is nothing to synchronise.
 
   const pricing = rateCardStatus(registry, form.garment_type, form.base_price);
+  const rateCardControlsType = rateCardState === 'ready' && Boolean(pricing.entry?.sources.includes('rate-card'));
   const knownCategories = registryCategories(registry).filter(Boolean);
+  // The figure this form reports is always the RATE CARD's, never the record's:
+  // the catalog cannot edit a price, so the two can never disagree.
+  const startingPrice = startingPriceFor(form, registry);
+  const startingPriceLabel = startingPrice === null ? '' : `Starting at ${formatPHP(startingPrice)}`;
+  const noStartingPrice = 'No Starting Price set — add this garment to the Rate Card.';
+
+
 
   // Customization presets: the intake form's structured categories (collars,
   // sleeves, embroidery) plus a curated quick-pick list. Custom values on the
@@ -911,8 +1247,15 @@ function GarmentForm({ garment, registry, rateCardState, onClose, onSave }: {
                   <Field label="Garment name" hint="Title on the storefront card">
                     <input value={form.name} onChange={(e) => update('name', e.target.value)} required placeholder="e.g. Barong Tagalog" style={fieldStyle} onFocus={(e) => focusRing(e, true)} onBlur={(e) => focusRing(e, false)} />
                   </Field>
-                  <Field label="Starting price" hint="Displayed as “From ₱…”">
-                    <input value={form.price} onChange={(e) => update('price', e.target.value)} required placeholder="From ₱5,000" style={fieldStyle} onFocus={(e) => focusRing(e, true)} onBlur={(e) => focusRing(e, false)} />
+                  {/* Read-only: the storefront label is derived from the Admin Rate
+                      Card, which is the only place a garment price is edited. */}
+                  <Field label="Storefront price label" hint="Derived from the Admin Rate Card">
+                    <input
+                      value={startingPriceLabel}
+                      readOnly
+                      placeholder={noStartingPrice}
+                      style={{ ...fieldStyle, background: COLORS.surfaceAlt, color: startingPriceLabel ? COLORS.ink : COLORS.warning }}
+                    />
                   </Field>
                 </div>
                 <Field
@@ -981,10 +1324,10 @@ function GarmentForm({ garment, registry, rateCardState, onClose, onSave }: {
             {tab === 'business' && (
               <section className="grid gap-4 sm:grid-cols-2" style={{ background: COLORS.surfaceAlt, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 16 }}>
                 <p className="text-[11px] sm:col-span-2" style={{ color: COLORS.faint }}>
-                  Category and garment type come from the shared system list, so the storefront, the Front Desk intake and the Pricing Engine all refer to the same garment. Start typing to see suggestions — picking one pulls its category, base price and workflow from the rate card — or type a brand-new bespoke garment. A new type needs a rate-card rule before the Front Desk can quote it.
+                  Category and garment type come from the shared system list, so the storefront, the Front Desk intake and the Pricing Engine all refer to the same garment. Start typing to see suggestions — picking one pulls its category, Starting Price and workflow from the Rate Card — or type a brand-new bespoke garment. A new type needs a rate-card rule before the Front Desk can quote it.
                 </p>
                 <Field label="Garment category" hint="Filters the garment type list">
-                  <select value={form.garment_category} onChange={(e) => chooseGarmentCategory(e.target.value)} style={fieldStyle}>
+                  <select value={form.garment_category} disabled={rateCardControlsType} onChange={(e) => chooseGarmentCategory(e.target.value)} style={{ ...fieldStyle, opacity: rateCardControlsType ? 0.7 : 1 }}>
                     <option value="">Select a category</option>
                     {knownCategories.map((category) => <option key={category} value={category}>{category}</option>)}
                     {form.garment_category && !knownCategories.includes(form.garment_category) && (
@@ -1059,16 +1402,6 @@ function GarmentForm({ garment, registry, rateCardState, onClose, onSave }: {
                           {rateCardState === 'unavailable' && 'Rate card unavailable — showing the shop’s standard garment list. Prices will sync once the server responds.'}
                           {rateCardState === 'ready' && pricing.message}
                         </>)}
-                    {!typeMenuOpen && pricing.state === 'drifted' && (
-                      <button
-                        type="button"
-                        onClick={syncFromRateCard}
-                        className="mt-1.5 inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em]"
-                        style={{ borderColor: COLORS.warningBorder, color: COLORS.warning, background: COLORS.surface, borderRadius: 6 }}
-                      >
-                        Use rate-card price
-                      </button>
-                    )}
                   </div>
                 </Field>
                 <Field label="Garment type source" hint="Single source of truth">
@@ -1081,24 +1414,19 @@ function GarmentForm({ garment, registry, rateCardState, onClose, onSave }: {
                     {!pricing.entry?.sources.length && <span className="text-[10px]" style={{ color: COLORS.faint }}>Pick a garment type to see where it comes from.</span>}
                   </div>
                 </Field>
-                <Field label="Base price (₱)" hint="The pricing rule base price">
+                <Field label="Starting Price (₱)" hint={startingPrice === null ? 'No Starting Price set — add this garment to the Rate Card.' : 'Run through the Admin Rate Card — change it there and this record follows automatically.'}>
                   <div className="flex items-center gap-2">
-                    <input type="number" min={0} step={50} value={form.base_price} onChange={(e) => update('base_price', e.target.value)} placeholder="6500" style={fieldStyle} onFocus={(e) => focusRing(e, true)} onBlur={(e) => focusRing(e, false)} />
-                    {rateCardState === 'ready' && pricing.state !== 'empty' && (
-                      <button
-                        type="button"
-                        onClick={syncFromRateCard}
-                        title="Apply the rate-card category, base price and workflow"
-                        className="whitespace-nowrap border px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors hover:bg-black/[0.04]"
-                        style={{ borderColor: COLORS.border, color: COLORS.inkSoft, borderRadius: 8, background: COLORS.surface }}
-                      >
-                        Sync
-                      </button>
-                    )}
+                    <span className="mono text-[13px] font-semibold" style={{ color: COLORS.muted }}>₱</span>
+                    <input
+                      value={startingPrice === null ? '' : String(startingPrice)}
+                      readOnly
+                      placeholder="Not set in the Rate Card"
+                      style={{ ...fieldStyle, background: COLORS.surfaceAlt, color: startingPrice === null ? COLORS.warning : COLORS.ink, fontFamily: "'IBM Plex Mono', monospace" }}
+                    />
                   </div>
                 </Field>
-                <Field label="Production workflow">
-                  <select value={form.production_workflow} onChange={(e) => update('production_workflow', e.target.value)} style={fieldStyle}>
+                <Field label="Production workflow" hint={rateCardControlsType ? "Managed by the Admin Rate Card." : undefined}>
+                  <select value={form.production_workflow} disabled={rateCardControlsType} onChange={(e) => update('production_workflow', e.target.value)} style={{ ...fieldStyle, opacity: rateCardControlsType ? 0.7 : 1 }}>
                     {WORKFLOWS.map((wf) => <option key={wf} value={wf}>{WORKFLOW_LABELS[wf] || wf}</option>)}
                   </select>
                 </Field>
@@ -1374,7 +1702,7 @@ function GarmentForm({ garment, registry, rateCardState, onClose, onSave }: {
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="text-sm font-semibold" style={{ color: COLORS.ink }}>{form.name || 'Garment name'}</h3>
-                      <span className="whitespace-nowrap text-[13px] font-semibold" style={{ color: COLORS.brassDeep }}>{form.price || 'From ₱0'}</span>
+                      <span className="whitespace-nowrap text-[13px] font-semibold" style={{ color: startingPriceLabel ? COLORS.brassDeep : COLORS.warning }}>{startingPriceLabel || 'No Starting Price'}</span>
                     </div>
                     <p className="mt-2 line-clamp-3 text-xs leading-relaxed" style={{ color: COLORS.muted }}>{form.description || 'A short description of this bespoke garment.'}</p>
                     <div className="mt-3 flex flex-wrap items-center gap-1.5">

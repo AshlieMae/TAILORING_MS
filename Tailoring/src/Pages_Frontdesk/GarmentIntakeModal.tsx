@@ -26,19 +26,19 @@ import {
   Loader2,
   Package,
   Palette,
-  Printer,
   Ruler,
-  Save,
   Scissors,
   Search,
   Shirt,
   User,
   X,
 } from 'lucide-react';
-import frontDeskApi, { type CatalogItem, type Customer, type Order, type OrderCustomizations, type PriceCalculation, type QuoteBreakdown } from '../../services/frontDeskApi';
+import frontDeskApi, { type CatalogItem, type CheckoutMeasurement, type Customer, type Order, type OrderCustomizations, type PriceCalculation, type QuoteBreakdown } from '../../services/frontDeskApi';
 import { formatPHPSmart } from '../utils/currency';
-import { printIntakeReceipt } from '../utils/printReceipt';
-import { GarmentIllustration } from './GarmentIllustration';
+// The intake form no longer writes a job card or takes a payment: it hands the
+// garment to the Draft Order Cart. Printing happens at checkout
+// (utils/printCheckoutSummary.ts + utils/printReceipt.ts).
+import { OrderGarmentImage } from '../components/OrderGarmentImage';
 import { GarmentCatalogPicker } from './GarmentCatalogdesk';
 import {
   CUSTOMIZATION_OPTIONS,
@@ -79,8 +79,10 @@ export interface GarmentIntakeData {
   targetCompletionDate: string;
   assignedTailorId: string;
   depositAmount: string;
+  /** Cash handed over at the counter for the intake deposit (server recomputes the change). */
+  depositCashReceived: string;
   collectDeposit: boolean;
-  depositPaymentMethod: 'Cash' | 'Card' | 'Bank Transfer' | 'GCash' | 'Other';
+  depositPaymentMethod: 'Cash';
   depositReferenceNumber: string;
   /** Which intake flow produced this order: a catalog template or a bespoke brief. */
   orderType: 'catalog' | 'bespoke';
@@ -122,6 +124,31 @@ export interface IntakeCreationResult {
   receiptReference: string;
 }
 
+/**
+ * Everything the intake form hands to the dashboard when the counter adds the
+ * garment to the Draft Order Cart: the frozen quote, the measurement snapshot
+ * for the future job card, and the design image used by the cart preview.
+ * NOTHING here is a database record — the cart becomes records only at checkout.
+ */
+export interface IntakeCartExtras {
+  /** label/value snapshot frozen onto the job card at checkout. */
+  measurements: CheckoutMeasurement[];
+  /** 'fresh' = typed at the counter now, 'profile' = reused from the measurement book. */
+  measurementSource: 'profile' | 'fresh';
+  quote: QuoteBreakdown | null;
+  finalPrice: number;
+  depositRequired: number;
+  /** The amount the counter intends to collect for this garment (defaults to the deposit). */
+  allocatedAmount: number;
+  /** Catalog design name (display only, catalog orders). */
+  catalogName: string;
+  /** Catalog photo for the cart thumbnail (never stored on the order). */
+  catalogImage: string;
+}
+
+/** How the counter wants the cart to respond after a garment is added. */
+export type IntakeCartIntent = 'stay' | 'cart' | 'checkout';
+
 
 // The two real intake flows. A Catalog Order starts from a catalog template;
 // a Bespoke Order starts from a consultation brief with no catalog design,
@@ -132,14 +159,14 @@ const INTAKE_STEPS = {
     { label: 'Choose Catalog Design', hint: 'A template from the catalog' },
     { label: 'Style · Fabric · Customize', hint: 'Allowed styles & real stock' },
     { label: 'Generate Quote', hint: 'Tailor, deadline, engine price' },
-    { label: 'Deposit & Confirm', hint: 'Deposit, balance, job card' },
+    { label: 'Add to Order Cart', hint: 'Deposit & checkout come later' },
   ],
   bespoke: [
     { label: 'Customer', hint: 'Who is ordering' },
     { label: 'Start Bespoke Brief', hint: 'No catalog design required' },
     { label: 'Measurements · Requirements', hint: 'Body, fabric, preferences' },
     { label: 'Generate Quote', hint: 'Tailor, deadline, engine price' },
-    { label: 'Deposit & Confirm', hint: 'Deposit, balance, job card' },
+    { label: 'Add to Order Cart', hint: 'Deposit & checkout come later' },
   ],
 } as const;
 
@@ -229,28 +256,47 @@ function PriceRow({ label, value, tone = 'default', strong = false }: { label: s
 
 export function GarmentIntakeModal({
   onClose,
-  onCreate,
+  onAddToCart,
+  onViewCart,
+  onProceedToCheckout,
+  cartItemCount = 0,
   customers,
   orders,
   initial = null,
+  initialState = null,
   onOpenCatalogPage,
+  initialCustomerId = '',
 }: {
   onClose: () => void;
-  /** Writes the job card (mode 'draft' skips the deposit, 'confirm' collects it). */
-  onCreate: (data: GarmentIntakeData, mode: IntakeMode) => Promise<IntakeCreationResult>;
+  /**
+   * Add the completed garment to the Draft Order Cart. `intent` tells the cart
+   * what to do next: 'stay' keeps the form open for another garment, 'cart'
+   * opens the cart review, 'checkout' goes straight to the checkout review.
+   */
+  onAddToCart: (data: GarmentIntakeData, extras: IntakeCartExtras, intent: IntakeCartIntent) => { ok: boolean; message: string };
+  /** Open the draft cart from inside the form. */
+  onViewCart?: () => void;
+  /** Add the garment and jump straight to the checkout review. */
+  onProceedToCheckout?: () => void;
+  /** How many garments are already in the cart (shown in the header). */
+  cartItemCount?: number;
   customers: Customer[];
   orders: Order[];
   /** Design already chosen on the Garment Catalog page (null = manual intake). */
   initial?: CatalogDesign | null;
+  /** A cart line being edited: its values prefill the form. */
+  initialState?: Partial<GarmentIntakeData> | null;
   /** Leave the form and open the full Garment Catalog page. */
   onOpenCatalogPage?: () => void;
+  /** Customer already chosen on the Customer Financial Center ("New order"). */
+  initialCustomerId?: string;
 }) {
   const [step, setStep] = useState(1);
   const [design, setDesign] = useState<CatalogDesign | null>(initial);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState('');
-  const [savingMode, setSavingMode] = useState<IntakeMode | null>(null);
-  const [created, setCreated] = useState<IntakeCreationResult | null>(null);
+  const [notice, setNotice] = useState('');
+  const [savingMode, setSavingMode] = useState<IntakeCartIntent | null>(null);
   const [fabricOptions, setFabricOptions] = useState<{ id: number; fabricName: string; tone: string; unit: string; stockQuantity?: number }[]>([]);
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
   const [tailorOptions, setTailorOptions] = useState<{ id: number; full_name: string; position: string }[]>([]);
@@ -263,7 +309,7 @@ export function GarmentIntakeModal({
   const [uploadingReferences, setUploadingReferences] = useState(false);
 
   const [form, setForm] = useState<GarmentIntakeData>(() => ({
-    customerId: '',
+    customerId: initialCustomerId,
     orderCategory: initial?.orderCategory || '',
     garmentType: initial?.garmentType || GARMENT_TYPES[0],
     styleDesign: initial?.styleDesign || '',
@@ -274,6 +320,7 @@ export function GarmentIntakeModal({
     targetCompletionDate: '',
     assignedTailorId: '',
     depositAmount: '',
+    depositCashReceived: '',
     collectDeposit: true,
     depositPaymentMethod: 'Cash',
     depositReferenceNumber: '',
@@ -296,6 +343,9 @@ export function GarmentIntakeModal({
     saveMeasurements: true,
     measurements: { ...EMPTY_MEASUREMENTS },
     useExistingMeasurements: true,
+    // A cart line being edited is prefilled with its own frozen values, so the
+    // counter corrects a garment instead of re-typing it.
+    ...(initialState || {}),
   }));
 
   const update = (patch: Partial<GarmentIntakeData>) => setForm((current) => ({ ...current, ...patch }));
@@ -419,9 +469,17 @@ export function GarmentIntakeModal({
   const discount = parseFloat(form.discount) || 0;
   const totalAmount = Math.max(0, rateCardTotal);
   const suggestedDeposit = Math.round(totalAmount * 0.5);
+  // The deposit the Pricing Engine says this garment needs (the Rate Card's
+  // deposit percentage) — the cart seeds its allocation with it.
+  const depositRequiredFromEngine = priceCalculation?.depositRequired ?? suggestedDeposit;
   const depositPaid = form.collectDeposit ? (parseFloat(form.depositAmount) || suggestedDeposit) : 0;
+  // The cash the customer hands over for the deposit. Left blank, the counter
+  // took exact cash, which is the same amount as the deposit itself.
+  // The cash the customer hands over is entered ONCE at checkout, for the whole
+  // cart — the counter only decides here how much of the deposit this garment
+  // carries (the cart seeds its allocation with it).
   const balanceDue = Math.max(0, totalAmount - depositPaid);
-  // Base price: the catalog item's stored base_price, else the engine rule's.
+  // Starting price: the catalog item's rate-card figure, else the engine rule's.
   const basePrice = design?.basePrice ?? priceCalculation?.breakdown?.base_price ?? 0;
 
   /* ------------------------------------- live-inventory selection lists */
@@ -492,7 +550,7 @@ export function GarmentIntakeModal({
       return 'Enter at least one measurement, or switch back to the saved profile.';
     }
     if (step === 4 && !form.targetCompletionDate) return 'Set the estimated completion date to continue.';
-    if (step === 4 && pricingUnavailable) return 'No pricing rule exists for this garment type — ask the Admin to add it to the rate card before confirming.';
+    if (step === 4 && pricingUnavailable) return 'Cannot generate quotation. No active Starting Price exists for this garment.';
     return '';
   }, [step, design, form.orderType, form.customerId, form.garmentType, form.styleDesign, form.fabric, form.useExistingMeasurements, form.measurements, form.targetCompletionDate, pricingUnavailable]);
 
@@ -503,17 +561,21 @@ export function GarmentIntakeModal({
 
   const applyDesign = (picked: CatalogDesign) => {
     setPickerOpen(false);
-    setDesign(picked);
+    setDesign(picked.source === 'catalog' ? picked : null);
     // A pick carrying consultation notes means the Customization tab was used —
     // open directly at Step 3 so the pre-filled options are visible.
     if (picked.consultationNotes) setStep(3);
     setForm((current) => ({
       ...current,
-      orderType: picked.source === 'catalog' ? 'catalog' : current.orderType,
-      catalogItemId: picked.catalogItemId ?? (picked.source === 'catalog' ? null : null),
-      garmentType: picked.garmentType || current.garmentType,
-      orderCategory: picked.orderCategory || current.orderCategory,
-      styleDesign: picked.styleDesign || current.styleDesign || picked.allowedStyles?.[0] || '',
+      orderType: picked.source === 'catalog' ? 'catalog' : 'bespoke',
+      catalogItemId: picked.source === 'catalog' ? (picked.catalogItemId ?? null) : null,
+      // A catalog pick is the source of truth for these fields. Replace stale
+      // values from the previously selected design instead of carrying them over.
+      garmentType: picked.source === 'catalog' ? (picked.garmentType || '') : '',
+      orderCategory: picked.source === 'catalog' ? (picked.orderCategory || '') : '',
+      styleDesign: picked.source === 'catalog'
+        ? (picked.styleDesign || picked.allowedStyles?.[0] || '')
+        : (picked.styleDesign || current.styleDesign || picked.allowedStyles?.[0] || ''),
       // Auto-fill the fabric only when a catalog suggestion really exists on
       // the shelf — otherwise the counter picks the real stock piece.
       fabric: current.fabric || (() => {
@@ -545,46 +607,78 @@ export function GarmentIntakeModal({
     form.specialInstructions,
   ].filter(Boolean).join(' · ');
 
-  const submit = async (mode: IntakeMode, thenPrint = false) => {
+  /**
+   * THE GARMENT → CART HAND-OFF.
+   *
+   * Nothing is written to the database here: the garment joins the Draft Order
+   * Cart, and the deposit is collected once for the whole cart at checkout
+   * (POST /api/orders/checkout). `intent` decides what the counter sees next.
+   */
+  const measurementSnapshot = (): CheckoutMeasurement[] => {
+    const fromProfile = form.useExistingMeasurements ? existingMeasurements : {};
+    const rows: CheckoutMeasurement[] = [];
+    for (const field of MEASUREMENT_FIELDS) {
+      const raw = form.useExistingMeasurements
+        ? (fromProfile[field.key] ?? form.measurements[field.key])
+        : form.measurements[field.key];
+      const value = String(raw ?? '').trim();
+      if (!value) continue;
+      // Canonical labels, exactly as the Measurements desk stores them, so the
+      // job card snapshot and the customer profile never disagree.
+      rows.push({ label: field.key === 'Hips' ? 'Hip' : field.key, value });
+    }
+    if (!form.useExistingMeasurements) {
+      const height = form.measurements.Height.trim();
+      if (height) rows.push({ label: 'Height', value: height });
+    }
+    return rows;
+  };
+
+  const addToCart = (intent: IntakeCartIntent) => {
     if (stepProblem) { setError(stepProblem); return; }
-    if (!form.customerId) { setError('Select the customer before saving the order.'); return; }
-    setSavingMode(mode);
+    if (!form.customerId) { setError('Select the customer before adding the garment to the cart.'); return; }
+    if (pricingUnavailable) {
+      setError('Cannot quote this garment. No active Starting Price exists for it — ask the Admin to add it to the Rate Card.');
+      return;
+    }
+    setSavingMode(intent);
     setError('');
+    setNotice('');
     try {
-      if (pricingUnavailable && step >= 4) {
-        setError('No pricing rule exists for this garment type — the job card cannot be quoted. Ask the Admin to add it to the rate card.');
-        setSavingMode(null);
+      const allocated = form.collectDeposit
+        ? (parseFloat(form.depositAmount) || suggestedDeposit || depositRequiredFromEngine)
+        : depositRequiredFromEngine;
+      const outcome = onAddToCart(
+        { ...form, specialInstructions: buildNotes(), collectDeposit: form.collectDeposit },
+        {
+          measurements: measurementSnapshot(),
+          measurementSource: form.useExistingMeasurements ? 'profile' : 'fresh',
+          quote: quoteBreakdown,
+          finalPrice: totalAmount,
+          depositRequired: depositRequiredFromEngine,
+          allocatedAmount: Math.min(Math.max(allocated, 0), totalAmount || allocated),
+          catalogName: design?.name || '',
+          catalogImage: design?.image || '',
+        },
+        intent,
+      );
+      if (!outcome?.ok) { setError(outcome?.message || 'The garment could not be added to the cart.'); return; }
+
+      if (intent === 'checkout') {
+        onClose();
+        onProceedToCheckout?.();
         return;
       }
-      const result = created ?? await onCreate({
-        ...form,
-        specialInstructions: buildNotes(),
-        collectDeposit: mode === 'confirm' && form.collectDeposit,
-      }, mode);
-      setCreated(result);
-      if (thenPrint) {
-        printIntakeReceipt({
-          jobCardId: result.jobCardId,
-          customerName: selectedCustomer?.full_name || 'Walk-in customer',
-          customerContact: selectedCustomer?.contact_number,
-          garmentType: form.garmentType,
-          orderCategory: form.orderCategory,
-          styleDesign: form.styleDesign,
-          fabric: form.fabric,
-          quantity: form.quantity,
-          totalAmount: result.totalAmount || totalAmount,
-          depositPaid: result.depositPaid,
-          remainingBalance: result.remainingBalance,
-          paymentMethod: form.collectDeposit ? form.depositPaymentMethod : undefined,
-          referenceNumber: form.depositReferenceNumber || result.receiptReference,
-          targetCompletionDate: form.targetCompletionDate,
-          assignedTailor: tailorOptions.find((t) => String(t.id) === form.assignedTailorId)?.full_name,
-          notes: [form.customizationNotes, form.specialInstructions].filter(Boolean).join(' · '),
-        });
+      if (intent === 'cart') {
+        onClose();
+        onViewCart?.();
+        return;
       }
-      onClose();
+      // 'stay' — keep the counter on the form for the customer's next garment,
+      // with the customer, measurements and deadline still in place.
+      setNotice(`${outcome.message} Add the next garment, or open the cart to check out.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create the order.');
+      setError(err instanceof Error ? err.message : 'The garment could not be added to the cart.');
     } finally {
       setSavingMode(null);
     }
@@ -619,6 +713,15 @@ export function GarmentIntakeModal({
               </p>
             </div>
             <div className="flex flex-shrink-0 items-center gap-2">
+              {onViewCart && cartItemCount > 0 && (
+                <button
+                  type="button"
+                  onClick={onViewCart}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#C9A15C]/60 bg-[#FBEDCB]/50 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8C6F3E] transition-colors hover:bg-[#F9F4EB]"
+                >
+                  <Package className="h-3.5 w-3.5" /> Cart · {cartItemCount}
+                </button>
+              )}
               {onOpenCatalogPage && (
                 <button
                   type="button"
@@ -680,7 +783,7 @@ export function GarmentIntakeModal({
 
         {/* BODY --------------------------------------------------------- */}
         <form
-          onSubmit={(event) => { event.preventDefault(); if (step === steps.length) submit('confirm'); else goNext(); }}
+          onSubmit={(event) => { event.preventDefault(); if (step === steps.length) addToCart('cart'); else goNext(); }}
           className="flex min-h-0 flex-1 flex-col"
         >
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-8">
@@ -797,7 +900,11 @@ export function GarmentIntakeModal({
                   {design && form.orderType === 'catalog' ? (
                     <div className="flex flex-col gap-4 sm:flex-row">
                       <div className="h-32 w-28 flex-shrink-0 overflow-hidden rounded-lg border border-[#E2D7C7] bg-[#F8F3EB]">
-                        <div className="flex h-full w-full items-center justify-center"><GarmentIllustration type={form.garmentType} className="h-24 w-20" /></div>
+        {design.image ? <OrderGarmentImage
+                          order={{ catalog_item_id: design.catalogItemId ?? null, order_type: 'catalog', catalog_image: design.image || null, catalog_image_zoom: design.imageFraming?.image_zoom, catalog_image_pos_x: design.imageFraming?.image_pos_x, catalog_image_pos_y: design.imageFraming?.image_pos_y, catalog_image_crop_mode: design.imageFraming?.image_crop_mode, garment: design.name }}
+                          alt={design.name + ' - the catalog garment selected for this order'}
+                          className="h-full w-full"
+                        /> : <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-[#766A62]">No catalog image</div>}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -812,7 +919,7 @@ export function GarmentIntakeModal({
                         <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[12px] sm:grid-cols-3">
                           <div><dt className="text-[#A3958B]">Garment type</dt><dd className="font-medium text-[#2A211D]">{form.garmentType}</dd></div>
                           <div><dt className="text-[#A3958B]">Style</dt><dd className="font-medium text-[#2A211D]">{form.styleDesign || '—'}</dd></div>
-                          <div><dt className="text-[#A3958B]">Base price</dt><dd className="font-medium text-[#8C6F3E]" style={{ fontFamily: "'Space Mono', monospace" }}>{basePrice > 0 ? peso(basePrice) : 'Priced at intake'}</dd></div>
+                          <div><dt className="text-[#A3958B]">Starting price</dt><dd className="font-medium text-[#8C6F3E]" style={{ fontFamily: "'Space Mono', monospace" }}>{basePrice > 0 ? peso(basePrice) : 'No Starting Price set'}</dd></div>
                         </dl>
                       </div>
                     </div>
@@ -893,7 +1000,7 @@ export function GarmentIntakeModal({
                       <Shirt className="mx-auto mb-2 h-6 w-6 text-[#A3958B]" />
                       <p className="text-[13px] font-medium text-[#2A211D]">No catalog design selected yet</p>
                       <p className="mt-1 text-[11.5px] text-[#766A62]">Pick the template the customer chose — or switch this intake to a Bespoke Brief, which needs no design.</p>
-                      <button type="button" onClick={() => update({ orderType: 'bespoke', catalogItemId: null })} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[#C9A15C]/60 bg-white px-3.5 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8C6F3E] hover:bg-[#F9F4EB]">
+                      <button type="button" onClick={() => { setDesign(null); update({ orderType: 'bespoke', catalogItemId: null, garmentType: '', orderCategory: '', styleDesign: '' }); }} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[#C9A15C]/60 bg-white px-3.5 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8C6F3E] hover:bg-[#F9F4EB]">
                         Start Bespoke Brief
                       </button>
                     </div>
@@ -901,32 +1008,14 @@ export function GarmentIntakeModal({
                 </SectionCard>
 
                 <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-                  <SectionCard icon={<Layers className="h-4 w-4" strokeWidth={1.7} />} title="Classification" hint="Auto-filled from the catalog pick — adjust only if the customer changes their mind.">
+                  <SectionCard icon={<Layers className="h-4 w-4" strokeWidth={1.7} />} title="Classification" hint={form.orderType === 'catalog' ? 'Garment category and type come from the selected catalog design.' : 'Set the garment classification for this bespoke brief.'}>
                     <div className="space-y-4">
                       {form.orderType === 'catalog' ? (
-                      <>
-  <Field label="Order category">
-                          <select
-                            value={form.orderCategory}
-                            onChange={(event) => {
-                              const list = GARMENTS_BY_CATEGORY[event.target.value] || GARMENT_TYPES;
-                              update({ orderCategory: event.target.value, garmentType: list.includes(form.garmentType) ? form.garmentType : list[0] });
-                            }}
-                            className={INPUT}
-                          >
-                            {ORDER_CATEGORIES.map((category) => <option key={category.name} value={category.name}>{category.name}</option>)}
-                          </select>
-                        </Field>
-                        <Field label="Garment type" hint="Drives pricing, measurement points and the production workflow.">
-                          <select
-                            value={form.garmentType}
-                            onChange={(event) => update({ garmentType: event.target.value })}
-                            className={INPUT}
-                          >
-                            {(availableGarments).map((garment) => <option key={garment} value={garment}>{garment}</option>)}
-                          </select>
-                        </Field>
-                      </>
+                      <div className="rounded-lg border border-[#ECE2D3] bg-[#FCFAF7] px-3.5 py-3">
+                        <Label>Classification from catalog</Label>
+                        <p className="mt-1 text-[13px] font-medium text-[#2A211D]">{form.orderCategory || 'No category'} › {form.garmentType || 'No garment type'}</p>
+                        <p className="mt-1 text-[11px] leading-relaxed text-[#766A62]">To change these details, select a different catalog design above.</p>
+                      </div>
                     ) : (
                       <div className="rounded-lg border border-[#ECE2D3] bg-[#FCFAF7] px-3.5 py-3">
                         <Label>Classification (from the bespoke brief)</Label>
@@ -952,12 +1041,20 @@ export function GarmentIntakeModal({
 
                   <SectionCard icon={<Scissors className="h-4 w-4" strokeWidth={1.7} />} title="Selected style & fabric" hint="Fabric comes from live inventory, so the job card can only reach production with real stock.">
                     <div className="space-y-4">
-                      <Field label="Selected style" hint="Styles offered for the selected garment, straight from the catalog record.">
-                        <select value={form.styleDesign} onChange={(event) => update({ styleDesign: event.target.value })} className={INPUT}>
-                          <option value="">Select a style</option>
-                          {availableStyles.map((style) => <option key={style} value={style}>{style}</option>)}
-                        </select>
-                      </Field>
+                      {form.orderType === 'catalog' ? (
+                        <div className="rounded-lg border border-[#ECE2D3] bg-[#FCFAF7] px-3.5 py-3">
+                          <Label>Selected style from catalog</Label>
+                          <p className="mt-1 text-[13px] font-medium text-[#2A211D]">{form.styleDesign || 'No style specified'}</p>
+                          <p className="mt-1 text-[11px] leading-relaxed text-[#766A62]">To change the style, select a different catalog design above.</p>
+                        </div>
+                      ) : (
+                        <Field label="Selected style" hint="Choose a style for this bespoke brief.">
+                          <select value={form.styleDesign} onChange={(event) => update({ styleDesign: event.target.value })} className={INPUT}>
+                            <option value="">Select a style</option>
+                            {availableStyles.map((style) => <option key={style} value={style}>{style}</option>)}
+                          </select>
+                        </Field>
+                      )}
                       <Field label="Selected fabric" hint="Live inventory — fabrics are listed from the shop's stock records.">
                         <select value={form.fabric} onChange={(event) => update({ fabric: event.target.value })} className={INPUT}>
                           <option value="">Select a fabric</option>
@@ -1264,12 +1361,13 @@ export function GarmentIntakeModal({
                       <div className="flex items-start gap-2 rounded-lg border border-[#C86A58]/30 bg-[#FDF4F2] px-3.5 py-3 text-[12px] text-[#9A3B2A]" role="alert">
                         <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
                         <span>
-                          {quoteError || `No pricing rule exists for "${form.garmentType}".`} The Pricing Guide and this quote both come from the Admin Rate Card — nothing can be quoted until the rule exists.
+                          {quoteError || `This garment cannot be quoted because no active Rate Card rule exists.`} The Pricing Guide and this quote both come from the Admin Rate Card — nothing
+                          can be quoted until a Starting Price is set for “{form.garmentType}”.
                         </span>
                       </div>
                     ) : (
                     <div className="space-y-2.5">
-                      <PriceRow label={`Base price — ${form.garmentType} (engine rate card)`} value={peso(quoteBreakdown?.base_total ?? 0)} />
+                      <PriceRow label={`Starting price — ${form.garmentType} (engine rate card)`} value={peso(quoteBreakdown?.base_total ?? 0)} />
                       {(quoteBreakdown?.style_adjustment ?? 0) > 0 && <PriceRow label={`Style — ${form.styleDesign}`} value={peso(quoteBreakdown?.style_adjustment ?? 0)} />}
                       {(quoteBreakdown?.fabric_adjustment ?? 0) > 0 && <PriceRow label="Premium fabric" value={peso(quoteBreakdown?.fabric_adjustment ?? 0)} />}
                       {(quoteBreakdown?.customization_cost ?? 0) > 0 && <PriceRow label="Customizations" value={peso(quoteBreakdown?.customization_cost ?? 0)} />}
@@ -1304,9 +1402,9 @@ export function GarmentIntakeModal({
                       <Label>After this step</Label>
                     </div>
                     <ol className="mt-3 space-y-2 text-[11.5px] leading-relaxed text-[#766A62]">
-                      <li><strong className="text-[#2A211D]">1.</strong> The job card is created as a Draft with the tailor preference saved.</li>
-                      <li><strong className="text-[#2A211D]">2.</strong> Collect the deposit in the next step and print the receipt.</li>
-                      <li><strong className="text-[#2A211D]">3.</strong> Send the card to production from the Orders desk — the tailor is notified with the measurements.</li>
+                      <li><strong className="text-[#2A211D]">1.</strong> The garment joins the Draft Order Cart — nothing is written to the database yet.</li>
+                      <li><strong className="text-[#2A211D]">2.</strong> Keep adding garments until the customer has finished choosing.</li>
+                      <li><strong className="text-[#2A211D]">3.</strong> At checkout, ONE cash payment creates a separate job card, receipt and balance per garment — each goes to its own tailor queue.</li>
                     </ol>
                   </div>
                 </div>
@@ -1336,15 +1434,15 @@ export function GarmentIntakeModal({
                       </div>
                     ))}
                   </dl>
-                  {created && (
+                  {notice && (
                     <div className="mt-4 flex items-start gap-2 rounded-lg border border-[#C7DDD3] bg-[#F1F5F0] px-3.5 py-3 text-[12px] text-[#4E7357]">
                       <Check className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                      <span>Job card <strong>{created.jobCardId}</strong> is saved. Print the receipt or close the form.</span>
+                      <span>{notice}</span>
                     </div>
                   )}
                 </SectionCard>
 
-                <SectionCard icon={<Banknote className="h-4 w-4" strokeWidth={1.7} />} title="Deposit & confirmation" hint="Collect the deposit now, or save the job card as a draft and collect later.">
+                <SectionCard icon={<Banknote className="h-4 w-4" strokeWidth={1.7} />} title="Deposit & cart" hint="The deposit is collected ONCE at checkout — here you only decide how much of it this garment carries.">
                   <div className="space-y-4">
                     <label className="flex cursor-pointer items-start gap-2.5 text-[12.5px] font-medium text-[#2A211D]">
                       <input
@@ -1353,84 +1451,56 @@ export function GarmentIntakeModal({
                         onChange={(event) => update({ collectDeposit: event.target.checked })}
                         className="mt-0.5 h-4 w-4 accent-[#8C6F3E]"
                       />
-                      Collect the deposit now (recorded automatically with the new job card)
+                      Hold this garment&apos;s deposit for the checkout (recommended)
                     </label>
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <Field label="Deposit amount (₱)">
+                      <Field label="Deposit to collect at checkout" hint="Seeds the cart. Editable per garment before the payment.">
                         <input
                           type="number"
                           min={0}
-                          step={1}
+                          step="0.01"
                           disabled={!form.collectDeposit}
-                          value={form.depositAmount}
+                          value={form.depositAmount || (form.collectDeposit ? String(depositRequiredFromEngine) : '')}
                           onChange={(event) => update({ depositAmount: event.target.value })}
-                          placeholder={String(suggestedDeposit)}
                           className={INPUT}
                         />
                       </Field>
-                      <Field label="Payment method">
-                        <select
-                          disabled={!form.collectDeposit}
-                          value={form.depositPaymentMethod}
-                          onChange={(event) => update({ depositPaymentMethod: event.target.value as GarmentIntakeData['depositPaymentMethod'] })}
-                          className={INPUT}
-                        >
-                          <option>Cash</option>
-                          <option>GCash</option>
-                          <option>Card</option>
-                          <option>Bank Transfer</option>
-                          <option>Other</option>
-                        </select>
-                      </Field>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <Field label="Receipt reference" hint="Optional — GCash, card or bank reference.">
-                        <input
-                          disabled={!form.collectDeposit}
-                          value={form.depositReferenceNumber}
-                          onChange={(event) => update({ depositReferenceNumber: event.target.value })}
-                          placeholder="e.g. GCash 0932…"
-                          className={INPUT}
-                        />
-                      </Field>
-                      <Field label="Balance due" hint="Collectible on or before pickup.">
+                      <Field label="Balance due after the deposit" hint="Collectible on or before pickup.">
                         <input readOnly value={peso(balanceDue)} className={INPUT} style={{ fontFamily: "'Space Mono', monospace" }} />
                       </Field>
                     </div>
 
-                    <div className="rounded-xl border border-[#E8DFD3] bg-[#FCFAF7] p-4">
-                      <PriceRow label="Total price" value={peso(totalAmount)} />
-                      <div className="mt-2 space-y-2">
-                        <PriceRow label="Deposit paid now" value={peso(depositPaid)} tone="good" />
-                        <PriceRow label="Remaining balance" value={peso(balanceDue)} tone="warn" strong />
-                      </div>
+                    <div className="rounded-xl border border-[#C9A15C]/40 bg-[#FBEDCB]/40 p-4 text-[11.5px] leading-relaxed text-[#7A5A1E]">
+                      <strong className="text-[#5E4A18]">Nothing is saved yet.</strong> This garment joins the Draft Order Cart.
+                      When the customer has finished choosing, the checkout screen takes ONE cash payment and creates a separate
+                      job card, receipt and balance for every garment in the cart.
                     </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => submit('draft')}
-                        disabled={savingMode !== null}
-                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#E2D7C7] bg-white px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048] transition-colors hover:bg-[#F2ECE1] disabled:opacity-50"
-                      >
-                        <Save className="h-3.5 w-3.5" /> Save draft
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => submit('confirm', true)}
-                        disabled={savingMode !== null}
-                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#C9A15C]/60 bg-white px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8C6F3E] transition-colors hover:bg-[#F9F4EB] disabled:opacity-50"
-                      >
-                        <Printer className="h-3.5 w-3.5" /> Print receipt
-                      </button>
-                    </div>
-                    <p className="text-[10.5px] leading-relaxed text-[#A3958B]">
-                      <strong className="text-[#5E5048]">Save draft</strong> keeps the job card without a payment. <strong className="text-[#5E5048]">Create order</strong> (bottom bar) records the job card and the deposit. <strong className="text-[#5E5048]">Print receipt</strong> saves, then prints the receipt for the customer.
-                    </p>
                   </div>
                 </SectionCard>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => addToCart('stay')}
+                    disabled={savingMode !== null}
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#E2D7C7] bg-white px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048] transition-colors hover:bg-[#F2ECE1] disabled:opacity-50"
+                  >
+                    {savingMode === 'stay' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Layers className="h-3.5 w-3.5" />} Add &amp; add another
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addToCart('checkout')}
+                    disabled={savingMode !== null}
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#C9A15C]/60 bg-white px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8C6F3E] transition-colors hover:bg-[#F9F4EB] disabled:opacity-50"
+                  >
+                    <Banknote className="h-3.5 w-3.5" /> Add &amp; check out
+                  </button>
+                </div>
+                <p className="text-[10.5px] leading-relaxed text-[#A3958B]">
+                  <strong className="text-[#5E5048]">Add &amp; add another</strong> keeps the form open for the customer&apos;s next garment.{' '}
+                  <strong className="text-[#5E5048]">Add to order cart</strong> (bottom bar) adds this garment and opens the cart review.
+                </p>
               </div>
             )}
           </div>
@@ -1444,7 +1514,7 @@ export function GarmentIntakeModal({
                   {calculating && <Loader2 className="ml-1.5 inline h-3 w-3 animate-spin text-[#8C6F3E]" />}
                 </span>
                 <span className="text-[11.5px] text-[#766A62]">
-                  Deposit <strong className="text-[#4E7357]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(depositPaid)}</strong>
+                  Deposit at checkout <strong className="text-[#4E7357]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(depositPaid)}</strong>
                 </span>
                 <span className="text-[11.5px] text-[#766A62]">
                   Balance <strong className="text-[#9E5B4B]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(balanceDue)}</strong>
@@ -1476,26 +1546,20 @@ export function GarmentIntakeModal({
                   <>
                     <button
                       type="button"
-                      onClick={() => submit('draft')}
-                      disabled={savingMode !== null}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#E2D7C7] bg-white px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048] transition-colors hover:bg-[#F2ECE1] disabled:opacity-50"
+                      onClick={onViewCart}
+                      disabled={savingMode !== null || !cartItemCount}
+                      title={cartItemCount ? `Review the ${cartItemCount} garment(s) already in the cart` : 'The cart is empty'}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#E2D7C7] bg-white px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048] transition-colors hover:bg-[#F2ECE1] disabled:opacity-40"
                     >
-                      {savingMode === 'draft' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Save draft
+                      <Package className="h-3.5 w-3.5" /> View cart{cartItemCount ? ` (${cartItemCount})` : ''}
                     </button>
                     <button
                       type="button"
-                      onClick={() => submit('confirm', true)}
-                      disabled={savingMode !== null}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#C9A15C]/60 bg-white px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8C6F3E] transition-colors hover:bg-[#F9F4EB] disabled:opacity-50"
-                    >
-                      <Printer className="h-3.5 w-3.5" /> Print receipt
-                    </button>
-                    <button
-                      type="submit"
+                      onClick={() => addToCart('cart')}
                       disabled={savingMode !== null}
                       className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#2A211D] px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#FAF7F2] shadow-md transition-colors hover:bg-[#3D312B] disabled:opacity-50"
                     >
-                      {savingMode !== null ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scissors className="h-3.5 w-3.5" />} Create order
+                      {savingMode === 'cart' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scissors className="h-3.5 w-3.5" />} Add to order cart
                     </button>
                   </>
                 )}

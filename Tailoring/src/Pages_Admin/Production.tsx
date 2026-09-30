@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CalendarDays, ChevronRight, Shirt, UserRound } from 'lucide-react';
+import { OrderGarmentImage } from '../components/OrderGarmentImage';
 import {
   COLORS, FONT_IMPORT, PageHeader, StatCard, SearchField, Card, TableHeadRow, EmptyState,
   ModalShell, EyebrowLabel, Badge,
 } from './Theme';
 
 type Stage = 'Measuring' | 'Pattern Cutting' | 'Initial Assembly' | 'First Fitting' | 'Final Alterations' | 'Completed' | 'Ready for Pickup';
-type Job = { id: string; customer: string; garment: string; tailor: string; stage: Stage; due: string; priority: 'Normal' | 'Due soon' | 'Overdue'; fabric: string; };
+type Job = { id: string; customer: string; garment: string; tailor: string; stage: Stage; due: string; priority: 'Normal' | 'Due soon' | 'Overdue'; fabric: string; catalog_item_id?: number | null; order_type?: string | null; reference_image?: string | null; catalog_image?: string | null; catalog_image_zoom?: number | null; catalog_image_pos_x?: number | null; catalog_image_pos_y?: number | null; catalog_image_crop_mode?: 'contain' | 'cover' | null; };
 
 const STAGES: Stage[] = ['Measuring', 'Pattern Cutting', 'Initial Assembly', 'First Fitting', 'Final Alterations', 'Completed', 'Ready for Pickup'];
 const JOBS: Job[] = [
@@ -40,6 +41,7 @@ export function AdminProductionView() {
           stage: (['Measuring', 'Pattern Cutting', 'Initial Assembly', 'First Fitting', 'Final Alterations', 'Completed', 'Ready for Pickup'].includes(j.stage) ? j.stage : 'Measuring') as Stage,
           due: j.due, priority: j.priority === 'High' ? 'Due soon' : 'Normal' as 'Due soon' | 'Normal' | 'Overdue',
           fabric: j.fabric,
+          catalog_item_id: j.catalog_item_id, order_type: j.order_type, reference_image: j.reference_image, catalog_image: j.catalog_image, catalog_image_zoom: j.catalog_image_zoom, catalog_image_pos_x: j.catalog_image_pos_x, catalog_image_pos_y: j.catalog_image_pos_y, catalog_image_crop_mode: j.catalog_image_crop_mode,
         }));
         setRows(mapped);
       })
@@ -104,7 +106,7 @@ export function AdminProductionView() {
           >
             <span className="mono text-[12px]" style={{ color: COLORS.navy }}>{job.id}</span>
             <span className="font-medium" style={{ color: COLORS.ink }}>{job.customer}</span>
-            <span className="text-sm" style={{ color: COLORS.inkSoft }}>{job.garment}</span>
+            <span className="flex items-center gap-2 text-sm" style={{ color: COLORS.inkSoft }}><span className="h-9 w-9 shrink-0 overflow-hidden rounded bg-[#F8F3EB]"><OrderGarmentImage order={job} className="h-full w-full" /></span>{job.garment}</span>
             <span><Badge tone={STAGE_TONE[job.stage]}>{job.stage}</Badge></span>
             <span className="text-sm" style={{ color: COLORS.inkSoft }}>{job.tailor}</span>
             <span className="mono text-sm" style={{ fontWeight: job.priority === 'Overdue' ? 600 : 400, color: job.priority === 'Overdue' ? COLORS.danger : job.priority === 'Due soon' ? COLORS.warning : COLORS.inkSoft }}>{job.due}</span>
@@ -135,6 +137,7 @@ function JobDetails({ job, onClose }: { job: Job; onClose: () => void }) {
       </header>
 
       <div className="space-y-9 p-7 sm:p-8">
+        <div className="h-56 overflow-hidden rounded-lg border" style={{ borderColor: COLORS.border, background: COLORS.surfaceAlt }}><OrderGarmentImage order={job} className="h-full w-full" /></div>
         <div className="grid gap-4 sm:grid-cols-2">
           {[['Assigned tailor', job.tailor], ['Fabric', job.fabric], ['Due date', job.due], ['Priority', job.priority]].map(([label, value]) => (
             <div key={label} className="border p-4" style={{ borderColor: COLORS.border, background: COLORS.surfaceAlt, borderRadius: 8 }}>

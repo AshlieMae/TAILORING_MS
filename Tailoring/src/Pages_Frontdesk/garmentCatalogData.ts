@@ -40,7 +40,7 @@ export const UNIFORM_TYPES = Array.from(new Set([
 ]));
 
 // NOTE: there are NO frontend prices anywhere in this file. Every price —
-// base prices, style adjustments, customization charges, rush fees,
+// Starting Prices, style adjustments, customization charges, rush fees,
 // discounts — is owned by the server Pricing Engine (/api/auth/pricing).
 
 /** Style library — also drives the catalog's style filters. */
@@ -191,7 +191,7 @@ export interface CatalogDesign {
   name: string;
   /** Explicit link back to the catalog row (catalog orders only). */
   catalogItemId?: number | null;
-  /** The item's stored base price — display only; the quote is engine-side. */
+  /** The Rate Card Starting Price — display only; the quote is engine-side. */
   basePrice?: number | null;
   /** Production workflow key from the catalog item. */
   productionWorkflow?: string;
@@ -288,11 +288,21 @@ export function catalogCategoryForGarmentType(garmentType: string): CatalogCateg
   return BROWSE_BUCKET_BY_TYPE[garmentType] || 'Custom Garment';
 }
 
-/** Starting price for a catalog card — catalog label first, rate card second. */
+/**
+ * Starting price for a catalog card. The Admin Rate Card is the single pricing
+ * authority and the server overlays its rule onto every catalog row, so this
+ * reads the rate-card figure back — the catalog owns no price of its own.
+ */
 export function startingPriceFor(item: CatalogItem): number {
   const stored = Number(item.base_price);
   return Number.isFinite(stored) && stored > 0 ? stored : 0;
 }
+
+/**
+ * No-Rate-Card copy. The Garment Catalog is a read-only consumer of Rate Card
+ * pricing, so a garment with no rule says so instead of inventing a figure.
+ */
+export const NO_STARTING_PRICE_MESSAGE = 'No Starting Price set — add this garment to the Rate Card.';
 
 
 export type CatalogCategory = (typeof CATALOG_CATEGORIES)[number];
@@ -338,7 +348,8 @@ export function buildCatalogCards(items: CatalogItem[], inventoryFabrics: string
       orderCategory,
       garmentType,
       styles: (item.allowed_styles || []).length > 0 ? item.allowed_styles : stylesForCategory(category),
-      priceLabel: item.price || (startingPrice > 0 ? `From ${formatPHP(startingPrice)}` : 'Priced at intake'),
+      // The card label is derived, never stored: the Rate Card is the authority.
+      priceLabel: startingPrice > 0 ? `Starting at ${formatPHP(startingPrice)}` : NO_STARTING_PRICE_MESSAGE,
       startingPrice,
       fabrics,
       colors: item.colors || [],
@@ -393,16 +404,19 @@ export function cardToDesign(card: CatalogCard): CatalogDesign {
 }
 
 /**
- * Build a design from a garment type alone (bespoke intake). No pricing
- * fallback exists here — the quote always comes from the server Pricing Engine.
+ * Build a design from a garment type alone (the uniform / bespoke browse
+ * paths). `priceLabel` is the Rate Card's "Starting at ₱X" for that exact
+ * garment type; when the Rate Card has no rule the caller passes the
+ * no-Starting-Price copy. No price fallback exists here — the quote always
+ * comes from the server Pricing Engine.
  */
 export function designForGarmentType(garmentType: string, priceLabel?: string): CatalogDesign {
   return {
     source: 'custom',
     name: garmentType,
     image: '',
-    description: `Bespoke ${garmentType} order — priced by the shop rate card at the counter.`,
-    priceLabel: priceLabel || 'Priced at intake',
+    description: `Bespoke ${garmentType} order — priced by the shop Rate Card at the counter.`,
+    priceLabel: priceLabel || NO_STARTING_PRICE_MESSAGE,
     suggestedFabrics: [],
     suggestedColors: [],
     garmentType,
@@ -422,35 +436,35 @@ export function designForGarmentType(garmentType: string, priceLabel?: string): 
  * Every row carries explicit classification + pricing — nothing is inferred.
  */
 export const SAMPLE_CATALOG_ITEMS: CatalogItem[] = [
-  { name: 'Barong Tagalog', price: 'From ₱6,500', description: '', fabrics: [], colors: [], image: '',
+  { name: 'Barong Tagalog', price: 'Starting at ₱6,500', description: '', fabrics: [], colors: [], image: '',
     garment_category: 'Formal Wear', garment_type: 'Barong Tagalog', base_price: 6500, production_workflow: 'formal_barong',
     allowed_styles: ["Classic","Modern","Minimalist"], allowed_fabrics: [], allowed_customizations: ["Embroidery","French Cuff","Custom Collar"],
     measurement_profile: 'full_body', active: 1 },
-  { name: 'Two-piece Suit', price: 'From ₱12,000', description: '', fabrics: [], colors: [], image: '',
+  { name: 'Two-piece Suit', price: 'Starting at ₱12,000', description: '', fabrics: [], colors: [], image: '',
     garment_category: 'Formal Wear', garment_type: 'Two-Piece Suit', base_price: 12000, production_workflow: 'suit',
     allowed_styles: ["Classic","Modern","Fitted"], allowed_fabrics: [], allowed_customizations: ["Lining","Custom Collar","Pocket Style"],
     measurement_profile: 'full_body', active: 1 },
-  { name: "Women's Coat", price: 'From ₱6,500', description: '', fabrics: [], colors: [], image: '',
+  { name: "Women's Coat", price: 'Starting at ₱6,500', description: '', fabrics: [], colors: [], image: '',
     garment_category: 'Formal Wear', garment_type: "Women's Coat", base_price: 6500, production_workflow: 'coat',
     allowed_styles: ["Modern","Fitted"], allowed_fabrics: [], allowed_customizations: ["Lining","Pocket Style"],
     measurement_profile: 'full_body', active: 1 },
-  { name: 'Filipiniana Dress', price: 'From ₱9,500', description: '', fabrics: [], colors: [], image: '',
+  { name: 'Filipiniana Dress', price: 'Starting at ₱9,500', description: '', fabrics: [], colors: [], image: '',
     garment_category: 'Formal Wear', garment_type: 'Filipiniana Dress', base_price: 9500, production_workflow: 'gown',
     allowed_styles: ["Traditional","Modern"], allowed_fabrics: [], allowed_customizations: ["Embroidery","Lining"],
     measurement_profile: 'full_body', active: 1 },
-  { name: 'School Uniform Set', price: 'From ₱1,800', description: '', fabrics: [], colors: [], image: '',
+  { name: 'School Uniform Set', price: 'Starting at ₱1,800', description: '', fabrics: [], colors: [], image: '',
     garment_category: 'School Uniform', garment_type: 'Regular Uniform', base_price: 1800, production_workflow: 'uniform',
     allowed_styles: ["Classic","Loose Fit"], allowed_fabrics: [], allowed_customizations: ["Embroidery","Pocket Style"],
     measurement_profile: 'full_body', active: 1 },
-  { name: 'Department Uniform', price: 'From ₱2,200', description: '', fabrics: [], colors: [], image: '',
+  { name: 'Department Uniform', price: 'Starting at ₱2,200', description: '', fabrics: [], colors: [], image: '',
     garment_category: 'Corporate Uniform', garment_type: 'Department Uniform', base_price: 2200, production_workflow: 'uniform',
     allowed_styles: ["Classic","Minimalist"], allowed_fabrics: [], allowed_customizations: ["Embroidery","Pocket Style"],
     measurement_profile: 'full_body', active: 1 },
-  { name: 'PE Uniform', price: 'From ₱1,500', description: '', fabrics: [], colors: [], image: '',
+  { name: 'PE Uniform', price: 'Starting at ₱1,500', description: '', fabrics: [], colors: [], image: '',
     garment_category: 'School Uniform', garment_type: 'PE Uniform', base_price: 1500, production_workflow: 'uniform',
     allowed_styles: ["Classic","Loose Fit"], allowed_fabrics: [], allowed_customizations: ["Embroidery"],
     measurement_profile: 'full_body', active: 1 },
-  { name: 'Sports Jersey', price: 'From ₱1,600', description: '', fabrics: [], colors: [], image: '',
+  { name: 'Sports Jersey', price: 'Starting at ₱1,600', description: '', fabrics: [], colors: [], image: '',
     garment_category: 'Sportswear', garment_type: 'Sports Jersey', base_price: 1600, production_workflow: 'uniform',
     allowed_styles: ["Modern","Minimalist"], allowed_fabrics: [], allowed_customizations: ["Embroidery"],
     measurement_profile: 'full_body', active: 1 },

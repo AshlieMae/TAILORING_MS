@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatPHP as peso } from '../utils/currency';
 import type { ReactNode } from 'react';
@@ -21,6 +21,7 @@ import {
   Menu,
   X,
   UserCog,
+  Tags,
   LogOut,
 } from 'lucide-react';
 import { UserManagementView } from '../Pages_Admin/UserAccounts';
@@ -29,7 +30,13 @@ import { AdminOrdersView } from '../Pages_Admin/Orders';
 import { AdminProductionView } from '../Pages_Admin/Production';
 import { AdminInventoryManagementView } from '../Pages_Admin/InventoryManagement';
 import { AdminGarmentCatalogView } from '../Pages_Admin/GarmentCatalog';
-import { AdminPaymentsView } from '../Pages_Admin/Payments';
+import { AdminRateCardView } from '../Pages_Admin/RateCard';
+// The old demo Admin Payments page is replaced by the shared Customer
+// Financial Center: the same records the Front Desk uses, read-only for
+// payment recording, with monitoring, reprinting, export and authorized voiding.
+import { CustomerFinancialCenterView } from '../financialCenter/CustomerFinancialCenter';
+import { FinancialCenterProvider } from '../financialCenter/FinancialCenterContext';
+import { PaymentReceiptModal } from '../financialCenter/PaymentReceiptModal';
 import { AdminReportsView } from '../Pages_Admin/Reports';
 import { AdminSettingsWideView } from '../Pages_Admin/SettingsWide';
 import { AdminProfileModal } from '../Pages_Admin/AdminProfile';
@@ -142,16 +149,17 @@ const stageTone: Record<string, string> = {
   'Ready for Pickup': 'border-[#B7D9D3] bg-[#E1EEEC] text-[#2C6E68]',
 };
 
-type ViewKey = 'dashboard' | 'customers' | 'orders' | 'catalog' | 'production' | 'inventory' | 'payments' | 'reports' | 'settings' | 'users';
+type ViewKey = 'dashboard' | 'customers' | 'orders' | 'catalog' | 'rateCard' | 'production' | 'inventory' | 'payments' | 'reports' | 'settings' | 'users';
 
 const NAV: { label: string; icon: typeof LayoutDashboard; view: ViewKey }[] = [
   { label: 'Dashboard', icon: LayoutDashboard, view: 'dashboard' },
   { label: 'Customers', icon: Users, view: 'customers' },
   { label: 'Orders', icon: Shirt, view: 'orders' },
   { label: 'Garment Catalog', icon: Shirt, view: 'catalog' },
+  { label: 'Rate Card', icon: Tags, view: 'rateCard' },
   { label: 'Production', icon: Scissors, view: 'production' },
   { label: 'Inventory', icon: Boxes, view: 'inventory' },
-  { label: 'Payments', icon: Wallet, view: 'payments' },
+  { label: 'Customer Financial Center', icon: Wallet, view: 'payments' },
   { label: 'User Management', icon: UserCog, view: 'users' },
   { label: 'Reports', icon: BarChart3, view: 'reports' },
   { label: 'Settings', icon: Settings, view: 'settings' },
@@ -365,6 +373,69 @@ function StatCard({ label, value, trend, trendUp, icon, delay = 0, tone = 'defau
    ROOT — sidebar drives which view renders
 ================================================================== */
 
+/**
+ * The Admin order-details bridge. The Financial Center hands over a frozen
+ * financial order row; this bridge fetches the same job card through the shared
+ * orders API and renders the real job-card snapshot read-only.
+ */
+function FinancialOrderDetailsBridge({ order, onClose }: { order: { job_card_number?: string }; onClose: () => void }) {
+  const [full, setFull] = useState<any | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!order?.job_card_number) return;
+    fetch(`${API_URL}/orders/job-card/${encodeURIComponent(order.job_card_number)}`, { headers: { Authorization: `Bearer ${authToken()}` } })
+      .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.message || 'Unable to load the job card.'); return d; })
+      .then((d) => { if (!cancelled) setFull(d); })
+      .catch(() => { if (!cancelled) setFull(null); });
+    return () => { cancelled = true; };
+  }, [order?.job_card_number]);
+
+  if (!full) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <button aria-label="Close" onClick={onClose} className="absolute inset-0" style={{ background: 'rgba(42,38,32,0.5)' }} />
+        <div className="relative border p-8 text-[12px]" style={{ borderColor: LINE, background: PAPER, color: MUTED }}>
+          {order?.job_card_number ? `Loading job card ${order.job_card_number}…` : 'This job card has no number on file.'}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button aria-label="Close" onClick={onClose} className="absolute inset-0" style={{ background: 'rgba(42,38,32,0.5)' }} />
+      <section className="relative max-h-[90vh] w-full max-w-3xl overflow-y-auto border p-8" style={{ borderColor: LINE, background: PAPER, borderRadius: 12 }}>
+        <header className="flex items-start justify-between gap-4">
+          <div>
+            <MonoLabel>Job card · Admin audit view</MonoLabel>
+            <h2 className="mt-1 text-2xl" style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, color: INK }}>{full.job_card_id}</h2>
+            <p className="mt-1 text-[12px]" style={{ color: MUTED }}>{full.customer_name} · {full.garment_type || full.garment}</p>
+          </div>
+          <button onClick={onClose} className="p-2" style={{ color: MUTED }} aria-label="Close job card details">
+            <X className="h-5 w-5" />
+          </button>
+        </header>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          {[
+            ['Production status', String(full.production_status || full.stage || '—')],
+            ['Payment status', String(full.payment_status || '—')],
+            ['Total', String(full.total_amount ?? '—')],
+            ['Paid', String(full.deposit_paid ?? '—')],
+            ['Balance', String(full.remaining_balance ?? '—')],
+            ['Fabric', String(full.fabric || '—')],
+            ['Assigned tailor', String(full.assigned_tailor_name || 'Unassigned')],
+            ['Completion target', String(full.target_completion_date || 'TBA')],
+          ].map(([label, value]) => (
+            <div key={label} className="border p-4" style={{ borderColor: LINE, background: '#F3EDDC' }}>
+              <MonoLabel>{label}</MonoLabel>
+              <div className="mt-1 text-[13px]" style={{ color: INK, fontFamily: "'IBM Plex Mono', monospace" }}>{value}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function AdminDashboard({ initialView = 'dashboard' }: { initialView?: ViewKey }) {
   const navigate = useNavigate();
   const [profile, setProfile] = useState(() => currentUser());
@@ -374,6 +445,19 @@ export default function AdminDashboard({ initialView = 'dashboard' }: { initialV
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [accountActivity, setAccountActivity] = useState<{ activity_type: 'profile_updated' | 'password_changed' | 'settings_updated'; details: string | null; created_at: string; full_name: string | null; email: string; customer_id: string | null; employee_id: string | null; role: string }[]>([]);
   const [showProfile, setShowProfile] = useState(false);
+
+  // --- Customer Financial Center (Admin: monitoring and audit) --------------
+  // Admin opens any customer's Financial Center read-only; payment recording
+  // stays a Front Desk capability, so this dashboard never renders a payment
+  // form. Receipts open as an overlay and never navigate away.
+  const [fcCustomer, setFcCustomer] = useState<string | null>(null);
+  const [fcDetailOrder, setFcDetailOrder] = useState<any | null>(null);
+  const [receiptFor, setReceiptFor] = useState<string | null>(null);
+
+  const openFinancialCenter = useCallback((customerId?: string) => {
+    setFcCustomer(customerId ?? null);
+    setView('payments');
+  }, []);
   const signOut = () => {
     localStorage.removeItem('authToken'); localStorage.removeItem('currentUser');
     sessionStorage.removeItem('authToken'); sessionStorage.removeItem('currentUser');
@@ -401,17 +485,27 @@ export default function AdminDashboard({ initialView = 'dashboard' }: { initialV
       case 'users':
         return <UserManagementView externalQuery={quickSearch} />;
       case 'customers':
-        return <AdminCustomersView externalQuery={quickSearch} />;
+        return <AdminCustomersView externalQuery={quickSearch} onOpenFinancialCenter={openFinancialCenter} />;
       case 'orders':
         return <AdminOrdersView externalQuery={quickSearch} />;
       case 'catalog':
         return <AdminGarmentCatalogView />;
+      case 'rateCard':
+        return <AdminRateCardView />;
       case 'production':
         return <AdminProductionView />;
       case 'inventory':
         return <AdminInventoryManagementView />;
       case 'payments':
-        return <AdminPaymentsView />;
+        return (
+          <FinancialCenterProvider open={openFinancialCenter}>
+            <div className="space-y-6">
+              <CustomerFinancialCenterView mode="admin" initialCustomerId={fcCustomer} onOpenOrder={(order) => setFcDetailOrder(order)} />
+              {receiptFor && <PaymentReceiptModal paymentId={receiptFor} onClose={() => setReceiptFor(null)} />}
+              {fcDetailOrder && <FinancialOrderDetailsBridge order={fcDetailOrder} onClose={() => setFcDetailOrder(null)} />}
+            </div>
+          </FinancialCenterProvider>
+        );
       case 'reports':
         return <AdminReportsView />;
       case 'settings':

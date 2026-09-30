@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatPHPExact as formatPeso } from '../utils/currency';
 import { AlertCircle, ChevronRight, Loader2, PackageCheck, Ruler, X } from 'lucide-react';
+import { OrderGarmentImage } from '../components/OrderGarmentImage';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -26,6 +27,14 @@ interface CustomerOrder {
   stage: string;
   estimated_ready: string | null;
   balance: number | string;
+  catalog_item_id?: number | null;
+  order_type?: string | null;
+  reference_image?: string | null;
+  catalog_image?: string | null;
+  catalog_image_zoom?: number | null;
+  catalog_image_pos_x?: number | null;
+  catalog_image_pos_y?: number | null;
+  catalog_image_crop_mode?: 'contain' | 'cover' | null;
 }
 
 interface UpcomingVisit {
@@ -158,9 +167,9 @@ export function CustomerOrdersView() {
               const visit = nextVisitByJob.get(order.id);
               return (
                 <button key={order.id} onClick={() => setSelected(order)} className="border border-dashed border-[#9DB1CB] bg-white p-6 text-left shadow-sm hover:border-[#0F1F3D]">
-                  <Tag>{order.id}</Tag>
-                  <h2 className="mt-3 text-2xl font-bold text-[#0F1F3D]" style={{ fontFamily: "'Big Shoulders Display', sans-serif" }}>{order.garment}</h2>
-                  <p className="mt-1 text-sm text-[#4C6E93]">{order.fabric || 'Fabric not specified'}</p>
+                  <div className="flex gap-4"><div className="h-20 w-20 shrink-0 overflow-hidden bg-[#F8FBFF]"><OrderGarmentImage order={order} className="h-full w-full" /></div><div><Tag>{order.id}</Tag>
+                  <h2 className="mt-2 text-2xl font-bold text-[#0F1F3D]" style={{ fontFamily: "'Big Shoulders Display', sans-serif" }}>{order.garment}</h2>
+                  <p className="mt-1 text-sm text-[#4C6E93]">{order.fabric || 'Fabric not specified'}</p></div></div>
                   {visit && (
                     <p className="mt-3 inline-block bg-[#FFF7E3] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#8A6618]">
                       Next visit: {visit.appointment_type} · {formatDateTime(visit.appointment_at)}
@@ -187,6 +196,7 @@ export function CustomerOrdersView() {
             <button onClick={() => setSelected(null)} className="absolute right-5 top-5"><X className="h-5 w-5" /></button>
             <Tag>Order details</Tag>
             <h2 className="mt-2 text-3xl font-bold text-[#0F1F3D]" style={{ fontFamily: "'Big Shoulders Display', sans-serif" }}>{selected.id}</h2>
+            <div className="mt-5 h-52 overflow-hidden border border-[#DCE5EF] bg-[#F8FBFF]"><OrderGarmentImage order={selected} className="h-full w-full" /></div>
             <div className="mt-6 grid grid-cols-2 gap-3">
               {([
                 ['Garment', selected.garment],

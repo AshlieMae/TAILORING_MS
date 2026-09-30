@@ -13,7 +13,7 @@ import { formatPHP } from './currency';
 //   1. Front Desk taxonomy (garmentCatalogData.ORDER_CATEGORIES) — the exact
 //      strings the intake's category › garment type chooser offers.
 //   2. Server Pricing Engine rate card (/api/auth/pricing) — authoritative for
-//      category, base price and production workflow. Wins on conflicts.
+//      category, Starting Price and production workflow. Wins on conflicts.
 //   3. Live garment-catalog records — keeps older/legacy values selectable so
 //      editing an existing record never rewrites its classification.
 //
@@ -43,7 +43,8 @@ export type GarmentTypeEntry = {
   /** The canonical string — must match the rate card and intake exactly. */
   type: string;
   category: string;
-  /** Rate-card base price, or null when the type has no pricing rule. */
+  /** Rate-card Starting Price (the pricing engine's `base_price`), or null when
+      the type has no pricing rule. */
   basePrice: number | null;
   /** Production workflow the pricing engine assigns to this type. */
   workflow: string;
@@ -104,7 +105,7 @@ export function buildGarmentTypeRegistry({ rateCard = [], catalog = [] }: { rate
     category.garments.forEach((garment) => upsert(garment, 'front-desk', { category: category.name }));
   });
 
-  // 2. Admin Rate Card — pricing authority (category, base price, workflow).
+  // 2. Admin Rate Card — pricing authority (category, Starting Price, workflow).
   rateCard.forEach((row) => upsert(row.garment_type, 'rate-card', {
     category: row.garment_category,
     basePrice: toPrice(row.base_price),
@@ -164,6 +165,18 @@ export function isPricedOnRateCard(registry: GarmentTypeEntry[], type: string): 
 }
 
 /**
+ * The Admin Rate Card figure for an exact garment type, or null when no rule
+ * prices it. It deliberately ignores a figure that only exists on a catalog
+ * record: the Rate Card is the single pricing authority, and the catalog is a
+ * read-only consumer of it.
+ */
+export function rateCardPriceFor(registry: GarmentTypeEntry[], type: string): number | null {
+  const entry = findGarmentType(registry, type);
+  if (!entry || !entry.sources.includes('rate-card') || entry.basePrice === null) return null;
+  return entry.basePrice > 0 ? entry.basePrice : null;
+}
+
+/**
  * True when the registry actually carries rate-card rules. When the server is
  * unreachable this is false, so the Admin UI hides "not on the rate card"
  * warnings instead of flagging every record as unpriced.
@@ -173,7 +186,7 @@ export function hasRateCardRules(registry: GarmentTypeEntry[]): boolean {
 }
 
 /**
- * Difference between a record's own base price and the rate card's, or null
+ * Difference between a record's stored figure and the Rate Card's, or null
  * when the two agree (or the type isn't priced). Used to flag price drift.
  */
 export function priceDrift(recordBasePrice: string | number | null | undefined, entry?: GarmentTypeEntry): number | null {
@@ -201,15 +214,15 @@ export function rateCardStatus(registry: GarmentTypeEntry[], type: string, recor
         state: 'drifted',
         entry,
         drift,
-        message: `Base price differs from the rate card by ${formatPHP(Math.abs(drift))} — the Front Desk always quotes the rate-card price.`,
+        message: `Starting Price differs from the Rate Card by ${formatPHP(Math.abs(drift))} — the Front Desk always quotes the Rate Card figure.`,
       };
     }
-    return { state: 'priced', entry, drift: null, message: `Priced on the rate card — ${formatPHP(entry.basePrice)} base, ${entry.workflow || 'standard'} workflow.` };
+    return { state: 'priced', entry, drift: null, message: `Priced on the Rate Card — ${formatPHP(entry.basePrice)} Starting Price, ${entry.workflow || 'standard'} workflow.` };
   }
   return {
     state: 'unpriced',
     entry,
     drift: null,
-    message: 'Not on the rate card — the Front Desk cannot quote this garment until a pricing rule exists for this exact type.',
+    message: 'No Starting Price set — add this garment to the Rate Card.',
   };
 }

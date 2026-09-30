@@ -3,13 +3,24 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatPHPExact as formatPeso } from '../utils/currency';
 import { FrontDeskCustomersExactView } from '../Pages_Frontdesk/CustomersdeskExact';
-import { FrontDeskOrdersView } from '../Pages_Frontdesk/Ordersdesk';
+import { FrontDeskOrdersView, OrderDetails as FrontDeskOrderDetails } from '../Pages_Frontdesk/Ordersdesk';
 import { FrontDeskMeasurementsView } from '../Pages_Frontdesk/Measurementsdesk';
 import { FrontDeskAppointmentsView } from '../Pages_Frontdesk/Appointmentsdesk';
-import { FrontDeskPaymentsView } from '../Pages_Frontdesk/Paymentsdesk';
+// The Payments page became the Customer Financial Center: one shared financial
+// profile per customer, built from the same orders and payment records.
+import { CustomerFinancialCenterView } from '../financialCenter/CustomerFinancialCenter';
+import { FinancialCenterProvider } from '../financialCenter/FinancialCenterContext';
+import { RecordCashPaymentModal } from '../financialCenter/CashPaymentForm';
 import { FrontDeskSettingsView } from '../Pages_Frontdesk/Settingsdesk';
 import { FrontDeskGarmentCatalogView } from '../Pages_Frontdesk/GarmentCatalogdesk';
-import { GarmentIntakeModal, type GarmentIntakeData, type IntakeCreationResult, type IntakeMode } from '../Pages_Frontdesk/GarmentIntakeModal';
+import { GarmentIntakeModal, type GarmentIntakeData, type IntakeCartExtras, type IntakeCartIntent } from '../Pages_Frontdesk/GarmentIntakeModal';
+// THE DRAFT ORDER CART — the counter's multi-garment workspace. It is Front
+// Desk state only (never a database table) and one checkout turns the whole
+// cart into separate job cards in a single transaction.
+import { DraftOrderCartProvider, newCartLineId, useDraftOrderCart, type DraftCartItem } from '../Pages_Frontdesk/DraftOrderCartContext';
+import type { PriorityLevel } from '../Pages_Frontdesk/garmentCatalogData';
+import { DraftOrderCartPanel } from '../Pages_Frontdesk/DraftOrderCartPanel';
+import { CheckoutReviewPanel } from '../Pages_Frontdesk/CheckoutReviewPanel';
 import { type CatalogDesign } from '../Pages_Frontdesk/garmentCatalogData';
 import frontDeskApi, { authToken, type Order, type Appointment, type Customer } from '../../services/frontDeskApi';
 import { RegisterCustomerModal, type NewCustomerForm } from '../pages/FrontDesk/FrontDeskModals';
@@ -43,6 +54,7 @@ import {
   BarChart3,
   Loader2,
   LayoutGrid,
+  ShoppingBag,
 } from 'lucide-react';
 
 function LiveDateTime() {
@@ -108,277 +120,16 @@ const NAV: { label: string; icon: typeof LayoutDashboard; view: ViewKey }[] = [
   { label: 'Orders', icon: Shirt, view: 'orders' },
   { label: 'Measurements', icon: Ruler, view: 'measurements' },
   { label: 'Appointments', icon: CalendarClock, view: 'appointments' },
-  { label: 'Payments', icon: Wallet, view: 'payments' },
+  { label: 'Customer Financial Center', icon: Wallet, view: 'payments' },
   { label: 'Settings', icon: Settings, view: 'settings' },
 ];
 
 // ============================================================
-// RECORD PAYMENT MODAL
+// CASH PAYMENT FORM
 // ============================================================
-interface RecordPaymentFormData {
-  jobCardId: string;
-  orderId: string;
-  amount: string;
-  paymentType: 'Deposit' | 'Final Payment' | 'Partial';
-  paymentMethod: 'Cash' | 'Card' | 'Bank Transfer' | 'GCash' | 'Other';
-  referenceNumber: string;
-  notes: string;
-}
-
-function RecordPaymentModal({ 
-  onClose, 
-  onRecord, 
-  orders 
-}: { 
-  onClose: () => void; 
-  onRecord: (data: any) => Promise<void>;
-  orders: Order[];
-}) {
-  const [form, setForm] = useState<RecordPaymentFormData>({
-    jobCardId: '',
-    orderId: '',
-    amount: '',
-    paymentType: 'Deposit',
-    paymentMethod: 'Cash',
-    referenceNumber: '',
-    notes: '',
-  });
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const selectedOrder = orders.find(o => o.job_card_id === form.jobCardId.toUpperCase());
-
-  // Auto-fill the amount from the payment type: Deposit = 50% of the total,
-  // Final Payment = the full remaining balance, Partial = typed by the staff.
-  const applyAmountForType = (type: 'Deposit' | 'Final Payment' | 'Partial', order?: Order) => {
-    const target = order || selectedOrder;
-    if (!target) return;
-    const total = Number(target.total_amount) || 0;
-    const balance = Number(target.remaining_balance) || 0;
-    let suggested = '';
-    if (type === 'Deposit') {
-      suggested = String(Math.min(Math.round(total * 0.5 * 100) / 100, balance));
-    } else if (type === 'Final Payment') {
-      suggested = String(balance);
-    }
-    setForm(f => ({ ...f, paymentType: type, amount: suggested }));
-  };
-
-  const handleJobCardSearch = (value: string) => {
-    setForm(f => ({ ...f, jobCardId: value }));
-    const found = orders.find(o => o.job_card_id === value.toUpperCase());
-    if (found) {
-      setForm(f => ({ ...f, orderId: found.order_id }));
-      applyAmountForType(form.paymentType, found);
-    }
-  };
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const amountNum = Number(form.amount);
-    if (!form.jobCardId.trim()) {
-      setError('Job card ID is required.');
-      return;
-    }
-    if (!form.amount.trim() || Number.isNaN(amountNum) || amountNum <= 0) {
-      setError('Enter a valid payment amount.');
-      return;
-    }
-    if (selectedOrder && amountNum > selectedOrder.remaining_balance) {
-      setError(`Amount exceeds the balance due of ${formatPeso(selectedOrder.remaining_balance)} for this job card.`);
-      return;
-    }
-    if (!selectedOrder) {
-      setError('Job card not found. Please check the ID.');
-      return;
-    }
-    setSaving(true);
-    setError('');
-    try {
-      await onRecord({
-        orderId: selectedOrder.order_id,
-        amount: amountNum,
-        paymentType: form.paymentType,
-        paymentMethod: form.paymentMethod,
-        referenceNumber: form.referenceNumber,
-        notes: form.notes,
-      });
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to record payment.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-[#1F1916]/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-xl bg-[#FFFFFF] border border-[#E8DFD3] rounded-xl shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-7 sm:px-10 pt-8 pb-2">
-          <MonoLabel>Record payment</MonoLabel>
-          <button onClick={onClose} className="text-[#A3958B] hover:text-[#2A211D] transition-colors p-1 rounded-full hover:bg-[#F2ECE1]">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="px-7 sm:px-10 pb-9 pt-2">
-          <h2 className="text-3xl leading-tight mb-2 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>
-            Record Payment
-          </h2>
-          <p className="text-[14px] text-[#766A62] font-light mb-6 leading-relaxed">
-            Record an additional deposit, partial payment, or final balance for an existing job card. Initial deposits can be collected while creating an order.
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="border border-[#C86A58]/30 bg-[#FDF4F2] px-4 py-3 rounded-lg text-sm text-[#9A3B2A]">
-                {error}
-              </div>
-            )}
-
-            <div>
-              <label className="block mb-1.5"><MonoLabel>Existing job card</MonoLabel></label>
-              <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
-                <Package className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                <select
-                  value={form.jobCardId}
-                  onChange={(e) => handleJobCardSearch(e.target.value)}
-                  className="w-full bg-transparent text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
-                >
-                  <option value="">Select an existing job card</option>
-                  {orders.filter((order) => order.production_status !== 'Released').map((order) => (
-                    <option key={order.order_id} value={order.job_card_id}>
-                      {order.job_card_id} — {order.customer_name} ({formatPeso(order.remaining_balance)} balance)
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <p className="mt-2 text-[11px] text-[#A3958B]">Choose the job card receiving this additional, partial, or final payment.</p>
-            </div>
-
-            {selectedOrder && (
-              <div className="rounded-lg border border-[#E8DFD3] bg-[#FCFAF7] p-4">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium text-[#2A211D]">{selectedOrder.customer_name}</span>
-                  <span className="text-sm text-[#766A62]">{selectedOrder.garment_type}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-dashed border-[#E2D7C7]">
-                  <div>
-                    <MonoLabel>Total</MonoLabel>
-                    <div className="text-sm font-semibold text-[#2A211D]">{formatPeso(Number(selectedOrder.total_amount))}</div>
-                  </div>
-                  <div>
-                    <MonoLabel>Paid</MonoLabel>
-                    <div className="text-sm font-semibold text-[#4E7357]">{formatPeso(Number(selectedOrder.deposit_paid))}</div>
-                  </div>
-                  <div>
-                    <MonoLabel>Balance</MonoLabel>
-                    <div className="text-sm font-semibold text-[#9E5B4B]">{formatPeso(Number(selectedOrder.remaining_balance))}</div>
-                  </div>
-                </div>
-                <div className="mt-2 text-xs text-[#766A62]">
-                  Status: {selectedOrder.payment_status} · Production: {selectedOrder.production_status}
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block mb-1.5"><MonoLabel>Payment type</MonoLabel></label>
-                <select
-                  value={form.paymentType}
-                  onChange={(e) => applyAmountForType(e.target.value as any)}
-                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-                >
-                  <option value="Deposit">Deposit</option>
-                  <option value="Final Payment">Final Payment</option>
-                  <option value="Partial">Partial</option>
-                </select>
-              </div>
-              <div>
-                <label className="block mb-1.5"><MonoLabel>Payment method</MonoLabel></label>
-                <select
-                  value={form.paymentMethod}
-                  onChange={(e) => setForm(f => ({ ...f, paymentMethod: e.target.value as any }))}
-                  className="w-full border-b border-[#E2D7C7] bg-transparent text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-                >
-                  <option value="Cash">Cash</option>
-                  <option value="Card">Card</option>
-                  <option value="Bank Transfer">Bank Transfer</option>
-                  <option value="GCash">GCash</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block mb-1.5"><MonoLabel>Amount (₱)</MonoLabel></label>
-              <div className="relative flex items-center border-b border-[#E2D7C7] focus-within:border-[#2A211D]">
-                <Banknote className="w-4 h-4 text-[#A3958B]" strokeWidth={1.5} />
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={form.amount}
-                  onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))}
-                  placeholder="0"
-                  className="w-full bg-transparent placeholder-[#C2B5A8] text-[14px] pl-3 py-2.5 focus:outline-none text-[#2A211D]"
-                />
-              </div>
-              {selectedOrder && (
-                <p className="text-[11px] text-[#A3958B] mt-1">
-                  Remaining balance: {formatPeso(Number(selectedOrder.remaining_balance))}
-                  {Number(selectedOrder.remaining_balance) > 0 && (
-                    <> · Deposit (50%): {formatPeso(Math.round(Number(selectedOrder.total_amount) * 0.5 * 100) / 100)} · Partial: type any amount</>
-                  )}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className="block mb-1.5"><MonoLabel>Reference number (optional)</MonoLabel></label>
-              <input
-                value={form.referenceNumber}
-                onChange={(e) => setForm(f => ({ ...f, referenceNumber: e.target.value }))}
-                placeholder="GCash, bank, card, or other reference"
-                className="w-full border-b border-[#E2D7C7] bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1.5"><MonoLabel>Notes (optional)</MonoLabel></label>
-              <input
-                value={form.notes}
-                onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
-                placeholder="e.g. Cash payment"
-                className="w-full border-b border-[#E2D7C7] bg-transparent placeholder-[#C2B5A8] text-[14px] py-2.5 focus:outline-none focus:border-[#2A211D] text-[#2A211D]"
-              />
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={saving}
-                className="flex-1 px-4 py-3 rounded-lg border border-[#E2D7C7] text-[#766A62] text-[11px] font-semibold uppercase hover:bg-[#F2ECE1] disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex-1 px-4 py-3 rounded-lg bg-[#2A211D] text-[#FAF7F2] text-[11px] font-semibold uppercase hover:bg-[#3D312B] shadow-md disabled:opacity-50"
-              >
-                {saving ? 'Recording...' : 'Record Payment'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
+// The one cash payment form lives in financialCenter/CashPaymentForm.tsx. It is
+// shared by the order-intake deposit, the existing-order payment modal, quick-pay
+// actions and the Customer Financial Center, so it is no longer duplicated here.
 
 // ============================================================
 // SCHEDULE FITTING MODAL
@@ -601,12 +352,17 @@ function DashboardView({
   pendingDesign,
   onDesignConsumed,
   onOpenCatalogPage,
+  pendingIntakeCustomer,
+  onIntakeCustomerConsumed,
 }: {
   /** Garment chosen on the Garment Catalog page — opens intake pre-filled. */
   pendingDesign?: CatalogDesign | null;
   onDesignConsumed?: () => void;
   /** Switch to the standalone Garment Catalog page. */
   onOpenCatalogPage?: () => void;
+  /** Customer chosen on the Customer Financial Center ("New order"). */
+  pendingIntakeCustomer?: string | null;
+  onIntakeCustomerConsumed?: () => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -623,10 +379,22 @@ function DashboardView({
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  // Approved Master Tailors, for per-garment assignment inside the draft cart.
+  const [tailors, setTailors] = useState<{ id: number; full_name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<null | 'customer' | 'order' | 'payment' | 'fitting'>(null);
   // Garment handed to the intake form (from the catalog page or the picker).
   const [intakeDesign, setIntakeDesign] = useState<CatalogDesign | null>(null);
+  // Customer handed to the intake form by the Customer Financial Center
+  // ("New order"): the form opens with that customer already selected.
+  const [intakeCustomerId, setIntakeCustomerId] = useState('');
+  useEffect(() => {
+    if (!pendingIntakeCustomer) return;
+    setIntakeCustomerId(pendingIntakeCustomer);
+    setIntakeDesign(null);
+    setActiveModal('order');
+    onIntakeCustomerConsumed?.();
+  }, [pendingIntakeCustomer, onIntakeCustomerConsumed]);
   const [banner, setBanner] = useState('');
   // Same display rules as the Appointments page: merge duplicate records
   // (same appointment ID) and keep only the latest active booking per
@@ -658,7 +426,7 @@ function DashboardView({
   const loadDashboardData = useCallback(async (silent = false) => {
     if (!silent) { setLoading(true); setError(null); }
     try {
-      const [statsData, activityData, pickupData, fittingsData, customersData, ordersData, appointmentsData] = await Promise.all([
+      const [statsData, activityData, pickupData, fittingsData, customersData, ordersData, appointmentsData, tailorsData] = await Promise.all([
         frontDeskApi.getDashboardStats(),
         frontDeskApi.getRecentActivity(),
         frontDeskApi.getReadyForPickup(),
@@ -666,6 +434,8 @@ function DashboardView({
         frontDeskApi.searchCustomers(''),
         frontDeskApi.getAllOrders(),
         frontDeskApi.getAppointments(),
+        // Approved Master Tailors — the draft cart assigns one per garment.
+        frontDeskApi.getTailors().catch(() => []),
       ]);
       setStats(statsData);
       setRecentActivity(activityData);
@@ -674,6 +444,7 @@ function DashboardView({
       setCustomers(customersData);
       setOrders(ordersData);
       setAllAppointments(appointmentsData);
+      setTailors((tailorsData || []).map((tailor) => ({ id: tailor.id, full_name: tailor.full_name })));
     } catch (err) {
       if (!silent) setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
     } finally {
@@ -725,56 +496,45 @@ function DashboardView({
   };
 
   /**
-   * Write the walk-in job card.
+   * THE DRAFT ORDER CART — Front Desk only.
    *
-   * mode 'draft'   — job card only (no payment recorded).
-   * mode 'confirm' — job card + the deposit collected at the counter, and the
-   *                  fresh measurements are saved to the customer's profile.
-   * Returns the receipt figures so the intake form can print immediately.
+   * `handleAddToCart` freezes one garment into the cart (nothing is written to
+   * the database), and `handleCheckoutCompleted` refreshes the desks once the
+   * checkout transaction has committed the job cards.
    */
-  const handleCreateOrder = async (data: GarmentIntakeData, mode: IntakeMode): Promise<IntakeCreationResult> => {
-    const depositAmount = mode === 'confirm' && data.collectDeposit ? (parseFloat(data.depositAmount) || 0) : 0;
+  const draftCart = useDraftOrderCart();
+  const [cartOpen, setCartOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  // The cart line being edited: its saved values prefill the intake form.
+  const [editingCartLine, setEditingCartLine] = useState<DraftCartItem | null>(null);
 
-    // 1. Fresh measurements go onto the customer's profile (the Measurements
-    //    desk reads the same record, so nothing is duplicated).
-    if (data.saveMeasurements && !data.useExistingMeasurements) {
-      const measurements = data.measurements;
-      const hasAny = Object.values(measurements).some((value) => String(value).trim() !== '');
-      if (hasAny) {
-        await frontDeskApi.createMeasurement({
-          customerId: data.customerId,
-          chest: parseFloat(measurements.Chest) || null,
-          waist: parseFloat(measurements.Waist) || null,
-          hip: parseFloat(measurements.Hips) || null,
-          sleeve: parseFloat(measurements.Sleeve) || null,
-          inseam: parseFloat(measurements.Inseam) || null,
-          shoulder: parseFloat(measurements.Shoulder) || null,
-          neck: null,
-          measurementDate: new Date().toISOString().slice(0, 10),
-          notes: measurements.Height ? `Height: ${measurements.Height}` : '',
-        });
-      }
-    }
+  const openIntake = (design: CatalogDesign | null = null, customerId = '', line: DraftCartItem | null = null) => {
+    setIntakeDesign(design);
+    setIntakeCustomerId(customerId);
+    setEditingCartLine(line);
+    setActiveModal('order');
+  };
 
-    // 2. The job card itself (created as a Draft — the tailor preference is
-    //    saved and the card is sent to production from the Orders desk).
-    //    Pricing is computed server-side by the Pricing Engine and snapshotted;
-    //    the structured customizations go in as real database columns.
-    const newOrder = await frontDeskApi.createOrder({
+  const handleAddToCart = (data: GarmentIntakeData, extras: IntakeCartExtras, intent: IntakeCartIntent) => {
+    const tailorName = tailors.find((t) => String(t.id) === String(data.assignedTailorId))?.full_name || '';
+    // "Add & add another" always adds a NEW line; the other actions apply the
+    // correction to the line that was opened for editing.
+    const isEditing = Boolean(editingCartLine) && intent !== 'stay';
+    const lineId = isEditing ? (editingCartLine as DraftCartItem).lineId : newCartLineId();
+    const item: DraftCartItem = {
+      lineId,
       customerId: data.customerId,
-      garmentType: data.garmentType,
-      uniformCategory: data.orderCategory || undefined,
-      styleDesign: data.styleDesign,
-      fabric: data.fabric,
-      fabricQuantity: parseFloat(data.fabricQuantity) || 0,
-      quantity: data.quantity,
-      specialInstructions: data.specialInstructions,
-      targetCompletionDate: data.targetCompletionDate,
-      assignedTailorId: data.assignedTailorId,
-      measurementSnapshotId: '',
-      orderNotes: '',
+      customerName: customers.find((c) => String(c.customer_id) === String(data.customerId))?.full_name || 'Walk-in customer',
       orderType: data.orderType,
       catalogItemId: data.catalogItemId ?? null,
+      catalogName: extras.catalogName,
+      garmentType: data.garmentType,
+      orderCategory: data.orderCategory,
+      styleDesign: data.styleDesign,
+      fabric: data.fabric,
+      fabricQuantity: data.fabricQuantity,
+      quantity: data.quantity,
+      priority: data.priority as PriorityLevel,
       customizations: {
         collar_type: data.collarStyle || undefined,
         sleeve_type: data.sleeveStyle || undefined,
@@ -785,54 +545,61 @@ function DashboardView({
         monogram: data.monogram || undefined,
         rush_order: data.rushOrder || undefined,
       },
-      priority: data.priority,
+      specialInstructions: data.specialInstructions,
+      targetCompletionDate: data.targetCompletionDate,
+      assignedTailorId: data.assignedTailorId,
+      assignedTailorName: tailorName,
+      measurements: extras.measurements,
+      referenceImages: data.referenceImages || [],
+      color: data.color,
+      customizationNotes: data.customizationNotes,
       additionalCharges: parseFloat(data.additionalCharges) || 0,
       discount: parseFloat(data.discount) || 0,
-      referenceImage: (data.referenceImages && data.referenceImages.length > 0)
-        ? JSON.stringify(data.referenceImages)
-        : undefined,
-    });
+      image: extras.catalogImage,
+      unitPrice: extras.finalPrice,
+      finalPrice: extras.finalPrice,
+      depositRequired: extras.depositRequired,
+      amount: extras.allocatedAmount,
+      breakdown: extras.quote,
+      addedAt: new Date().toISOString(),
+    };
 
-
-    // 3. The deposit collected at the counter.
-    let receiptReference = data.depositReferenceNumber || '';
-    if (depositAmount > 0) {
-      const payment = await frontDeskApi.recordPayment({
-        orderId: newOrder.order_id,
-        amount: depositAmount,
-        paymentType: 'Deposit',
-        paymentMethod: data.depositPaymentMethod,
-        referenceNumber: data.depositReferenceNumber,
-        notes: `Initial deposit collected at the Front Desk (${data.priority} priority)`,
-      });
-      receiptReference = data.depositReferenceNumber || payment?.receipt_number || '';
+    if (isEditing) {
+      // Editing an existing cart line never creates a second line.
+      draftCart.updateItem(lineId, item);
+      setEditingCartLine(null);
+      return { ok: true, message: `${item.garmentType} updated in the draft cart.` };
     }
 
-    const totalAmount = Number(newOrder.total_amount) || 0;
-    setBanner(
-      mode === 'draft'
-        ? `Draft job card ${newOrder.job_card_id} saved — no deposit recorded yet.`
-        : `Job card ${newOrder.job_card_id} created${depositAmount > 0 ? ` with a ${formatPeso(depositAmount)} deposit` : ''}.`,
-    );
-    setActiveModal(null);
-    loadDashboardData();
-    setTimeout(() => setBanner(''), 5000);
-
-    return {
-      jobCardId: newOrder.job_card_id,
-      totalAmount: totalAmount || Number(newOrder.deposit_required || 0) * 2,
-      depositPaid: depositAmount,
-      remainingBalance: Math.max(0, (totalAmount || 0) - depositAmount),
-      receiptReference,
-    };
+    const outcome = draftCart.addItem(item);
+    if (!outcome.ok) return outcome;
+    // A garment captured while a line was being edited ends the edit, so the
+    // next garment the counter adds starts a fresh line.
+    if (editingCartLine) setEditingCartLine(null);
+    loadDashboardData(true);
+    return outcome;
   };
 
-  const handleRecordPayment = async (data: any) => {
-    await frontDeskApi.recordPayment(data);
-    setBanner(`Payment of ${formatPeso(data.amount)} recorded successfully.`);
-    loadDashboardData();
-    setTimeout(() => setBanner(''), 5000);
+  /** The whole cart committed: refresh every desk and clear the edit state. */
+  const handleCheckoutCompleted = () => {
+    setCheckoutOpen(false);
+    setCartOpen(false);
+    setEditingCartLine(null);
+    setBanner('Checkout completed — every garment now has its own job card, receipt and balance.');
+    loadDashboardData(true);
+    window.setTimeout(() => setBanner(''), 6000);
   };
+
+  // The single-order create handler is GONE on purpose: the Front Desk no
+  // longer writes a job card from the intake form. The intake form adds to the
+  // Draft Order Cart (handleAddToCart above) and the ONE server transaction at
+  // checkout (POST /api/orders/checkout) creates the job cards, receipts and
+  // payment allocations. There is no second order-creation path.
+
+
+  // Payments are recorded through the shared cash form
+  // (financialCenter/CashPaymentForm.tsx) which calls the one payment API, so
+  // there is no dashboard-level payment handler to keep in sync.
 
   // Same rule as the Appointments page: if the job order already has a live
   // appointment, that SAME record is updated in place (new date/time + next
@@ -891,13 +658,38 @@ function DashboardView({
         </div>
       )}
 
-      <div className="dash-in grid grid-cols-2 lg:grid-cols-5 gap-4" style={{ animationDelay: '0.04s' }}>
+      <div className="dash-in grid grid-cols-2 lg:grid-cols-6 gap-4" style={{ animationDelay: '0.04s' }}>
         <QuickAction icon={<UserPlus className="w-5 h-5" strokeWidth={1.6} />} label="Register customer" hint="New profile" onClick={() => setActiveModal('customer')} />
         <QuickAction icon={<LayoutGrid className="w-5 h-5" strokeWidth={1.6} />} label="Garment catalog" hint="Designs & fabrics" helper="Browse the shop's garments, uniform types, styles, fabrics and customization options with the customer — then start the order from there." onClick={() => { setActiveModal(null); onOpenCatalogPage?.(); }} />
-        <QuickAction icon={<FilePlus2 className="w-5 h-5" strokeWidth={1.6} />} label="New order" hint="Garment intake" helper="Guided intake: customer, garment, customization and measurements, pricing, then the deposit. Creates a new job card." onClick={() => { setIntakeDesign(null); setActiveModal('order'); }} />
+        <QuickAction icon={<FilePlus2 className="w-5 h-5" strokeWidth={1.6} />} label="New order" hint="Garment intake" helper="Guided intake: customer, garment, customization and measurements, pricing — then the garment joins the Draft Order Cart. Add as many garments as the customer needs before checking out once." onClick={() => openIntake(null)} />
+        <QuickAction icon={<ShoppingBag className="w-5 h-5" strokeWidth={1.6} />} label="Draft order cart" hint={draftCart.totals.lines ? `${draftCart.totals.lines} garment(s) waiting` : 'Multi-garment checkout'} helper="Review every garment the customer has chosen, assign a tailor per garment, then take ONE cash payment that creates a separate job card and receipt for each item." onClick={() => setCartOpen(true)} />
         <QuickAction icon={<Banknote className="w-5 h-5" strokeWidth={1.6} />} label="Record payment" hint="Existing job card" helper="Record additional payments for existing job cards." onClick={() => setActiveModal('payment')} />
         <QuickAction icon={<CalendarPlus className="w-5 h-5" strokeWidth={1.6} />} label="Manual exception" hint="Special follow-ups" helper="Only for exceptional follow-ups. Normal fitting and pickup visits are suggested automatically by production and approved on the Appointments page." onClick={() => setActiveModal('fitting')} />
       </div>
+
+      {draftCart.totals.lines > 0 && (
+        <button
+          type="button"
+          onClick={() => setCartOpen(true)}
+          className="dash-in flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-[#C9A15C]/50 bg-[#FBEDCB]/50 px-5 py-4 text-left transition-colors hover:bg-[#F9F4EB]"
+          style={{ animationDelay: '0.06s' }}
+        >
+          <span className="flex items-center gap-3">
+            <ShoppingBag className="h-5 w-5 text-[#8C6F3E]" strokeWidth={1.7} />
+            <span>
+              <span className="block text-[13.5px] font-semibold text-[#2A211D]">
+                Draft order cart · {draftCart.totals.lines} garment{draftCart.totals.lines === 1 ? '' : 's'} for {draftCart.customerName || 'the walk-in customer'}
+              </span>
+              <span className="mt-0.5 block text-[11.5px] text-[#7A5A1E]">
+                {formatPeso(draftCart.totals.total)} total · {formatPeso(draftCart.totals.depositDue)} deposits due · one cash payment at checkout
+              </span>
+            </span>
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8C6F3E]">
+            Review &amp; check out <ArrowUpRight className="h-3.5 w-3.5" />
+          </span>
+        </button>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard delay={0.1} label="Collected today" value={formatPeso(stats.todayCollected)} icon={<Wallet className="w-4 h-4" strokeWidth={1.6} />} />
@@ -1055,19 +847,85 @@ function DashboardView({
       )}
       {activeModal === 'order' && (
         <GarmentIntakeModal
-          onClose={() => { setActiveModal(null); setIntakeDesign(null); }}
-          onCreate={handleCreateOrder}
+          onClose={() => { setActiveModal(null); setIntakeDesign(null); setIntakeCustomerId(''); setEditingCartLine(null); }}
+          onAddToCart={handleAddToCart}
+          onViewCart={() => { setActiveModal(null); setCartOpen(true); }}
+          onProceedToCheckout={() => { setActiveModal(null); setCheckoutOpen(true); }}
+          cartItemCount={draftCart.totals.lines}
           customers={customers}
           orders={orders}
           initial={intakeDesign}
+          initialState={editingCartLine ? {
+            customerId: editingCartLine.customerId,
+            orderCategory: editingCartLine.orderCategory,
+            garmentType: editingCartLine.garmentType,
+            styleDesign: editingCartLine.styleDesign,
+            fabric: editingCartLine.fabric,
+            fabricQuantity: editingCartLine.fabricQuantity,
+            quantity: editingCartLine.quantity,
+            specialInstructions: editingCartLine.specialInstructions,
+            targetCompletionDate: editingCartLine.targetCompletionDate,
+            assignedTailorId: editingCartLine.assignedTailorId,
+            orderType: editingCartLine.orderType,
+            catalogItemId: editingCartLine.catalogItemId,
+            priority: editingCartLine.priority,
+            collarStyle: editingCartLine.customizations.collar_type || '',
+            sleeveStyle: editingCartLine.customizations.sleeve_type || '',
+            embroidery: editingCartLine.customizations.embroidery || 'None',
+            lining: editingCartLine.customizations.lining || '',
+            pocketStyle: editingCartLine.customizations.pocket_style || '',
+            buttons: editingCartLine.customizations.buttons || '',
+            monogram: editingCartLine.customizations.monogram || '',
+            rushOrder: Boolean(editingCartLine.customizations.rush_order),
+            color: editingCartLine.color,
+            customizationNotes: editingCartLine.customizationNotes,
+            additionalCharges: String(editingCartLine.additionalCharges || ''),
+            discount: String(editingCartLine.discount || ''),
+            depositAmount: String(editingCartLine.amount || ''),
+            // The measurements frozen on the cart line come back into the form.
+            measurements: cartMeasurementsToIntake(editingCartLine.measurements),
+            useExistingMeasurements: false,
+          } : null}
+          initialCustomerId={intakeCustomerId || (editingCartLine?.customerId ?? '')}
           onOpenCatalogPage={onOpenCatalogPage}
         />
       )}
+      {cartOpen && (
+        <DraftOrderCartPanel
+          onClose={() => setCartOpen(false)}
+          tailors={tailors}
+          onEditItem={(item) => {
+            setCartOpen(false);
+            // The design + measured body are carried back into the form so the
+            // counter corrects one field instead of re-keying the garment.
+            openIntake(designFromCartItem(item), item.customerId, item);
+          }}
+          onAddAnother={() => {
+            // 'Add another garment' keeps the SAME customer: that is the whole
+            // point of the draft cart (one cart = one customer).
+            setCartOpen(false);
+            openIntake(null, draftCart.customerId);
+          }}
+          onProceedToCheckout={() => { setCartOpen(false); setCheckoutOpen(true); }}
+        />
+      )}
+      {checkoutOpen && (
+        <CheckoutReviewPanel
+          onClose={() => setCheckoutOpen(false)}
+          onBackToCart={() => { setCheckoutOpen(false); setCartOpen(true); }}
+          customerName={draftCart.customerName}
+          onCompleted={handleCheckoutCompleted}
+        />
+      )}
       {activeModal === 'payment' && (
-        <RecordPaymentModal 
-          onClose={() => setActiveModal(null)} 
-          onRecord={handleRecordPayment}
+        <RecordCashPaymentModal
+          onClose={() => setActiveModal(null)}
           orders={payableOrders}
+          onRecorded={(payment) => {
+            setBanner(`Payment of ${formatPeso(Number(payment.amount))} recorded (receipt ${payment.receipt_number}).`);
+            loadDashboardData();
+            setTimeout(() => setBanner(''), 5000);
+          }}
         />
       )}
       {activeModal === 'fitting' && (
@@ -1118,7 +976,62 @@ function StatCard({ label, value, icon, delay = 0, tone = 'default' }: { label: 
    ROOT — sidebar drives which view renders
 ================================================================== */
 
-export default function FrontDeskDashboard({ initialView = 'dashboard' }: { initialView?: ViewKey }) {
+/** The intake form's measurement keys, so a cart line can be edited in place. */
+function cartMeasurementsToIntake(measurements: { label: string; value: string }[]): GarmentIntakeData['measurements'] {
+  const values = { Chest: '', Waist: '', Hips: '', Shoulder: '', Sleeve: '', Inseam: '', Height: '' };
+  for (const measurement of measurements) {
+    const label = measurement.label.toLowerCase();
+    if (label === 'chest' || label === 'bust') values.Chest = measurement.value;
+    else if (label === 'waist') values.Waist = measurement.value;
+    else if (label === 'hip' || label === 'hips') values.Hips = measurement.value;
+    else if (label === 'shoulder') values.Shoulder = measurement.value;
+    else if (label === 'sleeve' || label === 'sleeve length') values.Sleeve = measurement.value;
+    else if (label === 'inseam') values.Inseam = measurement.value;
+    else if (label === 'height') values.Height = measurement.value;
+  }
+  return values;
+}
+
+/**
+ * A cart line reopened for editing needs the DESIGN it started from, otherwise
+ * the intake form's step-2 rule ("a catalog order needs a catalog design")
+ * would block a catalog garment from being corrected.
+ */
+function designFromCartItem(item: DraftCartItem): CatalogDesign {
+  return {
+    source: item.orderType === 'catalog' ? 'catalog' : 'custom',
+    name: item.catalogName || item.garmentType,
+    catalogItemId: item.catalogItemId,
+    image: item.image,
+    description: '',
+    priceLabel: '',
+    suggestedFabrics: [],
+    suggestedColors: [],
+    garmentType: item.garmentType,
+    orderCategory: item.orderCategory,
+    styleDesign: item.styleDesign,
+  };
+}
+
+/**
+ * THE FRONT DESK WORKSPACE — every side of the counter: dashboard, customers,
+ * orders, measurements, appointments, the financial center, the catalog and the
+ * multi-garment Draft Order Cart.
+ *
+ * The cart provider wraps the whole workspace so the badge, the intake form,
+ * the cart panel and the checkout review all read ONE cart (React state +
+ * sessionStorage — never a database table). The cart is Front Desk only: no
+ * customer, tailor or admin surface can see it.
+ */
+export default function FrontDeskDashboard(props: { initialView?: ViewKey }) {
+  return (
+    <DraftOrderCartProvider>
+      <FrontDeskWorkspace {...props} />
+    </DraftOrderCartProvider>
+  );
+}
+
+function FrontDeskWorkspace({ initialView = 'dashboard' }: { initialView?: ViewKey }) {
   const navigate = useNavigate();
   const [profile, setProfile] = useState(() => currentUser());
   const [navOpen, setNavOpen] = useState(false);
@@ -1126,6 +1039,39 @@ export default function FrontDeskDashboard({ initialView = 'dashboard' }: { init
   const [loading, setLoading] = useState(true);
   // Garment picked on the Garment Catalog page, waiting for the intake form.
   const [pendingDesign, setPendingDesign] = useState<CatalogDesign | null>(null);
+
+  // --- Customer Financial Center navigation -------------------------------
+  // The Financial Center is the primary financial profile page for every
+  // customer. It opens as a full-height overlay so any customer reference in
+  // the workspace (a customer card, an order row, a receipt, a dashboard
+  // widget) can open it without losing the page underneath. Closing the page,
+  // or closing an order detail opened from it, always returns to the same
+  // selected customer.
+  const [fcOpen, setFcOpen] = useState(false);
+  const [fcCustomer, setFcCustomer] = useState<string | null>(null);
+  const [fcDetailOrder, setFcDetailOrder] = useState<Order | null>(null);
+  const [pendingIntakeCustomer, setPendingIntakeCustomer] = useState<string | null>(null);
+
+  const openFinancialCenter = useCallback((customerId?: string) => {
+    setFcCustomer(customerId ?? null);
+    setFcOpen(true);
+    setView('payments');
+  }, []);
+
+  // A row in the Financial Center's order ledger opens the EXISTING order
+  // details on top of the Financial Center, so closing it returns here.
+  // The Financial Center reads the shared financial API while the detail modal
+  // needs the dashboard's live Order rows, so we match on the same keys.
+  const [liveOrders, setLiveOrders] = useState<Order[]>([]);
+  useEffect(() => {
+    frontDeskApi.getAllOrders().then(setLiveOrders).catch(() => setLiveOrders([]));
+  }, [fcOpen]);
+
+  const openOrderFromFinancialCenter = useCallback((financialOrder: { order_id: string | number; job_card_number: string }) => {
+    const match = liveOrders.find((order) => String(order.order_id) === String(financialOrder.order_id))
+      || liveOrders.find((order) => order.job_card_id === financialOrder.job_card_number);
+    if (match) setFcDetailOrder(match);
+  }, [liveOrders]);
 
   useEffect(() => {
     const token = authToken();
@@ -1171,6 +1117,8 @@ export default function FrontDeskDashboard({ initialView = 'dashboard' }: { init
             pendingDesign={pendingDesign}
             onDesignConsumed={() => setPendingDesign(null)}
             onOpenCatalogPage={() => setView('catalog')}
+            pendingIntakeCustomer={pendingIntakeCustomer}
+            onIntakeCustomerConsumed={() => setPendingIntakeCustomer(null)}
           />
         );
       case 'customers':
@@ -1189,7 +1137,14 @@ export default function FrontDeskDashboard({ initialView = 'dashboard' }: { init
       case 'appointments':
         return <div className="module-appointments"><FrontDeskAppointmentsView /></div>;
       case 'payments':
-        return <div className="module-payments"><FrontDeskPaymentsView /></div>;
+        return (
+          <CustomerFinancialCenterView
+            mode="front_desk"
+            initialCustomerId={fcCustomer}
+            onNewOrder={(customerCode) => { setPendingIntakeCustomer(customerCode); setView('dashboard'); }}
+            onOpenOrder={openOrderFromFinancialCenter}
+          />
+        );
       case 'settings':
         return <div className="module-settings"><FrontDeskSettingsView /></div>;
       default:
@@ -1303,10 +1258,40 @@ export default function FrontDeskDashboard({ initialView = 'dashboard' }: { init
           </div>
         </header>
 
-        <main className="w-full px-6 sm:px-10 xl:px-12 py-9">
-          {renderView()}
-        </main>
+        <FinancialCenterProvider open={openFinancialCenter}>
+          <main className="w-full px-6 sm:px-10 xl:px-12 py-9">
+            {renderView()}
+          </main>
+        </FinancialCenterProvider>
       </div>
+
+      {/* ---- Customer Financial Center overlay ---------------------------------
+          Opened from any customer reference in the workspace. The page below is
+          kept mounted, so closing the Financial Center (or an order detail
+          opened from it) returns to exactly where the desk was working. */}
+      {fcOpen && (
+        <div className="fixed inset-0 z-40 overflow-y-auto bg-[#FAF7F2] px-4 py-6 sm:px-8">
+          <div className="mx-auto max-w-[1500px]">
+            <CustomerFinancialCenterView
+              mode="front_desk"
+              initialCustomerId={fcCustomer}
+              onBack={() => { setFcOpen(false); setFcCustomer(null); }}
+              onNewOrder={(customerCode) => { setFcOpen(false); setFcCustomer(null); setPendingIntakeCustomer(customerCode); setView('dashboard'); }}
+              onOpenOrder={openOrderFromFinancialCenter}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* The existing job-card details for this customer, opened from the order
+          ledger and rendered ABOVE the Financial Center so closing it returns to
+          the same customer's Financial Center. */}
+      {fcDetailOrder && (
+        <FrontDeskOrderDetails
+          order={fcDetailOrder}
+          onClose={() => setFcDetailOrder(null)}
+        />
+      )}
     </div>
   );
 }

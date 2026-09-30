@@ -70,6 +70,9 @@ const App: React.FC = () => {
       <Route path="/customers" element={<RequireRole role="admin"><AdminDashboard initialView="customers" /></RequireRole>} />
       <Route path="/orders" element={<RequireRole role="admin"><AdminDashboard initialView="orders" /></RequireRole>} />
       <Route path="/garment-catalog" element={<RequireRole role="admin"><AdminDashboard initialView="catalog" /></RequireRole>} />
+      <Route path="/rate-card" element={<RequireRole role="admin"><AdminDashboard initialView="rateCard" /></RequireRole>} />
+      {/* The same Admin Rate Card under the nested path the module is documented by. */}
+      <Route path="/admin/rate-card" element={<RequireRole role="admin"><AdminDashboard initialView="rateCard" /></RequireRole>} />
       <Route path="/production" element={<RequireRole role="admin"><AdminDashboard initialView="production" /></RequireRole>} />
       <Route path="/inventory" element={<RequireRole role="admin"><AdminDashboard initialView="inventory" /></RequireRole>} />
       <Route path="/payments" element={<RequireRole role="admin"><AdminDashboard initialView="payments" /></RequireRole>} />
