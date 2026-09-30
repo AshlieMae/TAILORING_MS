@@ -19,7 +19,7 @@ export const handleResponse = async <T>(response: Response): Promise<T> => {
 export interface CatalogItem {
   id?: number;
   name: string;
-  /** Legacy display label such as "From ₱6,500" (storefront card only). */
+  /** Storefront card label, always derived from the Rate Card: "Starting at ₱6,500". */
   price: string;
   description: string;
   /** Suggested fabric labels — informational only, NOT inventory stock. */
@@ -63,6 +63,59 @@ export interface RateCard {
   rush_order_fee: number;
   discount_rules: Record<string, unknown>;
   deposit_percent: number;
+}
+
+/**
+ * One row of the Admin Rate Card management view (GET /api/auth/pricing/rules).
+ * Same rule the Pricing Engine quotes from — the Admin page adds only the
+ * bookkeeping fields (status, provenance, timestamp).
+ */
+export interface RateCardRule {
+  garment_type: string;
+  garment_category: string;
+  base_price: number;
+  production_workflow: string;
+  is_active: boolean;
+  /** 'shop' = saved in the Rate Card; 'default' = the engine's shipped seed. */
+  source: 'shop' | 'default';
+  updated_at: string | null;
+  updated_by_user_id: number | null;
+}
+
+/** Payload for creating or updating a rate-card rule. */
+export interface RateCardRuleInput {
+  garmentType: string;
+  garmentCategory?: string;
+  basePrice: number;
+  productionWorkflow?: string;
+  isActive?: boolean;
+}
+
+/** What the rule mutation endpoints return. */
+export interface RateCardMutationResult {
+  rule?: RateCardRule;
+  message?: string;
+  removed?: string;
+  reverted_to_default?: boolean;
+  default_price?: number | null;
+}
+
+/**
+ * Broadcast that the rate card changed so every mounted view — the Front Desk
+ * pricing guide, the garment catalog, an open intake form — refetches it. The
+ * server is always authoritative (the engine reads pricing_rules per request);
+ * this only saves the user a page refresh.
+ */
+export const RATE_CARD_UPDATED_EVENT = 'rate-card:updated';
+
+export function notifyRateCardUpdated(garmentType?: string): void {
+  try {
+    window.dispatchEvent(new CustomEvent(RATE_CARD_UPDATED_EVENT, { detail: { garmentType } }));
+    // Also visible to other tabs, which can only hear the storage event.
+    window.localStorage.setItem('rateCardUpdatedAt', new Date().toISOString());
+  } catch {
+    /* Storage disabled — the server value still applies on the next fetch. */
+  }
 }
 
 /** The authoritative quote breakdown returned by the Pricing Engine. */
@@ -184,6 +237,32 @@ export interface Order {
   // --- Pricing architecture fields (quote snapshot on the job card) ---
   order_type?: 'catalog' | 'bespoke';
   catalog_item_id?: number | null;
+  /**
+   * The garment photo for this order, resolved LIVE from garment_catalog - it
+   * is never copied onto the order row, so an Admin swapping a catalog photo
+   * updates every existing order automatically.
+   *
+   * Every endpoint that returns an order must expose these five columns:
+   *
+   *   SELECT o.*,
+   *          gc.image           AS catalog_image,
+   *          gc.image_zoom      AS catalog_image_zoom,
+   *          gc.image_pos_x     AS catalog_image_pos_x,
+   *          gc.image_pos_y     AS catalog_image_pos_y,
+   *          gc.image_crop_mode AS catalog_image_crop_mode
+   *   FROM   customer_orders o
+   *   LEFT JOIN garment_catalog gc ON gc.id = o.catalog_item_id
+   *
+   * The LEFT JOIN matters: an order created before catalog_item_id existed,
+   * and every bespoke order, still returns its row with all five columns null.
+   * Consumers never query garment_catalog themselves - they resolve through
+   * getOrderGarmentImage() and render with <OrderGarmentImage />.
+   */
+  catalog_image?: string | null;
+  catalog_image_zoom?: number | null;
+  catalog_image_pos_x?: number | null;
+  catalog_image_pos_y?: number | null;
+  catalog_image_crop_mode?: 'contain' | 'cover' | null;
   collar_type?: string | null;
   sleeve_type?: string | null;
   embroidery?: string | null;
@@ -208,17 +287,322 @@ export interface Payment {
   order_id: string;
   job_card_id: string;
   customer_id: string;
+  /** The CUS-00017 code — used to open this customer's Financial Center. */
+  customer_code?: string;
   customer_name: string;
   amount: number;
-  payment_type: 'Deposit' | 'Final Payment' | 'Partial';
-  payment_method: 'Cash' | 'Card' | 'Bank Transfer' | 'GCash' | 'Other';
+  /**
+   * Cash handed over and change returned. NULL on historical rows recorded
+   * before the cash columns existed — those render as an em dash, never 0.
+   */
+  cash_received?: number | null;
+  change_given?: number | null;
+  payment_type: 'Deposit' | 'Final Payment' | 'Partial Payment' | 'Partial' | string;
+  /** Read-only. Always 'Cash' for new payments; historical rows keep their own. */
+  payment_method: string;
   reference_number?: string | null;
+  /** Immutable audit snapshot taken when the payment was recorded. */
+  previous_balance?: number | null;
+  remaining_balance_after?: number | null;
   voided_at?: string | null;
+  void_reason?: string | null;
+  voided_by_name?: string | null;
+  payment_time?: string;
+  is_voided?: boolean;
+  /**
+   * The multi-garment cash checkout this payment belongs to (CHK-2026-000007).
+   * NULL for a standalone counter payment. Every allocation row of one cart
+   * carries the same reference; the cash figures live on the primary row only.
+   */
+  checkout_reference?: string | null;
   receipt_number: string;
   payment_date: string;
   recorded_by: string;
   recorded_by_name: string;
   notes: string;
+}
+
+/* ============================================================
+   CUSTOMER FINANCIAL CENTER
+   The consolidated financial profile read by both the Front Desk and the
+   Admin. Every figure comes from customer_orders / customer_payments - there
+   is no separate financial store, no customer ledger table and no demo data.
+   ============================================================ */
+
+/** One row of the searchable customer index on the Financial Center. */
+export interface FinancialCustomerSummary {
+  customer_record_id: number;
+  customer_user_id: number;
+  customer_code: string;
+  full_name: string;
+  email: string;
+  contact_number: string;
+  address: string;
+  registered_at: string;
+  status: string;
+  total_orders: number;
+  total_paid: number;
+  outstanding_balance: number;
+  last_payment_date: string | null;
+}
+
+/** One job card inside the Financial Center, with its frozen order total. */
+export interface FinancialOrder {
+  order_id: number | string;
+  job_card_number: string;
+  garment: string;
+  uniform_category: string;
+  style_design: string;
+  fabric: string;
+  quantity: number;
+  stage: string;
+  pickup_status: string;
+  production_status: string;
+  /** final_price when the quote was frozen, else Total Paid + Remaining Balance. */
+  total_amount: number;
+  paid_amount: number;
+  balance: number;
+  final_price: number;
+  has_frozen_total: boolean;
+  payment_status: string;
+  estimated_ready: string | null;
+  due_date: string | null;
+  created_at: string;
+  updated_at: string | null;
+  order_type?: string | null;
+  catalog_item_id?: number | null;
+  reference_image?: string | null;
+  catalog_image?: string | null;
+  catalog_image_zoom?: number | null;
+  catalog_image_pos_x?: number | null;
+  catalog_image_pos_y?: number | null;
+  catalog_image_crop_mode?: 'contain' | 'cover' | null;
+}
+
+/** One row of the customer payment audit trail (voided rows included). */
+export interface FinancialPayment {
+  payment_id: number | string;
+  receipt_number: string;
+  job_card_number: string | null;
+  payment_type: string;
+  amount: number;
+  payment_method: string;
+  reference_number: string;
+  notes: string;
+  paid_at: string;
+  payment_time: string;
+  cash_received: number | null;
+  change_given: number | null;
+  previous_balance: number | null;
+  remaining_balance_after: number | null;
+  voided_at: string | null;
+  void_reason: string;
+  recorded_by_name: string;
+  voided_by_name: string | null;
+  is_voided: boolean;
+  /** Set only on rows written by a multi-garment cart checkout. */
+  checkout_reference?: string | null;
+}
+
+/** The six summary figures behind the Financial Center KPI cards. */
+export interface FinancialSummary {
+  total_orders: number;
+  total_amount_ordered: number;
+  total_payments_made: number;
+  outstanding_balance: number;
+  average_order_value: number;
+  last_payment_date: string | null;
+}
+
+/** The complete Customer Financial Center payload. */
+export interface CustomerFinancialCenter {
+  customer: {
+    customer_record_id: number;
+    customer_user_id: number;
+    customer_code: string;
+    full_name: string;
+    first_name: string;
+    contact_number: string;
+    email: string;
+    address: string;
+    date_of_birth: string | null;
+    gender: string;
+    civil_status: string;
+    occupation: string;
+    registered_at: string;
+    status: string;
+  };
+  summary: FinancialSummary;
+  orders: FinancialOrder[];
+  payments: FinancialPayment[];
+}
+
+/** Receipt reprint payload from GET /api/payments/:id/receipt. */
+export interface PaymentReceiptData {
+  shopName: string;
+  receiptNumber: string;
+  date: string;
+  customer: string;
+  customerCode?: string;
+  jobCardId: string;
+  garment?: string;
+  paymentType: string;
+  paymentMethod: string;
+  referenceNumber?: string | null;
+  amount: number;
+  cashReceived: number | null;
+  changeGiven: number | null;
+  notes?: string;
+  previousBalance: number;
+  remainingBalance: number;
+  totalOrderAmount: number;
+  staff: string;
+  voidedAt: string | null;
+  voidReason?: string | null;
+  voidedByName?: string | null;
+  /** The cart checkout this receipt belongs to (null for a standalone payment). */
+  checkoutReference?: string | null;
+}
+
+/* ============================================================
+   THE FRONT DESK DRAFT ORDER CART & MULTI-GARMENT CASH CHECKOUT
+   One customer, many garments, ONE cash tender. The cart itself is counter
+   state (never a database table); POST /api/orders/checkout turns it into
+   independent orders, job cards and payment records in one transaction.
+   ============================================================ */
+
+/** One measurement line carried from intake onto the job card snapshot. */
+export interface CheckoutMeasurement {
+  label: string;
+  value: string;
+}
+
+/** One garment in the draft cart, exactly as POST /api/orders/checkout reads it. */
+export interface CheckoutCartItemInput {
+  garmentType: string;
+  orderType: 'catalog' | 'bespoke';
+  catalogItemId?: number | null;
+  uniformCategory?: string;
+  styleDesign?: string;
+  fabric: string;
+  fabricQuantity?: number | null;
+  quantity: number;
+  priority?: string;
+  additionalCharges?: number;
+  discount?: number;
+  customizations?: OrderCustomizations & { rush_order?: boolean };
+  specialInstructions?: string;
+  targetCompletionDate: string;
+  assignedTailorId?: string;
+  referenceImage?: string;
+  measurements: CheckoutMeasurement[];
+  /** What the preview quoted; the server re-quotes and rejects a stale cart. */
+  priceSnapshot?: { final_price: number; deposit_required?: number };
+  /** How much of the tender is applied to THIS job card (min = its deposit). */
+  amount: number;
+}
+
+/** The one request that creates the whole cart. */
+export interface CheckoutCartRequest {
+  customerId: string;
+  items: CheckoutCartItemInput[];
+  cashReceived: number;
+  paymentMethod?: 'Cash';
+  referenceNumber?: string;
+  notes?: string;
+}
+
+/** One job card produced by a checkout, with its own receipt and balance. */
+export interface CheckoutOrderResult {
+  order_id: number;
+  job_card_number: string;
+  receipt_number: string;
+  payment_id: number;
+  is_primary_payment: boolean;
+  payment_type: string;
+  payment_method: string;
+  amount: number;
+  /** Present on the PRIMARY allocation row only. */
+  cash_received: number | null;
+  change_given: number | null;
+  previous_balance: number;
+  remaining_balance_after: number;
+  final_price: number;
+  deposit_required: number;
+  garment: string;
+  uniform_category?: string | null;
+  style_design?: string | null;
+  fabric?: string | null;
+  quantity: number;
+  order_type: string;
+  catalog_item_id?: number | null;
+  stage: string;
+  pickup_status: string;
+  due_date?: string | null;
+  assigned_tailor_id?: number | null;
+  assigned_tailor_name: string;
+}
+
+/** What POST /api/orders/checkout returns after the transaction commits. */
+export interface CheckoutResult {
+  checkout_reference: string;
+  customer_user_id: number;
+  job_card_count: number;
+  total_collected: number;
+  cash_received: number;
+  change_given: number;
+  payment_method: string;
+  reference_number: string | null;
+  notes: string;
+  checked_out_at: string;
+  orders: CheckoutOrderResult[];
+  receipts: CheckoutOrderResult[];
+}
+
+/** One allocation line of GET /api/payments/checkout/:reference. */
+export interface CheckoutSummaryPayment {
+  payment_id: number;
+  receipt_number: string;
+  job_card_number: string;
+  payment_type: string;
+  amount: number;
+  cash_received: number | null;
+  change_given: number | null;
+  previous_balance: number | null;
+  remaining_balance_after: number | null;
+  payment_method: string;
+  paid_at: string;
+  garment: string;
+  style_design?: string;
+  quantity: number;
+  final_price: number | null;
+  order_balance: number | null;
+  due_date?: string | null;
+  stage: string;
+  assigned_tailor_name: string;
+  recorded_by_name: string;
+  is_voided: boolean;
+  voided_at: string | null;
+  void_reason: string;
+}
+
+/** The reprintable summary of ONE cash tender. */
+export interface CheckoutSummary {
+  checkout_reference: string | null;
+  customer_code: string;
+  customer_name: string;
+  job_card_count: number;
+  payment_count: number;
+  voided_count: number;
+  total_collected: number;
+  cash_received: number | null;
+  change_given: number | null;
+  payment_method: string;
+  reference_number: string;
+  notes: string;
+  checked_out_at: string | null;
+  recorded_by_name: string;
+  payments: CheckoutSummaryPayment[];
 }
 
 export type AppointmentStatus =
@@ -482,10 +866,12 @@ const frontDeskApi = {
   recordPayment: async (data: {
     orderId: string;
     amount: number;
-    paymentType: 'Deposit' | 'Final Payment' | 'Partial';
-    paymentMethod: 'Cash' | 'Card' | 'Bank Transfer' | 'GCash' | 'Other';
+    paymentType: 'Deposit' | 'Final Payment' | 'Partial' | 'Partial Payment';
+    paymentMethod: 'Cash';
     referenceNumber?: string;
     notes: string;
+    /** Cash handed over at the counter. Server recomputes the change. */
+    cashReceived: number;
   }): Promise<Payment> => {
     const response = await fetch(`${API_URL}/payments`, {
       method: 'POST',
@@ -502,8 +888,19 @@ const frontDeskApi = {
     return handleResponse(response);
   },
 
-  getAllPayments: async (): Promise<Payment[]> => {
-    const response = await fetch(`${API_URL}/payments`, {
+  /**
+   * The SHARED payment ledger (Admin audit + Front Desk). Filters are passed to
+   * the same endpoint, so both roles always read identical rows.
+   */
+  getAllPayments: async (filters: { customerId?: string; jobCardId?: string; from?: string; to?: string; checkoutReference?: string } = {}): Promise<Payment[]> => {
+    const params = new URLSearchParams();
+    if (filters.customerId) params.set('customerId', filters.customerId);
+    if (filters.jobCardId) params.set('jobCardId', filters.jobCardId);
+    if (filters.from) params.set('from', filters.from);
+    if (filters.to) params.set('to', filters.to);
+    if (filters.checkoutReference) params.set('checkoutReference', filters.checkoutReference);
+    const query = params.toString();
+    const response = await fetch(`${API_URL}/payments${query ? `?${query}` : ''}`, {
       headers: { Authorization: `Bearer ${authToken()}` },
     });
     return handleResponse(response);
@@ -514,6 +911,62 @@ const frontDeskApi = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
       body: JSON.stringify({ reason }),
+    });
+    return handleResponse(response);
+  },
+
+  /* ============================================================
+     THE MULTI-GARMENT CASH CHECKOUT
+
+     The ONE call that turns the Front Desk draft cart into real records:
+     one order + job card + receipt-bearing payment row per garment, one
+     shared checkout reference, one cash tender - all in one server
+     transaction. If anything fails, nothing is written.
+     ============================================================ */
+
+  /** Commit the draft cart. Returns every job card, receipt and balance. */
+  checkoutCart: async (payload: CheckoutCartRequest): Promise<CheckoutResult> => {
+    const response = await fetch(`${API_URL}/orders/checkout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify({ ...payload, paymentMethod: 'Cash' }),
+    });
+    return handleResponse(response);
+  },
+
+  /** Reprint / audit ONE cash tender by its checkout reference (CHK-…). */
+  getCheckoutSummary: async (checkoutReference: string): Promise<CheckoutSummary> => {
+    const response = await fetch(`${API_URL}/payments/checkout/${encodeURIComponent(checkoutReference)}`, {
+      headers: { Authorization: `Bearer ${authToken()}` },
+    });
+    return handleResponse(response);
+  },
+
+  /* ============================================================
+     CUSTOMER FINANCIAL CENTER (read-only, shared by Front Desk and Admin)
+
+     The consolidated financial profile: profile, orders with frozen totals,
+     every payment (active and voided), receipts, balances and the six summary
+     figures. Both roles call these same two methods, so the numbers can never
+     disagree between the Front Desk and the Admin.
+     ============================================================ */
+
+  /** Searchable customer index (name, code, contact number, e-mail). */
+  searchFinancialCustomers: async (query = ''): Promise<FinancialCustomerSummary[]> => {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set('q', query.trim());
+    const suffix = params.toString();
+    const response = await fetch(`${API_URL}/financial-center/customers${suffix ? `?${suffix}` : ''}`, {
+      headers: { Authorization: `Bearer ${authToken()}` },
+    });
+    const data = await handleResponse<{ customers?: FinancialCustomerSummary[] }>(response);
+    return Array.isArray(data?.customers) ? data.customers : [];
+  },
+
+  /** The full Financial Center payload for one customer. */
+  getCustomerFinancialCenter: async (customerId: string): Promise<CustomerFinancialCenter> => {
+    const response = await fetch(`${API_URL}/financial-center/customers/${encodeURIComponent(customerId)}`, {
+      headers: { Authorization: `Bearer ${authToken()}` },
     });
     return handleResponse(response);
   },
@@ -669,6 +1122,62 @@ const frontDeskApi = {
     return payload.quote;
   },
 
+  // --- Admin Rate Card management (Admin role only) --------------------
+  // These write through the same Pricing Engine the Front Desk quotes from.
+  // The engine reads the rate card on every request, so a save is live for
+  // quotations immediately — no restart, no cache to clear.
+
+  getRateCardRules: async (): Promise<RateCardRule[]> => {
+    const response = await fetch(`${API_URL}/auth/pricing/rules`, {
+      headers: { Authorization: `Bearer ${authToken()}` },
+    });
+    const data = await handleResponse<{ rules?: RateCardRule[] }>(response);
+    return data.rules || [];
+  },
+
+  createRateCardRule: async (rule: RateCardRuleInput): Promise<RateCardMutationResult> => {
+    const response = await fetch(`${API_URL}/auth/pricing/rules`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify(rule),
+    });
+    const result = await handleResponse<RateCardMutationResult>(response);
+    notifyRateCardUpdated(rule.garmentType);
+    return result;
+  },
+
+  updateRateCardRule: async (garmentType: string, rule: RateCardRuleInput): Promise<RateCardMutationResult> => {
+    const response = await fetch(`${API_URL}/auth/pricing/rules/${encodeURIComponent(garmentType)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify(rule),
+    });
+    const result = await handleResponse<RateCardMutationResult>(response);
+    notifyRateCardUpdated(garmentType);
+    return result;
+  },
+
+  setRateCardRuleActive: async (garmentType: string, isActive: boolean): Promise<RateCardMutationResult> => {
+    const response = await fetch(`${API_URL}/auth/pricing/rules/${encodeURIComponent(garmentType)}/active`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },
+      body: JSON.stringify({ isActive }),
+    });
+    const result = await handleResponse<RateCardMutationResult>(response);
+    notifyRateCardUpdated(garmentType);
+    return result;
+  },
+
+  deleteRateCardRule: async (garmentType: string): Promise<RateCardMutationResult> => {
+    const response = await fetch(`${API_URL}/auth/pricing/rules/${encodeURIComponent(garmentType)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${authToken()}` },
+    });
+    const result = await handleResponse<RateCardMutationResult>(response);
+    notifyRateCardUpdated(garmentType);
+    return result;
+  },
+
   // Store real customer inspiration files on the server. The returned URLs can
   // safely be attached to a job card instead of embedding large base64 blobs.
   uploadReferenceFiles: async (files: File[]): Promise<UploadedReference[]> => {
@@ -721,7 +1230,7 @@ const frontDeskApi = {
   // Generate receipt
   generateReceipt: async (paymentId: string): Promise<{
     receiptNumber: string;
-    receiptData: any;
+    receiptData: PaymentReceiptData;
   }> => {
     const response = await fetch(`${API_URL}/payments/${paymentId}/receipt`, {
       headers: { Authorization: `Bearer ${authToken()}` },

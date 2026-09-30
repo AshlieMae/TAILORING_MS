@@ -1,792 +1,1263 @@
-import { useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
+import type { ComponentType, FormEvent, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Menu,
   X,
   ArrowRight,
-  Play,
-  Star,
-  Quote,
   MapPin,
   Phone,
   Mail,
   Clock,
+  Navigation,
+  LogIn,
+  Scissors,
+  Ruler,
+  Shirt,
+  Sparkles,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Camera,
+  Copy,
+  Building2,
+  Users,
+  CalendarClock,
+  Store,
+  BadgeCheck,
 } from 'lucide-react';
 
-/* ---------------------------------------------------------------
-   DESIGN SYSTEM — "The Atelier Ticket"
-   Ink espresso base, brass + thread-red accents, parchment text.
-   Display serif (Newsreader) for voice, IBM Plex Mono for the
-   recurring "garment tag" labels, IBM Plex Sans for body/UI.
-   Signature element: a rotated spec-tag (dashed stitch border +
-   punch hole) reused as eyebrows, corner marks, and footer legend.
------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------------
+   LANDING PAGE — "The Walk-in Atelier"
+   Customer-facing redesign for a walk-in tailoring atelier.
 
-const FONT_IMPORT = `
-@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+   Palette  Deep Ink #0B1220 · Warm Paper #F8F5EF · Brass Gold #C8A46A · Soft Charcoal #2B2B2B
+   Type     Fraunces (display serif) + Inter (body/UI) + IBM Plex Mono (labels).
+            All three are already loaded globally by src/index.css, so this page
+            adds no extra font requests.
+   Imagery  Real atelier photography in /public/landing/*.jpg (see IMAGE NOTES).
 
-@keyframes fadeSlideIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
+   IMAGE NOTES — SERVICES and GALLERY below point at files in public/landing.
+   To swap in your own studio photography, replace those files, or change the
+   `image` values in SERVICES / GALLERY. Nothing else needs to change.
+--------------------------------------------------------------------------- */
+
+const BUSINESS = {
+  name: "Ashlie's Tailor",
+  street: '118 Thread Street, Suite 4',
+  city: 'Cebu City, Central Visayas',
+  addressOneLine: '118 Thread Street, Suite 4, Cebu City',
+  phoneDisplay: '+63 917 123 4567',
+  phoneHref: 'tel:+639171234567',
+  email: 'hello@ashlietailor.com',
+  emailHref: 'mailto:hello@ashlietailor.com',
+  hours: 'Monday – Saturday · 9:00 AM – 6:00 PM',
+  closedNote: 'Sunday · Closed',
+};
+
+/* Working location links — these open the visitor's own maps app / browser. */
+const MAPS_DIRECTIONS = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+  BUSINESS.addressOneLine,
+)}`;
+const MAPS_PLACE = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+  BUSINESS.addressOneLine,
+)}`;
+
+/* Injected once — page-scoped helpers Tailwind can't express inline. */
+const GLOBAL_STYLE = `
+section[id] { scroll-margin-top: 88px; }
+@keyframes atelierRise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes atelierFade { from { opacity: 0; } to { opacity: 1; } }
+.atelier-rise { animation: atelierRise 720ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.atelier-fade { animation: atelierFade 420ms ease-out both; }
+.atelier-grain {
+  background-image:
+    repeating-linear-gradient(45deg, rgba(11,18,32,0.05) 0px, rgba(11,18,32,0.05) 1px, transparent 1px, transparent 9px),
+    repeating-linear-gradient(-45deg, rgba(11,18,32,0.05) 0px, rgba(11,18,32,0.05) 1px, transparent 1px, transparent 9px);
 }
-@keyframes revealMeasure {
-  from { opacity: 0; transform: scaleX(0); }
-  to { opacity: 1; transform: scaleX(1); }
-}
-@keyframes revealMeasureY {
-  from { opacity: 0; transform: scaleY(0); }
-  to { opacity: 1; transform: scaleY(1); }
+@media (prefers-reduced-motion: reduce) {
+  .atelier-rise, .atelier-fade { animation: none !important; }
+  html { scroll-behavior: auto; }
 }
 `;
 
-function Tag({ children, className = '' }: { children: ReactNode; className?: string }) {
+/* Shared button treatments, so every CTA on the page stays consistent. */
+const BTN_INK =
+  'inline-flex items-center justify-center gap-2.5 rounded-full bg-[#0B1220] px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#F8F5EF] transition-all duration-300 hover:bg-[#C8A46A] hover:text-[#0B1220] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C8A46A]';
+const BTN_GOLD =
+  'inline-flex items-center justify-center gap-2.5 rounded-full bg-[#C8A46A] px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#0B1220] transition-all duration-300 hover:bg-[#b8924f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0B1220]';
+const BTN_GHOST =
+  'inline-flex items-center justify-center gap-2.5 rounded-full border border-[#0B1220]/25 px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#0B1220] transition-all duration-300 hover:border-[#0B1220] hover:bg-[#0B1220] hover:text-[#F8F5EF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C8A46A]';
+const BTN_GHOST_LIGHT =
+  'inline-flex items-center justify-center gap-2.5 rounded-full border border-[#F8F5EF]/35 px-6 py-3.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#F8F5EF] transition-all duration-300 hover:border-[#C8A46A] hover:bg-[#C8A46A] hover:text-[#0B1220] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C8A46A]';
+
+const MONO = "'IBM Plex Mono', monospace";
+const SERIF = "'Fraunces', Georgia, serif";
+
+/* Micro label with a brass punch-hole — the atelier's ticket/tag signature. */
+function Label({
+  children,
+  className = '',
+  dark = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  dark?: boolean;
+}) {
   return (
     <span
-      className={`inline-flex items-center gap-2 text-[10px] tracking-[0.28em] uppercase text-[#C9A66B] ${className}`}
-      style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+      className={`inline-flex items-center gap-2.5 text-[10px] uppercase tracking-[0.28em] ${
+        dark ? 'text-[#C8A46A]' : 'text-[#8a6d38]'
+      } ${className}`}
+      style={{ fontFamily: MONO }}
     >
-      <span className="relative inline-block w-3 h-3 rounded-full border border-[#C9A66B]/60 shrink-0">
-        <span className="absolute inset-[3px] rounded-full bg-[#C9A66B]/60" />
+      <span className="relative inline-block h-3 w-3 shrink-0 rounded-full border border-[#C8A46A]">
+        <span className="absolute inset-[3px] rounded-full bg-[#C8A46A]" />
       </span>
       {children}
     </span>
   );
 }
+type IconType = ComponentType<{ className?: string; strokeWidth?: number }>;
 
+const NAV_ITEMS = [
+  { href: '#walk-ins', label: 'Walk-ins' },
+  { href: '#how-it-works', label: 'How it works' },
+  { href: '#services', label: 'Services' },
+  { href: '#gallery', label: 'Gallery' },
+  { href: '#visit', label: 'Visit us' },
+];
+
+/* The four things a walk-in customer actually wants to know up front. */
+const QUICK_FACTS: { icon: IconType; title: string; body: string }[] = [
+  {
+    icon: CalendarClock,
+    title: 'No appointment needed',
+    body: 'Walk in any time we are open — a tailor will attend to you, not a queue machine.',
+  },
+  {
+    icon: Ruler,
+    title: 'Measured properly',
+    body: 'Your measurements are taken in person and saved on your client profile.',
+  },
+  {
+    icon: Sparkles,
+    title: 'Fit checked with you',
+    body: 'The finished piece is fitted on you before it leaves the atelier.',
+  },
+  {
+    icon: Store,
+    title: 'Talk to a tailor, not a form',
+    body: 'Bring the garment, the fabric, or just the idea and we will advise.',
+  },
+];
+
+const SERVICES: {
+  icon: IconType;
+  title: string;
+  body: string;
+  image: string;
+  alt: string;
+}[] = [
+  {
+    icon: Shirt,
+    title: 'Custom Suits & Blazers',
+    body: 'Measured, cut and finished for your frame — for the office, a wedding, or everyday wear.',
+    image: '/landing/hero-tailor-measuring.jpg',
+    alt: 'Tailor taking a client’s back measurement with a tape measure',
+  },
+  {
+    icon: Sparkles,
+    title: 'Dresses & Gowns',
+    body: 'Occasion pieces built from your measurements, from the first fitting to the final press.',
+    image: '/landing/gowns&dress.jpg',
+    alt: 'Tailor working at her bench in the atelier',
+  },
+  {
+    icon: Scissors,
+    title: 'Alterations & Repairs',
+    body: 'Hems, tapering, sleeves, seams and zips — bring the garment exactly as it is.',
+    image: '/landing/hands-edge-finishing.jpg',
+    alt: 'Hands finishing the edge of a garment',
+  },
+  {
+    icon: Users,
+    title: 'Uniforms & Workwear',
+    body: 'School, office and team uniforms cut to the same standard, batch after batch.',
+    image: '/landing/uniforms.jpg',
+    alt: 'Tailoring workshop detail',
+  },
+  {
+    icon: Ruler,
+    title: 'Fabric & Fit Consultation',
+    body: 'Not sure what a piece needs? We read the fabric, the drape and the fit, then tell you honestly.',
+    image: '/landing/detail-thread-library.jpg',
+    alt: 'Wooden drawers filled with reels of thread',
+  },
+  {
+    icon: CalendarClock,
+    title: 'Wedding Parties & Events',
+    body: 'Bring the whole party in to be measured together and we will keep every profile on file.',
+    image: '/landing/atelier-shelves.jpg',
+    alt: 'Shelves inside the tailoring atelier',
+  },
+];
+
+/* The walk-in journey, in five steps. */
+const WALK_IN_STEPS: { icon: IconType; step: string; title: string; body: string }[] = [
+  {
+    icon: Store,
+    step: '01',
+    title: 'Arrive',
+    body: 'Walk in during open hours. No booking, no waiting list — you will be seen.',
+  },
+  {
+    icon: Users,
+    step: '02',
+    title: 'Consult',
+    body: 'Tell us what the piece needs: a new garment, an alteration, or uniforms for a team.',
+  },
+  {
+    icon: Ruler,
+    step: '03',
+    title: 'Measure',
+    body: 'We take your measurements and record them on your client profile for next time.',
+  },
+  {
+    icon: Scissors,
+    step: '04',
+    title: 'Craft',
+    body: 'Your garment is cut, sewn and pressed in our own atelier — nothing is sent away.',
+  },
+  {
+    icon: Check,
+    step: '05',
+    title: 'Fit & collect',
+    body: 'Try it on with us and we will fine-tune the fit until it sits exactly right.',
+  },
+];
+
+const REASONS: { icon: IconType; title: string; body: string }[] = [
+  {
+    icon: Building2,
+    title: 'Master tailors in house',
+    body: 'Every piece is measured, cut and finished by our own tailors — never outsourced.',
+  },
+  {
+    icon: BadgeCheck,
+    title: 'Fit checked before you leave',
+    body: 'We do not hand a garment over until it sits right on you, and we say so when it does.',
+  },
+  {
+    icon: Users,
+    title: 'Your measurements on file',
+    body: 'Regular clients are measured once — repeat orders and uniform batches start from your saved profile.',
+  },
+  {
+    icon: Sparkles,
+    title: 'Honest advice on fabric and care',
+    body: 'We tell you what a garment genuinely needs, and when it does not need work at all.',
+  },
+];
+
+const GALLERY: { src: string; alt: string; caption: string }[] = [
+  {
+    src: '/landing/hero-tailor-measuring.jpg',
+    alt: 'Tailor measuring a client’s back with a yellow tape measure',
+    caption: 'Taking the measure',
+  },
+  {
+    src: '/landing/tailor-at-her-bench.jpg',
+    alt: 'Tailor at work at her bench',
+    caption: 'At the bench',
+  },
+  {
+    src: '/landing/detail-machine-needle.jpg',
+    alt: 'Close-up of a sewing machine needle and thread',
+    caption: 'Needle and thread',
+  },
+  {
+    src: '/landing/detail-thread-library.jpg',
+    alt: 'Wooden drawers of coloured thread reels',
+    caption: 'The thread library',
+  },
+  {
+    src: '/landing/atelier-shelves.jpg',
+    alt: 'Shelves in the tailoring atelier',
+    caption: 'On the shelves',
+  },
+  {
+    src: '/landing/detail-hand-crank-machine.jpg',
+    alt: 'Vintage hand-crank sewing machine',
+    caption: 'Hand-cranked heritage',
+  },
+  {
+    src: '/landing/tailor-sewing-cloth.jpg',
+    alt: 'Tailor sewing cloth at a machine',
+    caption: 'Sewing the seam',
+  },
+  {
+    src: '/landing/hands-edge-finishing.jpg',
+    alt: 'Hands finishing the edge of a garment',
+    caption: 'Finishing the edge',
+  },
+  {
+    src: '/landing/atelier-workshop-detail.jpg',
+    alt: 'Workshop detail inside the atelier',
+    caption: 'Workshop detail',
+  },
+  {
+    src: '/landing/shopfront-counter.jpg',
+    alt: 'The shopfront and counter of the tailoring shop',
+    caption: 'The counter',
+  },
+];
 export default function LandingPage() {
   const navigate = useNavigate();
-  const [emailSub, setEmailSub] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isCareGuideOpen, setIsCareGuideOpen] = useState(false);
-  const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
-  const [contactSent, setContactSent] = useState(false);
-
-  function handleContactSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setContactSent(true);
-    setContactForm({ name: '', email: '', message: '' });
-  }
 
   return (
-    <div
-      className="min-h-screen w-full overflow-x-hidden bg-[#14120D] text-[#EFE7D8] antialiased selection:bg-[#C9A66B] selection:text-[#14120D]"
-      style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}
-    >
-      <style>{FONT_IMPORT}</style>
+    <div className="min-h-screen w-full overflow-x-hidden bg-[#F8F5EF] text-[#0B1220] antialiased selection:bg-[#C8A46A] selection:text-[#0B1220]">
+      <style>{GLOBAL_STYLE}</style>
 
-      {/* faint woven-texture backdrop */}
-      <div
-        className="fixed inset-0 pointer-events-none opacity-[0.035]"
-        style={{
-          backgroundImage:
-            'repeating-linear-gradient(45deg, #EFE7D8 0px, #EFE7D8 1px, transparent 1px, transparent 10px), repeating-linear-gradient(-45deg, #EFE7D8 0px, #EFE7D8 1px, transparent 1px, transparent 10px)',
-        }}
-      />
+      {/* woven paper grain */}
+      <div className="atelier-grain pointer-events-none fixed inset-0 z-0 opacity-70" aria-hidden="true" />
 
-      {/* ---------------- NAVIGATION ---------------- */}
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-black/20 backdrop-blur-lg">
-        <div className="max-w-[1600px] mx-auto px-6 sm:px-8 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              className="p-1 hover:opacity-70 transition-opacity lg:hidden shrink-0"
-              aria-label="Open menu"
-              onClick={() => setMenuOpen((v) => !v)}
-            >
-              {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-
-            <div className="flex items-center gap-3 min-w-0">
-              <div
-                className="w-9 h-9 shrink-0 rounded-sm border border-[#C9A66B]/70 flex items-center justify-center rotate-3"
-                style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-              >
-                <span className="text-[#C9A66B] text-xs">A&T</span>
-              </div>
-              <div className="leading-tight min-w-0" style={{ fontFamily: "'Newsreader', serif" }}>
-                <div className="text-lg sm:text-xl lg:text-2xl tracking-[0.05em] whitespace-nowrap">
-                  Ashlie&apos;s Tailor
-                </div>
-                <div
-                  className="text-[9px] lg:text-[10px] tracking-[0.32em] text-[#9C8F76] uppercase whitespace-nowrap"
-                  style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-                >
-                  Garment Atelier
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <nav className="hidden lg:flex items-center gap-7 xl:gap-9 text-[11px] tracking-[0.2em] uppercase text-[#C7BDA8] font-medium whitespace-nowrap">
-            <a href="#home" className="hover:text-[#EFE7D8] transition-colors">Home</a>
-            <a href="#craft" className="hover:text-[#EFE7D8] transition-colors">Craft</a>
-            <a href="#reviews" className="hover:text-[#EFE7D8] transition-colors">Reviews</a>
-            <a href="#services" className="hover:text-[#EFE7D8] transition-colors">Services</a>
-            <a href="#contact-us" className="hover:text-[#EFE7D8] transition-colors">Contact</a>
-          </nav>
-
-          <div className="flex items-center gap-4 shrink-0">
-            <button
-              onClick={() => navigate('/login')}
-              className="px-5 py-2.5 rounded-full border border-[#C9A66B] bg-[#C9A66B]/10 backdrop-blur-md text-[#C9A66B] text-[10px] font-medium tracking-[0.18em] uppercase hover:bg-[#C9A66B] hover:text-[#14120D] transition-all duration-300 whitespace-nowrap"
-            >
-              Log In
-            </button>
+      <div className="relative z-10">
+        {/* ---------- announcement strip ---------- */}
+        <div className="bg-[#0B1220] text-[#F8F5EF]">
+          <div
+            className="mx-auto flex w-full max-w-[1400px] flex-wrap items-center justify-center gap-x-7 gap-y-1.5 px-5 py-2.5 text-[9.5px] uppercase tracking-[0.2em] sm:justify-between sm:px-8 sm:text-[10px]"
+            style={{ fontFamily: MONO }}
+          >
+            <span className="inline-flex items-center gap-2">
+              <Store className="h-3 w-3 text-[#C8A46A]" strokeWidth={1.7} />
+              Walk-ins welcome — no appointment
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <Clock className="h-3 w-3 text-[#C8A46A]" strokeWidth={1.7} />
+              {BUSINESS.hours}
+            </span>
+            <a href={BUSINESS.phoneHref} className="inline-flex items-center gap-2 transition-colors hover:text-[#C8A46A]">
+              <Phone className="h-3 w-3 text-[#C8A46A]" strokeWidth={1.7} />
+              {BUSINESS.phoneDisplay}
+            </a>
           </div>
         </div>
 
-        {menuOpen && (
-          <div
-            className="lg:hidden border-t border-white/10 bg-[#0F0D09]"
-            style={{ animation: 'fadeSlideIn 250ms ease-out both' }}
-          >
-            <nav className="flex flex-col divide-y divide-white/10 px-6">
-              {[
-                { href: '#home', label: 'Home' },
-                { href: '#craft', label: 'Craft' },
-                { href: '#reviews', label: 'Reviews' },
-                { href: '#services', label: 'Services' },
-                { href: '#contact-us', label: 'Contact' },
-              ].map((item) => (
+        {/* ---------- header ---------- */}
+        <header className="sticky top-0 z-50 border-b border-[#0B1220]/10 bg-[#F8F5EF]/92 backdrop-blur-md">
+          <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between gap-4 px-5 py-3.5 sm:px-8">
+            <a href="#home" className="flex min-w-0 items-center gap-3">
+              <span
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#C8A46A] text-[11px] font-semibold text-[#8a6d38]"
+                style={{ fontFamily: MONO }}
+              >
+                AT
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-[15px] leading-tight" style={{ fontFamily: SERIF, fontWeight: 600 }}>
+                  {BUSINESS.name}
+                </span>
+                <span className="block text-[9px] uppercase tracking-[0.24em] text-[#8a6d38]" style={{ fontFamily: MONO }}>
+                  Walk-in atelier · Cebu City
+                </span>
+              </span>
+            </a>
+
+            <nav className="hidden items-center gap-7 lg:flex">
+              {NAV_ITEMS.map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  className="text-[11px] uppercase tracking-[0.2em] text-[#2B2B2B] transition-colors hover:text-[#0B1220]"
+                  style={{ fontFamily: MONO }}
+                >
+                  {item.label}
+                </a>
+              ))}
+            </nav>
+
+            <div className="flex shrink-0 items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => navigate('/login')}
+                className="inline-flex items-center gap-2 rounded-full bg-[#0B1220] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#F8F5EF] transition-all duration-300 hover:bg-[#C8A46A] hover:text-[#0B1220] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C8A46A]"
+              >
+                <LogIn className="h-3.5 w-3.5 shrink-0" strokeWidth={1.7} />
+                <span className="hidden sm:inline">Client login</span>
+                <span className="sm:hidden">Login</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMenuOpen((open) => !open)}
+                aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+                aria-expanded={menuOpen}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#0B1220]/20 transition-colors hover:border-[#0B1220] lg:hidden"
+              >
+                {menuOpen ? <X className="h-4 w-4" strokeWidth={1.7} /> : <Menu className="h-4 w-4" strokeWidth={1.7} />}
+              </button>
+            </div>
+          </div>
+
+          {menuOpen && (
+            <nav className="atelier-fade border-t border-[#0B1220]/10 bg-[#FFFDF9] lg:hidden">
+              {NAV_ITEMS.map((item) => (
                 <a
                   key={item.href}
                   href={item.href}
                   onClick={() => setMenuOpen(false)}
-                  className="flex items-center justify-between py-4 text-xs tracking-[0.22em] uppercase text-[#C7BDA8] hover:text-[#EFE7D8] transition-colors"
+                  className="flex items-center justify-between border-b border-[#0B1220]/8 px-5 py-4 text-[11px] uppercase tracking-[0.2em] text-[#2B2B2B] last:border-b-0 sm:px-8"
+                  style={{ fontFamily: MONO }}
                 >
                   {item.label}
-                  <ArrowRight className="w-3.5 h-3.5 text-[#C9A66B]/60" />
+                  <ArrowRight className="h-3.5 w-3.5 text-[#C8A46A]" strokeWidth={1.7} />
                 </a>
               ))}
             </nav>
-          </div>
-        )}
-      </header>
+          )}
+        </header>
+        <main>
+          {/* ---------- hero ---------- */}
+          <section id="home" className="mx-auto w-full max-w-[1400px] px-5 pb-14 pt-12 sm:px-8 lg:pb-20 lg:pt-16">
+            <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-12 xl:gap-16">
+              <div className="atelier-rise lg:col-span-6 lg:self-center xl:col-span-5">
+                <Label>Walk-in tailoring · Thread Street</Label>
+                <h1
+                  className="mt-6 text-[2.35rem] leading-[1.05] tracking-[-0.015em] sm:text-[3.1rem] lg:text-[3.6rem] xl:text-[4.15rem]"
+                  style={{ fontFamily: SERIF, fontWeight: 600 }}
+                >
+                  Walk-in tailoring,
+                  <br />
+                  <span className="italic text-[#8a6d38]">made to fit.</span>
+                </h1>
+                <p className="mt-6 max-w-xl text-base leading-relaxed text-[#2B2B2B] sm:text-[1.0625rem]">
+                  Step in with your fabric, your measurements, or a garment that never quite sat right. Our
+                  tailors measure, cut and finish it here in the atelier — no appointment needed.
+                </p>
 
-      {/* ---------------- HERO ---------------- */}
-      <section id="home" className="relative max-w-[1600px] mx-auto px-6 sm:px-8 lg:px-16 pt-20 pb-32 lg:pb-40 min-h-[90vh] grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-        <div className="lg:col-span-6 space-y-8">
-          <Tag>No. 048 — Established Care</Tag>
+                <div className="mt-8 flex flex-wrap items-center gap-3">
+                  <a href={MAPS_DIRECTIONS} target="_blank" rel="noreferrer" className={BTN_INK}>
+                    <Navigation className="h-4 w-4" strokeWidth={1.7} />
+                    Get directions
+                  </a>
+                  <a href={BUSINESS.phoneHref} className={BTN_GHOST}>
+                    <Phone className="h-4 w-4" strokeWidth={1.7} />
+                    Call the atelier
+                  </a>
+                </div>
 
-          <h1 className="text-[2.75rem] sm:text-6xl lg:text-[5rem] leading-[1.02] tracking-tight">
-            Every garment <br />
-            <span className="italic text-[#C9A66B]">deserves a second</span>
-            <br /> life, pressed well.
-          </h1>
+                <ul className="mt-9 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  {[
+                    'Walk-ins welcome all day',
+                    'Fitted on you before you leave',
+                    'Your measurements kept on file',
+                    'Honest advice on fabric and care',
+                  ].map((point) => (
+                    <li key={point} className="flex items-start gap-2.5 text-[13.5px] leading-snug text-[#2B2B2B]">
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8a6d38]" strokeWidth={2.1} />
+                      {point}
+                    </li>
+                  ))}
+                </ul>
+              </div>
 
-          <p className="text-lg sm:text-xl lg:text-2xl text-[#B8AC94] font-light max-w-xl leading-relaxed">
-            Precision dry cleaning and tailoring, done at the pace of your week — not
-            the pace of a factory line.
-          </p>
+              <div className="lg:col-span-6 xl:col-span-7">
+                <div className="relative overflow-hidden rounded-sm border border-[#0B1220]/10 shadow-[0_30px_70px_-32px_rgba(11,18,32,0.55)]">
+                  <img
+                    src="/landing/hero-tailor-measuring.jpg"
+                    alt="A tailor measuring a client’s back with a tape measure in the atelier"
+                    className="h-[320px] w-full object-cover sm:h-[430px] lg:h-[515px]"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#0B1220]/75 via-[#0B1220]/5 to-transparent" />
+                  <div className="pointer-events-none absolute inset-3 border border-[#F8F5EF]/25" />
+                  <div className="absolute inset-x-5 bottom-5 sm:inset-x-7 sm:bottom-7">
+                    <p
+                      className="text-[9.5px] uppercase tracking-[0.26em] text-[#C8A46A]"
+                      style={{ fontFamily: MONO }}
+                    >
+                      In the atelier
+                    </p>
+                    <p
+                      className="mt-1.5 max-w-md text-lg leading-snug text-[#F8F5EF] sm:text-xl"
+                      style={{ fontFamily: SERIF, fontWeight: 500 }}
+                    >
+                      Every garment begins with a measurement taken by hand.
+                    </p>
+                  </div>
+                </div>
+                {/* walk-ins welcome card */}
+                <div className="mt-4 grid grid-cols-1 divide-y divide-[#0B1220]/10 overflow-hidden rounded-sm border border-[#0B1220]/10 bg-[#FFFDF9] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                  <div className="flex items-start gap-3 p-5">
+                    <Clock className="mt-0.5 h-4 w-4 shrink-0 text-[#8a6d38]" strokeWidth={1.7} />
+                    <div>
+                      <p className="text-[9.5px] uppercase tracking-[0.22em] text-[#8a6d38]" style={{ fontFamily: MONO }}>
+                        Walk in
+                      </p>
+                      <p className="mt-1.5 text-[13px] leading-relaxed text-[#2B2B2B]">
+                        {BUSINESS.hours}
+                        <br />
+                        {BUSINESS.closedNote}
+                      </p>
+                    </div>
+                  </div>
 
-          <div className="pt-2 flex flex-wrap items-center gap-5">
-            <button
-              onClick={() => navigate('/login')}
-              className="group inline-flex items-center gap-3 bg-[#C9A66B] text-[#14120D] text-[11px] tracking-[0.22em] uppercase font-semibold px-6 py-4 rounded-sm hover:bg-[#dcbb85] transition-colors"
-            >
-              Find a location
-              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-            </button>
-            <a
-              href="#craft"
-              className="text-[11px] tracking-[0.22em] uppercase text-[#C7BDA8] border-b border-[#C7BDA8]/30 hover:border-[#C9A66B] hover:text-[#EFE7D8] pb-1 transition-colors"
-            >
-              Our craft
-            </a>
-          </div>
-        </div>
+                  <div className="flex items-start gap-3 p-5">
+                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#8a6d38]" strokeWidth={1.7} />
+                    <div>
+                      <p className="text-[9.5px] uppercase tracking-[0.22em] text-[#8a6d38]" style={{ fontFamily: MONO }}>
+                        Atelier
+                      </p>
+                      <p className="mt-1.5 text-[13px] leading-relaxed text-[#2B2B2B]">
+                        {BUSINESS.street}
+                        <br />
+                        {BUSINESS.city}
+                      </p>
+                      <a
+                        href={MAPS_PLACE}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-flex items-center gap-1 text-[11px] text-[#8a6d38] underline decoration-[#C8A46A] underline-offset-4 transition-colors hover:text-[#0B1220]"
+                      >
+                        View on the map
+                      </a>
+                    </div>
+                  </div>
 
-        <div className="lg:col-span-6 relative lg:scale-105">
-          <MeasurementDiagram />
-        </div>
-      </section>
-
-      {/* ---------------- CRAFT SECTIONS ---------------- */}
-      <section id="craft" className="max-w-7xl mx-auto px-6 sm:px-8 py-10">
-        <SplitFeature
-          tag="Fabric"
-          title="Not just cleaned — read, and cared for accordingly"
-          body="Every fibre behaves differently under heat, steam, and solvent. We inspect before we clean, so wool, silk, and technical fabrics each get the treatment they were made for, not a one-size cycle."
-          img="https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?q=80&w=1000&auto=format&fit=crop"
-          alt="Garments on a rack"
-          reverse={false}
-        />
-        <SplitFeature
-          tag="Press"
-          title="Where style meets a schedule you can trust"
-          body="Drop off in the morning, wear it by evening. Our routing is built around your week, so convenience never comes at the cost of finish."
-          img="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?q=80&w=1000&auto=format&fit=crop"
-          alt="A pressed green dress"
-          reverse={true}
-        />
-        <SplitFeature
-          tag="Fit"
-          title="Your wardrobe's quiet second opinion"
-          body="Loose hems, tired seams, a jacket that never quite sat right — our tailors handle the small corrections that make older pieces feel new again."
-          img="https://images.unsplash.com/photo-1558769132-cb1aea458c5e?q=80&w=1000&auto=format&fit=crop"
-          alt="Sewing machine detail"
-          reverse={false}
-        />
-      </section>
-
-      {/* ---------------- VIDEO BANNER ---------------- */}
-      <section className="max-w-6xl mx-auto px-6 sm:px-8 py-14">
-        <div className="relative w-full h-[320px] sm:h-[420px] lg:h-[480px] overflow-hidden rounded-sm group">
-          <img
-            src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=1200&auto=format&fit=crop"
-            alt="Boutique rack"
-            className="w-full h-full object-cover brightness-[0.55] group-hover:brightness-[0.65] transition-all duration-500"
-          />
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
-            <span
-              className="text-[10px] tracking-[0.3em] uppercase text-[#C9A66B] mb-4"
-              style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-            >
-              Fall Collection Care Guide
-            </span>
-            <button
-              type="button"
-              onClick={() => setIsCareGuideOpen(true)}
-              aria-label="Play Fall Collection Care Guide"
-              className="w-16 h-16 rounded-full border border-[#EFE7D8]/70 flex items-center justify-center hover:scale-105 hover:border-[#C9A66B] transition-all"
-            >
-              <Play className="w-5 h-5 fill-current ml-1" />
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {isCareGuideOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <button
-            type="button"
-            aria-label="Close video"
-            onClick={() => setIsCareGuideOpen(false)}
-            className="absolute inset-0 bg-black/75 backdrop-blur-sm"
-          />
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-label="Fall Collection Care Guide video"
-            className="relative w-full max-w-4xl overflow-hidden rounded-sm border border-[#C9A66B]/60 bg-[#14120D] shadow-2xl"
-          >
-            <button
-              type="button"
-              onClick={() => setIsCareGuideOpen(false)}
-              className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-[#EFE7D8] hover:bg-black"
-              aria-label="Close video"
-            >
-              <X className="h-5 w-5" />
-            </button>
-            <div className="aspect-video">
-              <iframe
-                className="h-full w-full"
-                src="https://www.youtube-nocookie.com/embed/aqz-KE-bpKQ?autoplay=1&rel=0"
-                title="Fall Collection Care Guide"
-                allow="autoplay; encrypted-media; picture-in-picture"
-                allowFullScreen
-              />
+                  <div className="flex items-start gap-3 p-5">
+                    <Phone className="mt-0.5 h-4 w-4 shrink-0 text-[#8a6d38]" strokeWidth={1.7} />
+                    <div className="min-w-0">
+                      <p className="text-[9.5px] uppercase tracking-[0.22em] text-[#8a6d38]" style={{ fontFamily: MONO }}>
+                        Talk to us
+                      </p>
+                      <a
+                        href={BUSINESS.phoneHref}
+                        className="mt-1.5 block truncate text-[13px] text-[#2B2B2B] transition-colors hover:text-[#0B1220]"
+                      >
+                        {BUSINESS.phoneDisplay}
+                      </a>
+                      <a
+                        href={BUSINESS.emailHref}
+                        className="mt-0.5 block truncate text-[13px] text-[#2B2B2B] transition-colors hover:text-[#0B1220]"
+                      >
+                        {BUSINESS.email}
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
+          {/* ---------- walk-ins ---------- */}
+          <section id="walk-ins" className="border-y border-[#0B1220]/10 bg-[#FFFDF9]">
+            <div className="mx-auto w-full max-w-[1400px] px-5 py-14 sm:px-8 lg:py-20">
+              <div className="max-w-3xl">
+                <Label>Walk-ins welcome</Label>
+                <h2
+                  className="mt-5 text-[1.75rem] leading-tight tracking-[-0.01em] sm:text-[2.25rem] lg:text-[2.75rem]"
+                  style={{ fontFamily: SERIF, fontWeight: 600 }}
+                >
+                  Come as you are — <span className="italic text-[#8a6d38]">we will take it from here.</span>
+                </h2>
+                <p className="mt-5 max-w-2xl text-[15px] leading-relaxed text-[#2B2B2B] sm:text-base">
+                  No booking form, no call centre. Walk into the atelier during open hours with a garment, a
+                  length of fabric, or a measurement you would like checked.
+                </p>
+              </div>
+
+              <div className="mt-12 grid grid-cols-1 gap-px overflow-hidden rounded-sm border border-[#0B1220]/10 bg-[#0B1220]/10 sm:grid-cols-2 xl:grid-cols-4">
+                {QUICK_FACTS.map(({ icon: FactIcon, title, body }) => (
+                  <div key={title} className="bg-[#F8F5EF] p-6">
+                    <FactIcon className="h-5 w-5 text-[#8a6d38]" strokeWidth={1.6} />
+                    <h3 className="mt-4 text-[17px] leading-snug" style={{ fontFamily: SERIF, fontWeight: 600 }}>
+                      {title}
+                    </h3>
+                    <p className="mt-2 text-[13.5px] leading-relaxed text-[#2B2B2B]">{body}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ---------- how walk-ins work ---------- */}
+          <section id="how-it-works" className="bg-[#0B1220] text-[#F8F5EF]">
+            <div className="mx-auto w-full max-w-[1400px] px-5 py-16 sm:px-8 lg:py-24">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                <div className="max-w-2xl">
+                  <Label dark>Five steps · start to finish</Label>
+                  <h2
+                    className="mt-5 text-[1.75rem] leading-tight sm:text-[2.25rem] lg:text-[2.75rem]"
+                    style={{ fontFamily: SERIF, fontWeight: 600 }}
+                  >
+                    How a walk-in actually goes
+                  </h2>
+                </div>
+                <p className="max-w-md text-[14px] leading-relaxed text-[#F8F5EF]/70">
+                  The same routine for a single hem or a full uniform batch — measured, recorded and finished
+                  by the people you meet at the counter.
+                </p>
+              </div>
+
+              <div className="mt-14 grid grid-cols-1 gap-12 sm:grid-cols-2 lg:grid-cols-5 lg:gap-6">
+                {WALK_IN_STEPS.map(({ icon: StepIcon, step, title, body }) => (
+                  <div key={step} className="relative">
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#C8A46A]/60 text-[11px] text-[#C8A46A]"
+                        style={{ fontFamily: MONO }}
+                      >
+                        {step}
+                      </span>
+                      <span
+                        className="hidden h-px flex-1 bg-gradient-to-r from-[#C8A46A]/45 to-transparent lg:block"
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <StepIcon className="mt-6 h-5 w-5 text-[#C8A46A]" strokeWidth={1.6} />
+                    <h3 className="mt-3 text-xl" style={{ fontFamily: SERIF, fontWeight: 500 }}>
+                      {title}
+                    </h3>
+                    <p className="mt-2 text-[13.5px] leading-relaxed text-[#F8F5EF]/70">{body}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-14 flex flex-wrap items-center gap-3 border-t border-[#F8F5EF]/12 pt-10">
+                <a href={MAPS_DIRECTIONS} target="_blank" rel="noreferrer" className={BTN_GOLD}>
+                  <Navigation className="h-4 w-4" strokeWidth={1.7} />
+                  Get directions
+                </a>
+                <a href={BUSINESS.phoneHref} className={BTN_GHOST_LIGHT}>
+                  <Phone className="h-4 w-4" strokeWidth={1.7} />
+                  {BUSINESS.phoneDisplay}
+                </a>
+                <span className="text-[11px] uppercase tracking-[0.2em] text-[#F8F5EF]/55" style={{ fontFamily: MONO }}>
+                  Or just walk in — {BUSINESS.hours}
+                </span>
+              </div>
+            </div>
+          </section>
+          {/* ---------- services ---------- */}
+          <section id="services" className="mx-auto w-full max-w-[1400px] px-5 py-16 sm:px-8 lg:py-24">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-2xl">
+                <Label>What we make and mend</Label>
+                <h2
+                  className="mt-5 text-[1.75rem] leading-tight tracking-[-0.01em] sm:text-[2.25rem] lg:text-[2.75rem]"
+                  style={{ fontFamily: SERIF, fontWeight: 600 }}
+                >
+                  Bring the garment — <span className="italic text-[#8a6d38]">we will fit the occasion.</span>
+                </h2>
+              </div>
+              <p className="max-w-md text-[14px] leading-relaxed text-[#2B2B2B]">
+                Everything below can be started at the counter. If you are not sure which one you need, walk in
+                with the piece and we will tell you honestly.
+              </p>
+            </div>
+
+            <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+              {SERVICES.map(({ icon: ServiceIcon, title, body, image, alt }) => (
+                <article
+                  key={title}
+                  className="group overflow-hidden rounded-sm border border-[#0B1220]/10 bg-[#FFFDF9] transition-all duration-500 hover:-translate-y-1 hover:border-[#C8A46A]/60 hover:shadow-[0_26px_55px_-32px_rgba(11,18,32,0.6)]"
+                >
+                  <div className="relative h-44 overflow-hidden sm:h-48">
+                    <img
+                      src={image}
+                      alt={alt}
+                      loading="lazy"
+                      className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.06]"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0B1220]/50 via-transparent to-transparent" />
+                    <span className="absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-[#F8F5EF]/90 text-[#8a6d38] backdrop-blur-sm">
+                      <ServiceIcon className="h-4 w-4" strokeWidth={1.7} />
+                    </span>
+                  </div>
+                  <div className="p-6">
+                    <h3 className="text-[19px] leading-snug" style={{ fontFamily: SERIF, fontWeight: 600 }}>
+                      {title}
+                    </h3>
+                    <p className="mt-2.5 text-[13.5px] leading-relaxed text-[#2B2B2B]">{body}</p>
+                    <p
+                      className="mt-5 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-[#8a6d38]"
+                      style={{ fontFamily: MONO }}
+                    >
+                      <Scissors className="h-3 w-3" strokeWidth={2} />
+                      Available to walk-ins
+                    </p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+          {/* ---------- why choose us + trust statement ---------- */}
+          <section className="border-y border-[#0B1220]/10 bg-[#FFFDF9]">
+            <div className="mx-auto grid w-full max-w-[1400px] grid-cols-1 gap-12 px-5 py-16 sm:px-8 lg:grid-cols-12 lg:gap-16 lg:py-24">
+              <div className="lg:col-span-5">
+                <Label>Why clients keep coming back</Label>
+                <h2
+                  className="mt-5 text-[1.75rem] leading-tight sm:text-[2.25rem] lg:text-[2.4rem]"
+                  style={{ fontFamily: SERIF, fontWeight: 600 }}
+                >
+                  Old-fashioned standards,
+                  <br />
+                  <span className="italic text-[#8a6d38]">kept properly.</span>
+                </h2>
+                <p className="mt-5 text-[15px] leading-relaxed text-[#2B2B2B]">
+                  We are a small atelier, and we like it that way. Fewer pieces, all of them measured on the
+                  person who will wear them.
+                </p>
+
+                <div className="mt-8 rounded-sm border border-[#C8A46A]/45 bg-[#F8F5EF] p-6">
+                  <BadgeCheck className="h-5 w-5 text-[#8a6d38]" strokeWidth={1.7} />
+                  <p
+                    className="mt-4 text-[10px] uppercase tracking-[0.24em] text-[#8a6d38]"
+                    style={{ fontFamily: MONO }}
+                  >
+                    What you can expect
+                  </p>
+                  <p className="mt-2 text-[14px] leading-relaxed text-[#2B2B2B]">
+                    A tailor attends to you when you walk in. Measurements are taken in person and written down
+                    accurately. Your finished piece is fitted on you before it leaves the atelier, and we will
+                    tell you plainly when a garment does not need work at all.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-px overflow-hidden rounded-sm border border-[#0B1220]/10 bg-[#0B1220]/10 sm:grid-cols-2 lg:col-span-7 lg:self-start">
+                {REASONS.map(({ icon: ReasonIcon, title, body }) => (
+                  <div key={title} className="bg-[#F8F5EF] p-6 sm:p-7">
+                    <ReasonIcon className="h-5 w-5 text-[#8a6d38]" strokeWidth={1.6} />
+                    <h3 className="mt-4 text-[17px] leading-snug" style={{ fontFamily: SERIF, fontWeight: 600 }}>
+                      {title}
+                    </h3>
+                    <p className="mt-2 text-[13.5px] leading-relaxed text-[#2B2B2B]">{body}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ---------- gallery ---------- */}
+          <Gallery />
+          <VisitSection />
+        </main>
+
+        <SiteFooter onClientLogin={() => navigate('/login')} />
+      </div>
+    </div>
+  );
+}
+/* ---------------------------------------------------------------------------
+   GALLERY — masonry columns with a keyboard-accessible lightbox.
+--------------------------------------------------------------------------- */
+function Gallery() {
+  const [active, setActive] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (active === null) return;
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setActive(null);
+      if (event.key === 'ArrowRight') setActive((i) => (i === null ? i : (i + 1) % GALLERY.length));
+      if (event.key === 'ArrowLeft') setActive((i) => (i === null ? i : (i - 1 + GALLERY.length) % GALLERY.length));
+    };
+
+    window.addEventListener('keydown', onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [active]);
+
+  const activeItem = active === null ? null : GALLERY[active];
+
+  const step = (delta: number) =>
+    setActive((i) => (i === null ? i : (i + delta + GALLERY.length) % GALLERY.length));
+
+  return (
+    <section id="gallery" className="mx-auto w-full max-w-[1400px] px-5 py-16 sm:px-8 lg:py-24">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-2xl">
+          <Label>Inside the atelier</Label>
+          <h2
+            className="mt-5 text-[1.75rem] leading-tight sm:text-[2.25rem] lg:text-[2.75rem]"
+            style={{ fontFamily: SERIF, fontWeight: 600 }}
+          >
+            A look at where your garment gets made
+          </h2>
+        </div>
+        <p className="max-w-md text-[14px] leading-relaxed text-[#2B2B2B]">
+          Photographs from the workroom, the fabric shelves and the counter. Open any image to see it larger.
+        </p>
+      </div>
+
+      <div className="mt-12 gap-4 sm:columns-2 lg:columns-3">
+        {GALLERY.map((item, index) => (
+          <button
+            key={item.src}
+            type="button"
+            onClick={() => setActive(index)}
+            aria-label={`Open larger image: ${item.caption}`}
+            className="group relative mb-4 block w-full break-inside-avoid overflow-hidden rounded-sm border border-[#0B1220]/10 bg-[#FFFDF9] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C8A46A]"
+          >
+            <img
+              src={item.src}
+              alt={item.alt}
+              loading="lazy"
+              className="w-full transition-transform duration-700 ease-out group-hover:scale-[1.05]"
+            />
+            <span
+              className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0B1220]/70 via-transparent to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+              aria-hidden="true"
+            />
+            <span
+              className="pointer-events-none absolute inset-x-4 bottom-3 flex items-center justify-between gap-3 text-[10px] uppercase tracking-[0.2em] text-[#F8F5EF] opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+              style={{ fontFamily: MONO }}
+            >
+              {item.caption}
+              <Camera className="h-3.5 w-3.5 shrink-0" strokeWidth={1.7} />
+            </span>
+          </button>
+        ))}
+      </div>
+      {activeItem && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={activeItem.caption}
+          className="atelier-fade fixed inset-0 z-[60] flex flex-col bg-[#0B1220]/95 px-4 py-5 sm:px-8"
+        >
+          <button
+            type="button"
+            onClick={() => setActive(null)}
+            aria-label="Close image"
+            className="absolute inset-0 cursor-zoom-out"
+          />
+          <div className="relative flex items-center justify-between gap-4 text-[#F8F5EF]">
+            <p className="text-[10px] uppercase tracking-[0.24em]" style={{ fontFamily: MONO }}>
+              {activeItem.caption}
+            </p>
+            <button
+              type="button"
+              onClick={() => setActive(null)}
+              aria-label="Close image"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#F8F5EF]/30 transition-colors hover:border-[#C8A46A] hover:text-[#C8A46A]"
+            >
+              <X className="h-4 w-4" strokeWidth={1.7} />
+            </button>
+          </div>
+
+          <div className="relative mt-4 flex min-h-0 flex-1 items-center justify-center gap-2 sm:gap-5">
+            <button
+              type="button"
+              onClick={() => step(-1)}
+              aria-label="Previous image"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#F8F5EF]/30 text-[#F8F5EF] transition-colors hover:border-[#C8A46A] hover:text-[#C8A46A]"
+            >
+              <ChevronLeft className="h-5 w-5" strokeWidth={1.7} />
+            </button>
+
+            <img
+              src={activeItem.src}
+              alt={activeItem.alt}
+              className="max-h-full w-auto max-w-full rounded-sm object-contain"
+            />
+
+            <button
+              type="button"
+              onClick={() => step(1)}
+              aria-label="Next image"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#F8F5EF]/30 text-[#F8F5EF] transition-colors hover:border-[#C8A46A] hover:text-[#C8A46A]"
+            >
+              <ChevronRight className="h-5 w-5" strokeWidth={1.7} />
+            </button>
+          </div>
+
+          <p
+            className="relative mt-3 text-center text-[10px] uppercase tracking-[0.2em] text-[#F8F5EF]/55"
+            style={{ fontFamily: MONO }}
+          >
+            Use ← → to browse · Esc to close
+          </p>
         </div>
       )}
 
-      {/* ---------------- REVIEWS ---------------- */}
-      <section id="reviews" className="max-w-7xl mx-auto px-6 sm:px-8 py-20">
-        <div className="mb-14 max-w-2xl">
-          <Tag className="mb-4">Client Reviews</Tag>
+    </section>
+  );
+}
+/* ---------------------------------------------------------------------------
+   VISIT — address, working call / directions / email actions and a note form.
+   The form composes a pre-filled email in the visitor's own mail app, so the
+   page stays fully static while every action still does something real.
+--------------------------------------------------------------------------- */
+function VisitSection() {
+  const [form, setForm] = useState({ name: '', contact: '', need: 'A custom garment', message: '' });
+  const [sent, setSent] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const mailtoHref = `mailto:${BUSINESS.email}?subject=${encodeURIComponent(
+    `Atelier enquiry — ${form.need}`,
+  )}&body=${encodeURIComponent(
+    [
+      `Name: ${form.name}`,
+      `Phone or email: ${form.contact}`,
+      `Looking for: ${form.need}`,
+      '',
+      form.message,
+    ].join('\n'),
+  )}`;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    /* Opens the visitor's mail application with the note already filled in. */
+    window.location.href = mailtoHref;
+    setSent(true);
+  }
+
+  async function copyAddress() {
+    try {
+      await navigator.clipboard.writeText(BUSINESS.addressOneLine);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2400);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <section id="visit" className="border-t border-[#0B1220]/10 bg-[#FFFDF9]">
+      <div className="mx-auto w-full max-w-[1400px] px-5 py-16 sm:px-8 lg:py-24">
+        <div className="max-w-2xl">
+          <Label>Visit us</Label>
           <h2
-            className="text-3xl sm:text-5xl leading-tight"
-            style={{ fontFamily: "'Newsreader', serif", fontWeight: 500 }}
+            className="mt-5 text-[1.75rem] leading-tight sm:text-[2.25rem] lg:text-[2.75rem]"
+            style={{ fontFamily: SERIF, fontWeight: 600 }}
           >
-            Hear it from the best-dressed in town
+            Find the shop, or <span className="italic text-[#8a6d38]">send us a note.</span>
           </h2>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-          <div className="lg:col-span-6 space-y-6">
-            <Quote className="w-8 h-8 text-[#C9A66B]/60" />
-            <div className="flex space-x-1 text-[#C9A66B]">
-              {[...Array(5)].map((_, i) => (
-                <Star key={i} className="w-3.5 h-3.5 fill-current" />
-              ))}
-            </div>
-
-            <blockquote className="text-xl lg:text-2xl text-[#C7BDA8] leading-relaxed font-light max-w-2xl">
-              After retiring, I wanted my wardrobe kept in the same order as everything
-              else in my life. Ashlie&apos;s Tailor team walked me through exactly what
-              each piece needed, and nothing has come back the wrong shape since.
-            </blockquote>
-
-            <div
-              className="text-base lg:text-lg tracking-[0.15em] uppercase text-[#EFE7D8]"
-              style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-            >
-              Barbara Gordon
-            </div>
-
-            <a href="#reviews" className="pt-4 inline-flex items-center gap-3 group">
-              <span className="text-xs lg:text-sm uppercase tracking-[0.22em] text-[#C7BDA8] group-hover:text-[#EFE7D8]">
-                More reviews
-              </span>
-              <ArrowRight className="w-4 h-4 text-[#C9A66B] transition-transform group-hover:translate-x-1" />
-            </a>
-          </div>
-
-          <div className="lg:col-span-6">
-            <div className="w-full h-[340px] sm:h-[420px] lg:h-[460px] overflow-hidden rounded-sm">
-              <img
-                src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=800&auto=format&fit=crop"
-                alt="Client portrait"
-                className="w-full h-full object-cover grayscale-[20%]"
-              />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ---------------- SERVICES ---------------- */}
-      <section id="services" className="max-w-7xl mx-auto px-6 sm:px-8 py-20 border-t border-[#3A3226]/70">
-        <div className="mb-14 max-w-4xl">
-          <Tag className="mb-4">Our Services</Tag>
-          <h2
-            className="text-4xl sm:text-5xl lg:text-6xl leading-[1.08]"
-            style={{ fontFamily: "'Newsreader', serif", fontWeight: 500 }}
-          >
-            Crafted with Precision, <span className="italic text-[#C9A66B]">Tailored for You</span>
-          </h2>
-          <p className="mt-5 max-w-2xl text-base sm:text-lg leading-relaxed font-light text-[#B8AC94]">
-            From a perfect first fitting to every final stitch, our services keep your wardrobe and orders in expert hands.
+          <p className="mt-5 text-[15px] leading-relaxed text-[#2B2B2B]">
+            Walking in is the fastest way to talk to a tailor. If you would rather ask first, the details
+            below reach the atelier directly.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          <ServiceCard
-            title="Custom Suit Tailoring"
-            body="Personalized suit creation with precise measurements and premium craftsmanship."
-            image="https://images.unsplash.com/photo-1617127365659-c47fa864d8bc?auto=format&fit=crop&w=1200&q=85"
-            alt="Tailor taking measurements for a custom suit"
-          />
-          <ServiceCard
-            title="Uniform Customization"
-            body="High-quality uniform tailoring and adjustments for schools, offices, and organizations."
-            image="https://images.unsplash.com/photo-1598032895397-b9472444bf93?auto=format&fit=crop&w=1200&q=85"
-            alt="Tailor working at a sewing machine"
-          />
-          <ServiceCard
-            title="Dressmaking & Alterations"
-            body="Custom dresses, repairs, resizing, and garment alterations."
-            image="https://images.unsplash.com/photo-1585488434455-1a6d9d2e1655?auto=format&fit=crop&w=1200&q=85"
-            alt="Formal dress displayed on a mannequin"
-          />
-          <ServiceCard
-            title="Measurement Profile Management"
-            body="Save customer measurements digitally for faster future orders."
-            image="https://images.unsplash.com/photo-1613909671501-f9678ffc1d33?auto=format&fit=crop&w=1200&q=85"
-            alt="Measuring tape and fabric on a tailor's work table"
-          />
-          <ServiceCard
-            title="Production Tracking"
-            body="Track every order from cutting and sewing to fitting and completion."
-            image="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=1200&q=85"
-            alt="Garments in a tailoring workshop"
-          />
-          <ServiceCard
-            title="Fabric & Material Management"
-            body="Monitor fabric inventory, usage, and stock availability."
-            image="https://images.unsplash.com/photo-1603252109303-2751441dd157?auto=format&fit=crop&w=1200&q=85"
-            alt="Colorful fabric rolls in a tailoring shop"
-          />
-        </div>
-      </section>
-
-      {/* ---------------- CONTACT — styled as an order ticket ---------------- */}
-      <section id="contact-us" className="max-w-7xl mx-auto px-6 sm:px-8 py-20 border-t border-[#3A3226]/70">
-        <div className="mb-14 max-w-2xl">
-          <Tag className="mb-4">Get In Touch</Tag>
-          <h2
-            className="text-3xl sm:text-5xl leading-tight"
-            style={{ fontFamily: "'Newsreader', serif", fontWeight: 500 }}
-          >
-            Bring us the piece, we&apos;ll take it from there
-          </h2>
-          <p className="mt-5 max-w-xl text-base sm:text-lg leading-relaxed font-light text-[#B8AC94]">
-            Questions about an order, a fitting, or a fabric you&apos;re not sure about? Send a note or stop by the atelier.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Info card, styled like a garment ticket */}
-          <div className="lg:col-span-5 relative rounded-sm border border-dashed border-[#C9A66B]/50 bg-[#1D1912] p-8 sm:p-10">
-            <span className="absolute -top-3 left-8 h-6 w-6 rounded-full border border-[#3A3226] bg-[#14120D]" />
-            <span className="absolute -bottom-3 left-8 h-6 w-6 rounded-full border border-[#3A3226] bg-[#14120D]" />
-
-            <Tag className="mb-8">Shop Details — No. 048</Tag>
-
-            <div className="space-y-7">
-              <div className="flex items-start gap-4">
-                <MapPin className="w-4 h-4 mt-1 text-[#C9A66B] shrink-0" />
-                <div>
-                  <div
-                    className="text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-1"
-                    style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-                  >
-                    Atelier
-                  </div>
-                  <div className="text-base text-[#EFE7D8] font-light">
-                    118 Thread Street, Suite 4<br />Cebu City, Central Visayas
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <Phone className="w-4 h-4 mt-1 text-[#C9A66B] shrink-0" />
-                <div>
-                  <div
-                    className="text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-1"
-                    style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-                  >
-                    Phone
-                  </div>
-                  <a href="tel:+639171234567" className="text-base text-[#EFE7D8] font-light hover:text-[#C9A66B] transition-colors">
-                    +63 917 123 4567
-                  </a>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <Mail className="w-4 h-4 mt-1 text-[#C9A66B] shrink-0" />
-                <div>
-                  <div
-                    className="text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-1"
-                    style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-                  >
-                    Email
-                  </div>
-                  <a href="mailto:hello@ashlietailor.com" className="text-base text-[#EFE7D8] font-light hover:text-[#C9A66B] transition-colors">
-                    hello@ashlietailor.com
-                  </a>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <Clock className="w-4 h-4 mt-1 text-[#C9A66B] shrink-0" />
-                <div>
-                  <div
-                    className="text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-1"
-                    style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-                  >
-                    Hours
-                  </div>
-                  <div className="text-base text-[#EFE7D8] font-light">
-                    Mon–Sat, 9:00 AM – 7:00 PM<br />Sunday by appointment
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Contact form */}
-          <div className="lg:col-span-7">
-            <form onSubmit={handleContactSubmit} className="space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <div>
-                  <label
-                    htmlFor="contact-name"
-                    className="block text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-2"
-                    style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-                  >
-                    Name
-                  </label>
-                  <input
-                    id="contact-name"
-                    type="text"
-                    required
-                    value={contactForm.name}
-                    onChange={(e) => setContactForm((f) => ({ ...f, name: e.target.value }))}
-                    className="w-full bg-[#1D1912] border border-[#3A3226] rounded-sm px-4 py-3 text-sm text-[#EFE7D8] placeholder-[#6E6452] focus:outline-none focus:border-[#C9A66B] transition-colors"
-                    placeholder="Your name"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="contact-email"
-                    className="block text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-2"
-                    style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-                  >
-                    Email
-                  </label>
-                  <input
-                    id="contact-email"
-                    type="email"
-                    required
-                    value={contactForm.email}
-                    onChange={(e) => setContactForm((f) => ({ ...f, email: e.target.value }))}
-                    className="w-full bg-[#1D1912] border border-[#3A3226] rounded-sm px-4 py-3 text-sm text-[#EFE7D8] placeholder-[#6E6452] focus:outline-none focus:border-[#C9A66B] transition-colors"
-                    placeholder="you@email.com"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="contact-message"
-                  className="block text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-2"
-                  style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-                >
-                  Message
-                </label>
-                <textarea
-                  id="contact-message"
-                  required
-                  rows={5}
-                  value={contactForm.message}
-                  onChange={(e) => setContactForm((f) => ({ ...f, message: e.target.value }))}
-                  className="w-full bg-[#1D1912] border border-[#3A3226] rounded-sm px-4 py-3 text-sm text-[#EFE7D8] placeholder-[#6E6452] focus:outline-none focus:border-[#C9A66B] transition-colors resize-none"
-                  placeholder="Tell us about the piece, the fit, or the fix it needs..."
-                />
-              </div>
-
-              <div className="flex items-center gap-5 pt-1">
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-3 bg-[#C9A66B] text-[#14120D] text-[11px] tracking-[0.22em] uppercase font-semibold px-6 py-4 rounded-sm hover:bg-[#dcbb85] transition-colors"
-                >
-                  Send Request
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-                {contactSent && (
-                  <span
-                    className="text-[11px] tracking-[0.2em] uppercase text-[#9C8F76]"
-                    style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-                  >
-                    Received — we&apos;ll reply shortly
-                  </span>
-                )}
-              </div>
-            </form>
-          </div>
-        </div>
-      </section>
-
-      {/* ---------------- FOOTER — styled like a care label ---------------- */}
-      <footer className="bg-[#0F0D09] text-[#C7BDA8] pt-16 pb-10 px-6 sm:px-8 border-t border-[#3A3226]/70">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-12 pb-14 border-b border-[#3A3226]/70">
-          <div className="md:col-span-4 space-y-6">
-            <div className="flex items-center gap-3">
-              <div
-                className="w-9 h-9 shrink-0 rounded-sm border border-[#C9A66B]/70 flex items-center justify-center -rotate-3"
-                style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-              >
-                <span className="text-[#C9A66B] text-xs">A&T</span>
-              </div>
-              <div
-                style={{ fontFamily: "'Newsreader', serif" }}
-                className="text-2xl lg:text-3xl text-[#EFE7D8] tracking-[0.06em]"
-              >
-                Ashlie&apos;s Tailor
-              </div>
-            </div>
-            <p
-              className="text-xs lg:text-sm tracking-[0.15em] text-[#8E8067] uppercase max-w-[220px]"
-              style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-            >
-              Handle with care — dry clean only — do not wring
+        <div className="mt-12 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12">
+          <div className="rounded-sm bg-[#0B1220] p-7 text-[#F8F5EF] sm:p-9 lg:col-span-5">
+            <p className="text-[10px] uppercase tracking-[0.24em] text-[#C8A46A]" style={{ fontFamily: MONO }}>
+              The atelier
             </p>
-            <div className="flex flex-wrap gap-3 pt-1">
-              {['f', '▶', '◎', '𝕏', 'in'].map((label) => (
-                <a
-                  key={label}
-                  href="#social"
-                  className="w-11 h-11 rounded-sm border border-[#3A3226] flex items-center justify-center text-[#9C8F76] hover:border-[#C9A66B] hover:text-[#C9A66B] transition-colors"
-                  aria-label={`Visit us on ${label}`}
-                >
-                  <span className="text-base font-semibold leading-none">{label}</span>
-                </a>
-              ))}
+
+            <div className="mt-7 space-y-7">
+              <div className="flex items-start gap-4">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#C8A46A]" strokeWidth={1.7} />
+                <div>
+                  <p className="text-[13px] leading-relaxed">
+                    {BUSINESS.street}
+                    <br />
+                    {BUSINESS.city}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2.5">
+                    <a href={MAPS_DIRECTIONS} target="_blank" rel="noreferrer" className={BTN_GOLD}>
+                      <Navigation className="h-3.5 w-3.5" strokeWidth={1.8} />
+                      Get directions
+                    </a>
+                    <button
+                      type="button"
+                      onClick={copyAddress}
+                      className="inline-flex items-center gap-2 rounded-full border border-[#F8F5EF]/35 px-5 py-3.5 text-[11px] font-semibold uppercase tracking-[0.18em] transition-colors hover:border-[#C8A46A] hover:text-[#C8A46A]"
+                    >
+                      <Copy className="h-3.5 w-3.5" strokeWidth={1.8} />
+                      {copied ? 'Address copied' : 'Copy address'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <Phone className="mt-0.5 h-4 w-4 shrink-0 text-[#C8A46A]" strokeWidth={1.7} />
+                <div>
+                  <p className="text-[9.5px] uppercase tracking-[0.22em] text-[#F8F5EF]/55" style={{ fontFamily: MONO }}>
+                    Call the atelier
+                  </p>
+                  <a
+                    href={BUSINESS.phoneHref}
+                    className="mt-1 block text-[15px] transition-colors hover:text-[#C8A46A]"
+                  >
+                    {BUSINESS.phoneDisplay}
+                  </a>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <Mail className="mt-0.5 h-4 w-4 shrink-0 text-[#C8A46A]" strokeWidth={1.7} />
+                <div>
+                  <p className="text-[9.5px] uppercase tracking-[0.22em] text-[#F8F5EF]/55" style={{ fontFamily: MONO }}>
+                    Email
+                  </p>
+                  <a
+                    href={BUSINESS.emailHref}
+                    className="mt-1 block break-all text-[15px] transition-colors hover:text-[#C8A46A]"
+                  >
+                    {BUSINESS.email}
+                  </a>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4 border-t border-[#F8F5EF]/12 pt-7">
+                <Clock className="mt-0.5 h-4 w-4 shrink-0 text-[#C8A46A]" strokeWidth={1.7} />
+                <div>
+                  <p className="text-[9.5px] uppercase tracking-[0.22em] text-[#F8F5EF]/55" style={{ fontFamily: MONO }}>
+                    Open hours
+                  </p>
+                  <p className="mt-1 text-[15px]">{BUSINESS.hours}</p>
+                  <p className="mt-0.5 text-[13px] text-[#F8F5EF]/60">{BUSINESS.closedNote}</p>
+                </div>
+              </div>
             </div>
           </div>
+          <form onSubmit={handleSubmit} className="lg:col-span-7">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <label className="block">
+                <span
+                  className="mb-2 block text-[10px] uppercase tracking-[0.22em] text-[#8a6d38]"
+                  style={{ fontFamily: MONO }}
+                >
+                  Your name
+                </span>
+                <input
+                  type="text"
+                  required
+                  value={form.name}
+                  onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Maria Santos"
+                  className="w-full rounded-sm border border-[#0B1220]/15 bg-[#F8F5EF] px-4 py-3 text-[14px] text-[#0B1220] outline-none transition-colors placeholder:text-[#9a9486] focus:border-[#C8A46A]"
+                />
+              </label>
 
-          <FooterCol title="Discover" items={['Home', 'About', 'Blog', 'Pricing', 'Contact us']} />
-          <FooterCol title="Support" items={['Help center', 'Terms of service', 'Legal', 'Privacy policy', 'Status']} />
+              <label className="block">
+                <span
+                  className="mb-2 block text-[10px] uppercase tracking-[0.22em] text-[#8a6d38]"
+                  style={{ fontFamily: MONO }}
+                >
+                  Phone or email
+                </span>
+                <input
+                  type="text"
+                  required
+                  value={form.contact}
+                  onChange={(event) => setForm((current) => ({ ...current, contact: event.target.value }))}
+                  placeholder="+63 917 123 4567"
+                  className="w-full rounded-sm border border-[#0B1220]/15 bg-[#F8F5EF] px-4 py-3 text-[14px] text-[#0B1220] outline-none transition-colors placeholder:text-[#9a9486] focus:border-[#C8A46A]"
+                />
+              </label>
+            </div>
 
-          <div className="md:col-span-4 space-y-4">
-            <h4
-              className="text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-4"
-              style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-            >
-              Stay Up to Date
-            </h4>
-            <div className="flex items-center bg-[#1D1912] border border-[#3A3226] rounded-sm p-1">
-              <input
-                type="email"
-                placeholder="Email..."
-                value={emailSub}
-                onChange={(e) => setEmailSub(e.target.value)}
-                className="bg-transparent text-xs text-[#EFE7D8] px-3 py-2.5 focus:outline-none w-full placeholder-[#6E6452]"
+            <label className="mt-5 block">
+              <span
+                className="mb-2 block text-[10px] uppercase tracking-[0.22em] text-[#8a6d38]"
+                style={{ fontFamily: MONO }}
+              >
+                What do you need?
+              </span>
+              <select
+                value={form.need}
+                onChange={(event) => setForm((current) => ({ ...current, need: event.target.value }))}
+                className="w-full rounded-sm border border-[#0B1220]/15 bg-[#F8F5EF] px-4 py-3 text-[14px] text-[#0B1220] outline-none transition-colors focus:border-[#C8A46A]"
+              >
+                {[
+                  'A custom garment',
+                  'Alterations & repairs',
+                  'Uniforms & workwear',
+                  'Wedding party or event',
+                  'Something else',
+                ].map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="mt-5 block">
+              <span
+                className="mb-2 block text-[10px] uppercase tracking-[0.22em] text-[#8a6d38]"
+                style={{ fontFamily: MONO }}
+              >
+                Your note
+              </span>
+              <textarea
+                required
+                rows={5}
+                value={form.message}
+                onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))}
+                placeholder="Tell us about the piece — what it is, and how you would like it to fit."
+                className="w-full resize-none rounded-sm border border-[#0B1220]/15 bg-[#F8F5EF] px-4 py-3 text-[14px] leading-relaxed text-[#0B1220] outline-none transition-colors placeholder:text-[#9a9486] focus:border-[#C8A46A]"
               />
-              <button className="bg-[#C9A66B] text-[#14120D] text-[10px] tracking-[0.2em] uppercase px-4 py-2.5 font-semibold rounded-sm hover:bg-[#dcbb85] transition-colors shrink-0">
-                Subscribe
+            </label>
+
+            <div className="mt-6 flex flex-wrap items-center gap-4">
+              <button type="submit" className={BTN_INK}>
+                <Mail className="h-4 w-4" strokeWidth={1.7} />
+                Send message
+              </button>
+              <a
+                href={BUSINESS.phoneHref}
+                className="text-[11px] uppercase tracking-[0.2em] text-[#8a6d38] underline decoration-[#C8A46A] underline-offset-4 transition-colors hover:text-[#0B1220]"
+                style={{ fontFamily: MONO }}
+              >
+                Or call {BUSINESS.phoneDisplay}
+              </a>
+            </div>
+
+            {sent && (
+              <p className="atelier-fade mt-5 rounded-sm border border-[#C8A46A]/45 bg-[#F8F5EF] px-5 py-4 text-[13px] leading-relaxed text-[#2B2B2B]">
+                Your mail app should now be open with the note ready to send. If it did not open,{' '}
+                <a
+                  href={mailtoHref}
+                  className="text-[#8a6d38] underline decoration-[#C8A46A] underline-offset-4"
+                >
+                  email us directly
+                </a>{' '}
+                or simply walk in during open hours.
+              </p>
+            )}
+
+          </form>
+
+        </div>
+      </div>
+    </section>
+  );
+}
+/* ---------------------------------------------------------------------------
+   FOOTER — real details only: address, phone, email, hours and section links.
+--------------------------------------------------------------------------- */
+function SiteFooter({ onClientLogin }: { onClientLogin: () => void }) {
+  return (
+    <footer className="bg-[#0B1220] text-[#F8F5EF]">
+      <div className="mx-auto w-full max-w-[1400px] px-5 py-14 sm:px-8 lg:py-16">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
+          <div className="lg:col-span-5">
+            <div className="flex items-center gap-3">
+              <span
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-[#C8A46A] text-[11px] font-semibold text-[#C8A46A]"
+                style={{ fontFamily: MONO }}
+              >
+                AT
+              </span>
+              <span className="text-[17px]" style={{ fontFamily: SERIF, fontWeight: 600 }}>
+                {BUSINESS.name}
+              </span>
+            </div>
+            <p className="mt-5 max-w-sm text-[13.5px] leading-relaxed text-[#F8F5EF]/70">
+              A walk-in tailoring atelier on Thread Street. Measured, cut and finished in house — no
+              appointment required.
+            </p>
+            <p
+              className="mt-5 text-[11px] uppercase tracking-[0.2em] text-[#F8F5EF]/55"
+              style={{ fontFamily: MONO }}
+            >
+              {BUSINESS.hours}
+              <br />
+              {BUSINESS.closedNote}
+            </p>
+          </div>
+
+          <div className="lg:col-span-3">
+            <p className="text-[10px] uppercase tracking-[0.24em] text-[#C8A46A]" style={{ fontFamily: MONO }}>
+              Explore
+            </p>
+            <ul className="mt-5 space-y-3">
+              {NAV_ITEMS.map((item) => (
+                <li key={item.href}>
+                  <a
+                    href={item.href}
+                    className="text-[13.5px] text-[#F8F5EF]/75 transition-colors hover:text-[#C8A46A]"
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="lg:col-span-4">
+            <p className="text-[10px] uppercase tracking-[0.24em] text-[#C8A46A]" style={{ fontFamily: MONO }}>
+              Reach the atelier
+            </p>
+            <ul className="mt-5 space-y-4">
+              <li>
+                <a
+                  href={MAPS_PLACE}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-start gap-3 text-[13.5px] text-[#F8F5EF]/75 transition-colors hover:text-[#C8A46A]"
+                >
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#C8A46A]" strokeWidth={1.7} />
+                  {BUSINESS.street}, {BUSINESS.city}
+                </a>
+              </li>
+              <li>
+                <a
+                  href={BUSINESS.phoneHref}
+                  className="flex items-center gap-3 text-[13.5px] text-[#F8F5EF]/75 transition-colors hover:text-[#C8A46A]"
+                >
+                  <Phone className="h-4 w-4 shrink-0 text-[#C8A46A]" strokeWidth={1.7} />
+                  {BUSINESS.phoneDisplay}
+                </a>
+              </li>
+              <li>
+                <a
+                  href={BUSINESS.emailHref}
+                  className="flex items-center gap-3 break-all text-[13.5px] text-[#F8F5EF]/75 transition-colors hover:text-[#C8A46A]"
+                >
+                  <Mail className="h-4 w-4 shrink-0 text-[#C8A46A]" strokeWidth={1.7} />
+                  {BUSINESS.email}
+                </a>
+              </li>
+            </ul>
+
+            <div className="mt-7 flex flex-wrap items-center gap-4">
+              <a href={MAPS_DIRECTIONS} target="_blank" rel="noreferrer" className={BTN_GHOST_LIGHT}>
+                <Navigation className="h-3.5 w-3.5" strokeWidth={1.8} />
+                Directions
+              </a>
+              <button
+                type="button"
+                onClick={onClientLogin}
+                className="text-[11px] uppercase tracking-[0.18em] text-[#F8F5EF]/70 underline decoration-[#C8A46A] underline-offset-4 transition-colors hover:text-[#C8A46A]"
+                style={{ fontFamily: MONO }}
+              >
+                Client login
               </button>
             </div>
           </div>
         </div>
 
         <div
-          className="max-w-7xl mx-auto pt-8 flex justify-center text-[10px] text-[#6E6452] tracking-[0.25em] uppercase"
-          style={{ fontFamily: "'IBM Plex Mono', monospace" }}
+          className="mt-12 flex flex-col gap-3 border-t border-[#F8F5EF]/12 pt-7 text-[10px] uppercase tracking-[0.2em] text-[#F8F5EF]/50 sm:flex-row sm:items-center sm:justify-between"
+          style={{ fontFamily: MONO }}
         >
-          All rights reserved · ©2026 Ashlie&apos;s Tailor
-        </div>
-      </footer>
-    </div>
-  );
-}
-
-function MeasurementDiagram() {
-  return (
-    <div className="group relative aspect-[2/1] w-full max-w-[1100px] mx-auto overflow-hidden rounded-sm border border-[#3A3226] bg-[#AAA59E] lg:aspect-[16/9]">
-      <img
-        src="/school-uniforms.png"
-        alt="Male and female school uniforms"
-        className="h-full w-full object-cover object-top transition-transform duration-700 ease-out group-hover:scale-[1.05]"
-        style={{ animation: 'fadeSlideIn 700ms ease-out both' }}
-      />
-      <div className="pointer-events-none absolute inset-2 border border-white/40" />
-
-      <div className="pointer-events-none absolute inset-0 font-mono text-[6px] font-medium tracking-[0.12em] text-[#A64F3D] sm:text-[8px]">
-        <div className="absolute left-[20%] top-[31%] h-px w-[16%] origin-left bg-[#A64F3D]" style={{ animation: 'revealMeasure 850ms 350ms ease-out both' }} />
-        <span className="absolute left-[20%] top-[28%] rounded bg-[#16130F]/80 px-1 py-0.5 text-[#F8F1E3]" style={{ animation: 'fadeSlideIn 500ms 1.1s ease-out both' }}>CHEST</span>
-        <div className="absolute left-[21%] top-[49%] h-px w-[14%] origin-left bg-[#A64F3D]" style={{ animation: 'revealMeasure 850ms 650ms ease-out both' }} />
-        <span className="absolute left-[21%] top-[51%] rounded bg-[#16130F]/80 px-1 py-0.5 text-[#F8F1E3]" style={{ animation: 'fadeSlideIn 500ms 1.35s ease-out both' }}>WAIST</span>
-        <div className="absolute left-[39%] top-[17%] h-[66%] w-px origin-top bg-[#C9A66B]" style={{ animation: 'revealMeasureY 1s 900ms ease-out both' }} />
-        <span className="absolute left-[40%] top-[17%] bg-[#16130F]/80 px-1 py-0.5 text-[#EFD9A0]" style={{ animation: 'fadeSlideIn 500ms 1.75s ease-out both' }}>HEIGHT</span>
-
-        <div className="absolute left-[65%] top-[31%] h-px w-[16%] origin-left bg-[#A64F3D]" style={{ animation: 'revealMeasure 850ms 500ms ease-out both' }} />
-        <span className="absolute left-[66%] top-[28%] rounded bg-[#16130F]/80 px-1 py-0.5 text-[#F8F1E3]" style={{ animation: 'fadeSlideIn 500ms 1.25s ease-out both' }}>BUST</span>
-        <div className="absolute left-[66%] top-[47%] h-px w-[15%] origin-left bg-[#A64F3D]" style={{ animation: 'revealMeasure 850ms 800ms ease-out both' }} />
-        <span className="absolute left-[66%] top-[49%] rounded bg-[#16130F]/80 px-1 py-0.5 text-[#F8F1E3]" style={{ animation: 'fadeSlideIn 500ms 1.5s ease-out both' }}>WAIST</span>
-        <div className="absolute left-[84%] top-[48%] h-[33%] w-px origin-top bg-[#C9A66B]" style={{ animation: 'revealMeasureY 1s 1.1s ease-out both' }} />
-        <span className="absolute left-[85%] top-[64%] bg-[#16130F]/80 px-1 py-0.5 text-[#EFD9A0]" style={{ animation: 'fadeSlideIn 500ms 1.95s ease-out both' }}>SKIRT</span>
-      </div>
-      <div
-        className="absolute bottom-3 left-3 bg-[#14120D]/90 px-2 py-1 text-[7px] uppercase tracking-[0.16em] text-[#EFD9A0] sm:bottom-4 sm:left-4 sm:px-3 sm:py-2 sm:text-[9px]"
-        style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-      >
-        Uniform measurement guide
-      </div>
-    </div>
-  );
-}
-
-interface SplitFeatureProps {
-  tag: string;
-  title: string;
-  body: string;
-  img: string;
-  alt: string;
-  reverse?: boolean;
-}
-
-function SplitFeature({ tag, title, body, img, alt, reverse = false }: SplitFeatureProps) {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-20 items-center py-20 lg:py-32">
-      <div className={`lg:col-span-6 ${reverse ? 'lg:order-2' : ''}`}>
-        <div className="relative w-full h-[360px] sm:h-[480px] lg:h-[620px] overflow-hidden rounded-sm">
-          <img src={img} alt={alt} className="w-full h-full object-cover grayscale-[10%]" />
+          <span>
+            © {new Date().getFullYear()} {BUSINESS.name} · Walk-in tailoring atelier
+          </span>
+          <span>{BUSINESS.addressOneLine}</span>
         </div>
       </div>
-
-      <div className={`lg:col-span-6 space-y-5 ${reverse ? 'lg:order-1' : ''} ${reverse ? 'lg:pr-8' : 'lg:pl-8'}`}>
-        <Tag>{tag}</Tag>
-        <h2
-          className="text-4xl sm:text-5xl lg:text-6xl leading-tight"
-          style={{ fontFamily: "'Newsreader', serif", fontWeight: 500 }}
-        >
-          {title}
-        </h2>
-        <p className="text-base lg:text-lg text-[#B8AC94] font-light leading-relaxed max-w-xl">{body}</p>
-      </div>
-    </div>
+    </footer>
   );
 }
 
-interface ServiceCardProps {
-  title: string;
-  body: string;
-  image: string;
-  alt: string;
-}
 
-function ServiceCard({ title, body, image, alt }: ServiceCardProps) {
-  const navigate = useNavigate();
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [isVisible, setIsVisible] = useState(false);
 
-  useEffect(() => {
-    const card = cardRef.current;
-    if (!card) return;
 
-    const observer = new IntersectionObserver(
-      ([entry]) => entry.isIntersecting && setIsVisible(true),
-      { threshold: 0.15 },
-    );
-    observer.observe(card);
-    return () => observer.disconnect();
-  }, []);
 
-  return (
-    <div
-      ref={cardRef}
-      className={`group relative isolate min-h-[400px] overflow-hidden rounded-2xl border border-white/15 bg-[#1D1912] shadow-[0_18px_55px_rgba(0,0,0,0.28)] transition-all duration-700 hover:-translate-y-1 hover:border-[#C9A66B]/60 hover:shadow-[0_24px_65px_rgba(0,0,0,0.42)] ${
-        isVisible ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'
-      }`}
-    >
-      <img
-        src={image}
-        alt={alt}
-        className="absolute inset-0 -z-20 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
-        loading="lazy"
-      />
-      <div className="absolute inset-0 -z-10 bg-gradient-to-t from-[#100e09] via-[#100e09]/75 to-[#100e09]/10" />
-      <div className="relative flex min-h-[400px] flex-col justify-end p-6 sm:p-7">
-        <div className="mb-4 inline-flex w-fit items-center gap-2 rounded-full border border-[#E9D6AD]/35 bg-[#16130f]/45 px-3 py-1.5 text-[9px] font-medium uppercase tracking-[0.22em] text-[#F1DEB7] backdrop-blur-md">
-          Atelier Service
-        </div>
-        <h3 className="max-w-[16ch] text-2xl lg:text-3xl leading-tight text-[#F8F1E3]" style={{ fontFamily: "'Newsreader', serif", fontWeight: 500 }}>
-          {title}
-        </h3>
-        <p className="mt-3 max-w-md text-sm leading-relaxed text-[#E8DECA]/85">{body}</p>
-        <button
-          type="button"
-          onClick={() => navigate('/login')}
-          className="mt-6 w-fit rounded-full border border-[#C9A66B] bg-[#C9A66B]/15 px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#F4D99D] backdrop-blur-md transition-all duration-300 hover:bg-[#C9A66B] hover:text-[#16130f]"
-        >
-          Available Now
-        </button>
-      </div>
-    </div>
-  );
-}
 
-function FooterCol({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div className="md:col-span-2 space-y-3">
-      <h4
-        className="text-[10px] tracking-[0.25em] text-[#6E6452] uppercase mb-4"
-        style={{ fontFamily: "'IBM Plex Mono', monospace" }}
-      >
-        {title}
-      </h4>
-      <ul className="space-y-2 text-[13px] font-light">
-        {items.map((item) => (
-          <li key={item}>
-            <a href={`#${item.toLowerCase().replace(/\s+/g, '-')}`} className="hover:text-[#EFE7D8] transition-colors">
-              {item}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
+
+
+
+
+

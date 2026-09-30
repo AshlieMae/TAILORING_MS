@@ -13,6 +13,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
 } from 'recharts';
+import { OrderGarmentImage } from '../components/OrderGarmentImage';
 
 const TOKENS = {
   ink: '#262420', inkSoft: '#55503F', paper: '#FBF9F2', paperDim: '#F4F1E6',
@@ -707,9 +708,9 @@ function TailorJobCardsView() {
                   <Label>{card.id}</Label>
                   <PriorityPill priority={card.priority} />
                 </div>
-                <h2 className="mt-3.5 text-[19px] font-semibold leading-tight text-[#262420]" style={{ fontFamily: "'Fraunces', serif" }}>{card.customer}</h2>
+                <div className="mt-3.5 flex gap-3"><div className="h-14 w-14 shrink-0 overflow-hidden rounded-[3px] bg-[#F4F1E6]"><OrderGarmentImage order={{ ...card, garment: card.garmentType }} className="h-full w-full" /></div><div><h2 className="text-[19px] font-semibold leading-tight text-[#262420]" style={{ fontFamily: "'Fraunces', serif" }}>{card.customer}</h2>
                 <p className="mt-1 text-sm text-[#6D6A60]">{card.garmentType}{card.quantity > 1 ? ` · ×${card.quantity}` : ''}</p>
-                <div className="mt-4"><TapeDivider /></div>
+                </div></div><div className="mt-4"><TapeDivider /></div>
                 <div className="mt-4">
                   <div className="flex items-center justify-between">
                     <Label>Stage</Label>
@@ -824,6 +825,7 @@ function JobCardDetail({ jobCardId, onClose, onSaved, onStageChange }: { jobCard
           <div className="grid gap-5 lg:grid-cols-12">
             {/* ------------------ LEFT: JOB INFORMATION ------------------ */}
             <div className="jc-anim min-w-0 space-y-4 lg:col-span-3" style={{ animationDelay: '0.06s' }}>
+              <div className="h-44 overflow-hidden rounded-[4px] border border-[#E9E5D4] bg-[#F4F1E6]"><OrderGarmentImage order={{ ...job, garment: job.garmentType, reference_image: job.reference_image ?? job.referenceImage }} className="h-full w-full" /></div>
               <JobInformationCard job={job} locked={locked} productionNotes={productionNotes} />
             </div>
 

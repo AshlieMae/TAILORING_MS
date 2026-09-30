@@ -27,7 +27,7 @@
     Tag,
     X,
   } from 'lucide-react';
-  import frontDeskApi, { type CatalogItem, type RateCard } from '../../services/frontDeskApi';
+  import frontDeskApi, { RATE_CARD_UPDATED_EVENT, type CatalogItem, type RateCard } from '../../services/frontDeskApi';
   import { type ImageFraming } from '../utils/imageFraming';
   import { formatPHP } from '../utils/currency';
   import { CatalogImage } from '../utils/CatalogImage';
@@ -61,7 +61,7 @@
     );
   }
 
-  /** Base price for a garment type from the server rate card (null = not priced). */
+  /** Starting Price for a garment type from the server Rate Card (null = not priced). */
 function rateBaseFor(rateCard: RateCard | null | undefined, garmentType: string): number | null {
   if (!rateCard) return null;
   const hit = rateCard.garment_types.find((row) => row.garment_type === garmentType);
@@ -69,6 +69,17 @@ function rateBaseFor(rateCard: RateCard | null | undefined, garmentType: string)
 }
 
 const peso = (amount: number) => formatPHP(amount);
+
+/**
+ * The one way a Rate Card figure is worded anywhere in the counter UI:
+ * "Starting at ₱X" when the rule exists, and the no-Rate-Card copy when it does
+ * not. The catalog never invents a price.
+ */
+function ratePriceLabel(ratePrice: number | null | undefined): string {
+  return ratePrice !== null && ratePrice !== undefined && ratePrice > 0
+    ? `Starting at ${peso(ratePrice)}`
+    : 'No Starting Price set — add this garment to the Rate Card.';
+}
 
   /** Catalog image with the shop's garment illustration as the fallback, rendered
       through the shared framing contract (Admin Live Preview → everywhere). */
@@ -136,6 +147,27 @@ const peso = (amount: number) => formatPHP(amount);
         .finally(() => { if (!cancelled) setLoading(false); });
       return () => { cancelled = true; };
     }, [reloadKey]);
+
+    // The Admin Rate Card can be edited while this counter page is open. The
+    // server is authoritative (the engine re-reads pricing_rules on every
+    // request), so this only pulls the new card in to keep the Pricing Guide
+    // and the "from" prices truthful without a page refresh.
+    useEffect(() => {
+      const refreshRateCard = () => {
+        frontDeskApi.getRateCard()
+          .then((card) => setRateCard(card))
+          .catch(() => { /* keep the last good card on a blip */ });
+      };
+      const onStorage = (event: StorageEvent) => {
+        if (event.key === 'rateCardUpdatedAt') refreshRateCard();
+      };
+      window.addEventListener(RATE_CARD_UPDATED_EVENT, refreshRateCard);
+      window.addEventListener('storage', onStorage);
+      return () => {
+        window.removeEventListener(RATE_CARD_UPDATED_EVENT, refreshRateCard);
+        window.removeEventListener('storage', onStorage);
+      };
+    }, []);
 
     const cards = useMemo(
       () => buildCatalogCards(items, fabrics.map((f) => f.fabricName)),
@@ -324,7 +356,7 @@ const peso = (amount: number) => formatPHP(amount);
             {groupForCategory(card.category)}
           </span>
           <span className="absolute right-2.5 top-2.5 rounded-full bg-[#2A211D]/88 px-2.5 py-1 text-[10px] font-semibold text-[#F5EAD5] shadow" style={{ fontFamily: "'Space Mono', monospace" }}>
-            {card.priceLabel}
+            {card.startingPrice > 0 ? card.priceLabel : 'No Starting Price'}
           </span>
         </div>
 
@@ -333,6 +365,12 @@ const peso = (amount: number) => formatPHP(amount);
           <p className="mt-0.5 text-[10.5px] uppercase tracking-[0.12em] text-[#A3958B]" style={{ fontFamily: "'Space Mono', monospace" }}>
             {card.orderCategory} · {card.garmentType}
           </p>
+          {/* No Rate Card rule = no price to show. The catalog never invents one. */}
+          {!isCustom && card.startingPrice <= 0 && (
+            <p className="mt-2 rounded-lg border border-[#E5D5AE] bg-[#FFFBEE] px-2.5 py-1.5 text-[10.5px] font-medium leading-relaxed text-[#8A6618]" role="status">
+              {card.priceLabel}
+            </p>
+          )}
           {!compact && card.description && (
             <p className="mt-2 line-clamp-2 text-[12px] leading-relaxed text-[#766A62]">{card.description}</p>
           )}
@@ -484,17 +522,22 @@ const peso = (amount: number) => formatPHP(amount);
                 <p className="mt-2 text-[10.5px] leading-relaxed text-[#A3958B]">
                   Design reference shown to the customer at the counter. The garment, style and fabric recorded on the job card come from live inventory — nothing is typed by hand.
                 </p>
-                <div className="mt-4 rounded-xl border border-[#ECE2D3] bg-white p-4">
-                  <Label>Illustration reference</Label>
-                  <div className="mt-2 flex items-center gap-4">
-                    <div className="flex h-24 w-20 items-center justify-center rounded-lg border border-[#E2D7C7] bg-[#FCFAF7]">
-                      <GarmentIllustration type={card.garmentType} className="h-20 w-16" />
+                {/* Only shown when this card has no real photo. When a catalog
+                    photo exists it IS the reference the customer sees — never a
+                    generated graphic. */}
+                {!card.image && (
+                  <div className="mt-4 rounded-xl border border-[#ECE2D3] bg-white p-4">
+                    <Label>Pattern reference</Label>
+                    <div className="mt-2 flex items-center gap-4">
+                      <div className="flex h-24 w-20 items-center justify-center rounded-lg border border-[#E2D7C7] bg-[#FCFAF7]">
+                        <GarmentIllustration type={card.garmentType} className="h-20 w-16" />
+                      </div>
+                      <p className="text-[11.5px] leading-relaxed text-[#766A62]">
+                        The workshop cuts from the <strong className="text-[#2A211D]">{card.garmentType}</strong> pattern block. Pricing, measurement points and the production workflow all follow this garment type.
+                      </p>
                     </div>
-                    <p className="text-[11.5px] leading-relaxed text-[#766A62]">
-                      The workshop cuts from the <strong className="text-[#2A211D]">{card.garmentType}</strong> pattern block. Pricing, measurement points and the production workflow all follow this garment type.
-                    </p>
                   </div>
-                </div>
+                )}
               </div>
               <div className="space-y-5">
                 {card.description && (
@@ -506,20 +549,26 @@ const peso = (amount: number) => formatPHP(amount);
                   <dl className="mt-3 space-y-2.5">
                     <div className="flex items-baseline justify-between gap-4">
                       <dt className="text-[11.5px] text-[#766A62]">Starting Price</dt>
-                      <dd className="text-[15px] font-semibold tabular-nums text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(card.startingPrice)}</dd>
+                      <dd className="text-right text-[15px] font-semibold tabular-nums text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>
+                        {card.startingPrice > 0 ? peso(card.startingPrice) : card.priceLabel}
+                      </dd>
                     </div>
-                    <div className="flex items-baseline justify-between gap-4">
-                      <dt className="text-[11.5px] text-[#766A62]">Labor Estimate</dt>
-                      <dd className="text-[13px] font-medium tabular-nums text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(Math.round(card.startingPrice * 0.6))}</dd>
-                    </div>
-                    <div className="flex items-baseline justify-between gap-4">
-                      <dt className="text-[11.5px] text-[#766A62]">Material Estimate</dt>
-                      <dd className="text-[13px] font-medium tabular-nums text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(Math.round(card.startingPrice * 0.3))}</dd>
-                    </div>
-                    <div className="flex items-baseline justify-between gap-4 border-t border-dashed border-[#E2D7C7] pt-2.5">
-                      <dt className="text-[11.5px] font-medium text-[#766A62]">Suggested Deposit (50%)</dt>
-                      <dd className="text-[15px] font-semibold tabular-nums text-[#8C6F3E]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(Math.round(card.startingPrice * 0.5))}</dd>
-                    </div>
+                    {card.startingPrice > 0 && (
+                      <>
+                        <div className="flex items-baseline justify-between gap-4">
+                          <dt className="text-[11.5px] text-[#766A62]">Labor Estimate</dt>
+                          <dd className="text-[13px] font-medium tabular-nums text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(Math.round(card.startingPrice * 0.6))}</dd>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-4">
+                          <dt className="text-[11.5px] text-[#766A62]">Material Estimate</dt>
+                          <dd className="text-[13px] font-medium tabular-nums text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(Math.round(card.startingPrice * 0.3))}</dd>
+                        </div>
+                        <div className="flex items-baseline justify-between gap-4 border-t border-dashed border-[#E2D7C7] pt-2.5">
+                          <dt className="text-[11.5px] font-medium text-[#766A62]">Suggested Deposit (50%)</dt>
+                          <dd className="text-[15px] font-semibold tabular-nums text-[#8C6F3E]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(Math.round(card.startingPrice * 0.5))}</dd>
+                        </div>
+                      </>
+                    )}
                   </dl>
                   <p className="mt-2.5 text-[10.5px] leading-relaxed text-[#A3958B]">Indicative only — the job card total is computed by the shop rate card when the order is saved.</p>
                 </div>
@@ -632,7 +681,7 @@ const peso = (amount: number) => formatPHP(amount);
               <Label>Step 2 — garment selection</Label>
               <h2 className="mt-1 text-2xl leading-tight text-[#2A211D] sm:text-3xl" style={{ fontFamily: "'DM Serif Display', serif" }}>{title}</h2>
               <p className="mt-1 text-[12px] leading-relaxed text-[#766A62]">
-                Browse the shop's garments, uniform types, styles and fabrics with the customer, then pick the design. The intake form fills in the garment type, style, fabric suggestion and base price.
+                Browse the shop's garments, uniform types, styles and fabrics with the customer, then pick the design. The intake form fills in the garment type, style, fabric suggestion and Starting Price.
               </p>
             </div>
             <button onClick={onClose} aria-label="Close garment catalog" className="flex-shrink-0 rounded-full p-1.5 text-[#A3958B] transition-colors hover:bg-[#F2ECE1] hover:text-[#2A211D]">
@@ -1002,33 +1051,43 @@ const peso = (amount: number) => formatPHP(amount);
             <dl className="mt-3 space-y-2.5">
               <div className="flex items-baseline justify-between gap-4">
                 <dt className="text-[11.5px] text-[#766A62]">Starting Price</dt>
-                <dd className="text-[15px] font-semibold tabular-nums text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(card.startingPrice)}</dd>
+                <dd className="text-right text-[15px] font-semibold tabular-nums text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>
+                  {card.startingPrice > 0 ? peso(card.startingPrice) : card.priceLabel}
+                </dd>
               </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-[11.5px] text-[#766A62]">Labor Estimate</dt>
-                <dd className="text-[13px] font-medium tabular-nums text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(Math.round(card.startingPrice * 0.6))}</dd>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-[11.5px] text-[#766A62]">Material Estimate</dt>
-                <dd className="text-[13px] font-medium tabular-nums text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(Math.round(card.startingPrice * 0.3))}</dd>
-              </div>
-              <div className="flex items-baseline justify-between gap-4 border-t border-dashed border-[#E2D7C7] pt-2.5">
-                <dt className="text-[11.5px] font-medium text-[#766A62]">Suggested Deposit (50%)</dt>
-                <dd className="text-[15px] font-semibold tabular-nums text-[#8C6F3E]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(Math.round(card.startingPrice * 0.5))}</dd>
-              </div>
+              {card.startingPrice > 0 && (
+                <>
+                  <div className="flex items-baseline justify-between gap-4">
+                    <dt className="text-[11.5px] text-[#766A62]">Labor Estimate</dt>
+                    <dd className="text-[13px] font-medium tabular-nums text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(Math.round(card.startingPrice * 0.6))}</dd>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-4">
+                    <dt className="text-[11.5px] text-[#766A62]">Material Estimate</dt>
+                    <dd className="text-[13px] font-medium tabular-nums text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(Math.round(card.startingPrice * 0.3))}</dd>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-4 border-t border-dashed border-[#E2D7C7] pt-2.5">
+                    <dt className="text-[11.5px] font-medium text-[#766A62]">Suggested Deposit (50%)</dt>
+                    <dd className="text-[15px] font-semibold tabular-nums text-[#8C6F3E]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(Math.round(card.startingPrice * 0.5))}</dd>
+                  </div>
+                </>
+              )}
             </dl>
             <p className="mt-2.5 text-[10.5px] leading-relaxed text-[#A3958B]">Indicative only — the job card total is computed by the shop rate card when the order is saved.</p>
           </div>
 
-          <div className="rounded-xl border border-[#ECE2D3] bg-[#FCFAF7] p-3">
-            <Label>Illustration reference</Label>
-            <div className="mt-2 flex items-center gap-3">
-              <div className="flex h-20 w-16 items-center justify-center rounded-lg border border-[#E2D7C7] bg-white">
-                <GarmentIllustration type={card.garmentType} className="h-16 w-12" />
+          {/* Same rule as the detail panel: a real catalog photo replaces the
+              generated pattern graphic entirely. */}
+          {!card.image && (
+            <div className="rounded-xl border border-[#ECE2D3] bg-[#FCFAF7] p-3">
+              <Label>Pattern reference</Label>
+              <div className="mt-2 flex items-center gap-3">
+                <div className="flex h-20 w-16 items-center justify-center rounded-lg border border-[#E2D7C7] bg-white">
+                  <GarmentIllustration type={card.garmentType} className="h-16 w-12" />
+                </div>
+                <p className="text-[11px] leading-relaxed text-[#766A62]">Cut from the <strong className="text-[#2A211D]">{card.garmentType}</strong> pattern block.</p>
               </div>
-              <p className="text-[11px] leading-relaxed text-[#766A62]">Cut from the <strong className="text-[#2A211D]">{card.garmentType}</strong> pattern block.</p>
             </div>
-          </div>
+          )}
 
           {onStartOrder && (
             <button
@@ -1051,7 +1110,8 @@ const peso = (amount: number) => formatPHP(amount);
               : `The ${card.name} follows the shop's ${card.garmentType} pattern block. Confirm collar, sleeves, embroidery, colour and fabric at intake Step 3; special requests go in the notes field and onto the job card.`}
           </p>
           <p className="mt-2 flex items-center gap-1.5 text-[11px] text-[#A3958B]">
-            <Clock className="h-3.5 w-3.5" strokeWidth={1.8} /> Estimated production time · {card.productionTime} · deposit typically {peso(Math.round(card.startingPrice * 0.5))} at the counter
+            <Clock className="h-3.5 w-3.5" strokeWidth={1.8} /> Estimated production time · {card.productionTime}
+            {card.startingPrice > 0 ? ` · deposit typically ${peso(Math.round(card.startingPrice * 0.5))} at the counter` : ''}
           </p>
         </div>
 
@@ -1100,7 +1160,7 @@ const peso = (amount: number) => formatPHP(amount);
               <div className="min-w-0">
                 <p className="truncate text-[13.5px] font-semibold text-[#2A211D]">{type}</p>
                 <p className="mt-0.5 text-[11px] text-[#8C6F3E]" style={{ fontFamily: "'Space Mono', monospace" }}>
-                  {rateBaseFor(rateCard, type) !== null ? `from ${peso(rateBaseFor(rateCard, type) as number)}` : 'priced at intake'}
+                  {ratePriceLabel(rateBaseFor(rateCard, type))}
                 </p>
               </div>
             </div>
@@ -1111,7 +1171,7 @@ const peso = (amount: number) => formatPHP(amount);
               <button
                 type="button"
                 disabled={!onStartOrder}
-                onClick={() => onStartOrder?.(designForGarmentType(type))}
+                onClick={() => onStartOrder?.(designForGarmentType(type, ratePriceLabel(rateBaseFor(rateCard, type))))}
                 className="inline-flex items-center gap-1 rounded-lg border border-[#E2D7C7] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#5E5048] transition-colors hover:bg-[#F2ECE1] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Start order <ArrowRight className="h-3 w-3" />
@@ -1176,9 +1236,9 @@ const peso = (amount: number) => formatPHP(amount);
                     <dd className="truncate font-medium text-[#2A211D]">{fabric.tone || '—'}</dd>
                   </div>
                   <div className="flex items-center justify-between">
-                    <dt className="text-[#766A62]">Price</dt>
+                    <dt className="text-[#766A62]">Fabric price</dt>
                     <dd className="font-medium text-[#8C6F3E]" style={{ fontFamily: "'Space Mono', monospace" }}>
-                      {price !== undefined && price !== null ? `${peso(Number(price))} / ${fabric.unit}` : 'Priced at intake'}
+                      {price !== undefined && price !== null ? `${peso(Number(price))} / ${fabric.unit}` : '—'}
                     </dd>
                   </div>
                 </dl>
@@ -1328,7 +1388,7 @@ const peso = (amount: number) => formatPHP(amount);
                 <button
                   type="button"
                   disabled={!onStartOrder}
-                  onClick={() => onStartOrder?.(designForGarmentType(row.garment_type, `From ${formatPHP(base)}`))}
+                  onClick={() => onStartOrder?.(designForGarmentType(row.garment_type, ratePriceLabel(base > 0 ? base : null)))}
                   className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#2A211D] px-3 py-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#FAF7F2] shadow-sm transition-colors hover:bg-[#3D312B] disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Scissors className="h-3.5 w-3.5" /> Start order
@@ -1411,11 +1471,15 @@ const peso = (amount: number) => formatPHP(amount);
             </div>
 
             <div className="rounded-xl border border-[#E8DFD3] bg-white p-4">
-              <div className="flex items-center justify-between">
-                <Label>Price</Label>
-                <span className="text-[17px] font-semibold text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>{peso(card.startingPrice)}</span>
+              <div className="flex items-center justify-between gap-3">
+                <Label>Starting Price</Label>
+                <span className="text-right text-[17px] font-semibold text-[#2A211D]" style={{ fontFamily: "'Space Mono', monospace" }}>
+                  {card.startingPrice > 0 ? peso(card.startingPrice) : 'Not set'}
+                </span>
               </div>
-              <p className="mt-1 text-[10.5px] text-[#A3958B]">{card.priceLabel} · deposit typically {peso(Math.round(card.startingPrice * 0.5))}</p>
+              <p className="mt-1 text-[10.5px] text-[#A3958B]">
+                {card.startingPrice > 0 ? `${card.priceLabel} · deposit typically ${peso(Math.round(card.startingPrice * 0.5))}` : card.priceLabel}
+              </p>
               <p className="mt-3 flex items-center gap-1.5 text-[11.5px] font-semibold text-[#8C6F3E]">
                 <Clock className="h-3.5 w-3.5" strokeWidth={1.8} /> Estimated production time · {card.productionTime}
               </p>

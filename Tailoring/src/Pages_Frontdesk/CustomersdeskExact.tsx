@@ -3,6 +3,7 @@ import { useMemo, useState, useEffect, useCallback } from 'react';
 import { ChevronRight, Mail, MapPin, Phone, Ruler, Search, UserPlus, X, Loader2, Pencil, Check } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
 import frontDeskApi, { type Customer } from '../../services/frontDeskApi';
+import { OrderGarmentImage, type OrderImageSource } from '../components/OrderGarmentImage';
 // Pages_Frontdesk/CustomersdeskExact.tsx
 import { RegisterCustomerModal, type NewCustomerForm } from '../pages/FrontDesk/FrontDeskModals';
 
@@ -28,7 +29,7 @@ function OrderPhotoModal({
   order,
   onClose,
 }: {
-  order: { id: string; garment: string; stage: string; image?: string };
+  order: OrderImageSource & { id: string; garment: string; stage: string };
   onClose: () => void;
 }) {
   return (
@@ -48,20 +49,19 @@ function OrderPhotoModal({
         </div>
 
         <div className="px-7 pb-7">
-          {order.image ? (
-            <div className="rounded-lg border border-[#E8DFD3] bg-[#FCFAF7] p-2">
-              <img
-                src={order.image}
+          {/* One shared renderer: the catalog photo chosen at intake, else this
+              job card's own reference upload, else the shared placeholder. A
+              dead or mislabelled link falls back inside the component, so a
+              document is never pushed into an <img>. */}
+          <div className="rounded-lg border border-[#E8DFD3] bg-[#FCFAF7] p-2">
+            <div className="flex h-[52vh] items-center justify-center overflow-hidden">
+              <OrderGarmentImage
+                order={order}
                 alt={`${order.garment} — ${order.id}`}
-                className="mx-auto max-h-[52vh] w-auto rounded-md object-contain"
+                className="h-full w-full rounded-md"
               />
             </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-[#E2D7C7] bg-[#FCFAF7] py-12 text-center">
-              <div className="text-3xl opacity-60" style={{ fontFamily: "'DM Serif Display', serif" }}>{order.garment[0] || '?'}</div>
-              <p className="mt-3 text-sm text-[#766A62]">No photo uploaded for this job card.</p>
-            </div>
-          )}
+          </div>
 
           <div className="mt-4 flex items-center justify-between border-t border-[#E8DFD3] pt-4">
             <MonoLabel>Stage</MonoLabel>
@@ -75,11 +75,11 @@ function OrderPhotoModal({
 
 function CustomerDetails({ customer, onClose, onUpdated }: { customer: Customer; onClose: () => void; onUpdated?: (c: Customer) => void }) {
   const [measurements, setMeasurements] = useState<MeasurementRow[]>([]);
-  const [recentOrders, setRecentOrders] = useState<{ id: string; garment: string; stage: string; image?: string }[]>([]);
+  const [recentOrders, setRecentOrders] = useState<(OrderImageSource & { id: string; garment: string; stage: string })[]>([]);
   const [barsIn, setBarsIn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [viewingOrder, setViewingOrder] = useState<{ id: string; garment: string; stage: string; image?: string } | null>(null);
+  const [viewingOrder, setViewingOrder] = useState<(OrderImageSource & { id: string; garment: string; stage: string }) | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,7 +97,21 @@ function CustomerDetails({ customer, onClose, onUpdated }: { customer: Customer;
           allOrders
             .filter((o) => String(o.customer_id) === String(customer.customer_id))
             .slice(0, 4)
-            .map((o) => ({ id: o.job_card_id, garment: o.garment_type, stage: o.production_status, image: o.reference_image || undefined }))
+            .map((o) => ({
+              id: o.job_card_id,
+              garment: o.garment_type,
+              stage: o.production_status,
+              // Everything the shared image resolver needs: the catalog link
+              // (with the framing the Admin saved) and the bespoke upload.
+              catalog_item_id: o.catalog_item_id,
+              order_type: o.order_type,
+              catalog_image: o.catalog_image,
+              catalog_image_zoom: o.catalog_image_zoom,
+              catalog_image_pos_x: o.catalog_image_pos_x,
+              catalog_image_pos_y: o.catalog_image_pos_y,
+              catalog_image_crop_mode: o.catalog_image_crop_mode,
+              reference_image: o.reference_image,
+            }))
         );
       } catch (err) {
         console.error('Failed to load customer details:', err);

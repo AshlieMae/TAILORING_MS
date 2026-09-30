@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Mail, MapPin, Phone, Ruler, UserRound } from 'lucide-react';
+import { ChevronRight, Mail, MapPin, Phone, Ruler, UserRound, Wallet } from 'lucide-react';
 import {
   COLORS, FONT_IMPORT, PageHeader, StatCard, SearchField, FilterPill, Card, TableHeadRow, EmptyState,
   ModalShell, EyebrowLabel, Badge, shadowSm,
@@ -9,6 +9,8 @@ type CustomerStatus = 'Active' | 'Pickup due' | 'Inactive';
 
 type Customer = {
   id: string;
+  /** The REAL customer code (users.customer_id) used to open the Financial Center. */
+  customerId?: string;
   name: string;
   email: string;
   phone: string;
@@ -30,7 +32,7 @@ const CUSTOMERS: Customer[] = [
 
 const STATUS_TONE: Record<CustomerStatus, 'success' | 'warning' | 'neutral'> = { Active: 'success', 'Pickup due': 'warning', Inactive: 'neutral' };
 
-export function AdminCustomersView({ externalQuery = '' }: { externalQuery?: string }) {
+export function AdminCustomersView({ externalQuery = '', onOpenFinancialCenter }: { externalQuery?: string; onOpenFinancialCenter?: (customerId: string) => void }) {
   const [query, setQuery] = useState(externalQuery);
   const [status, setStatus] = useState<'All' | CustomerStatus>('All');
   const [selected, setSelected] = useState<Customer | null>(null);
@@ -116,12 +118,12 @@ export function AdminCustomersView({ externalQuery = '' }: { externalQuery?: str
         {!customers.length && <EmptyState message="No customer matches your search." />}
       </Card>
 
-      {selected && <CustomerProfile customer={selected} onClose={() => setSelected(null)} />}
+      {selected && <CustomerProfile customer={selected} onClose={() => setSelected(null)} onOpenFinancialCenter={onOpenFinancialCenter} />}
     </div>
   );
 }
 
-function CustomerProfile({ customer, onClose }: { customer: Customer; onClose: () => void }) {
+function CustomerProfile({ customer, onClose, onOpenFinancialCenter }: { customer: Customer; onClose: () => void; onOpenFinancialCenter?: (customerId: string) => void }) {
   return (
     <ModalShell onClose={onClose} maxWidth="max-w-4xl">
       <header className="flex items-start justify-between border-b px-7 py-6 sm:px-8" style={{ borderColor: COLORS.border }}>
@@ -130,9 +132,20 @@ function CustomerProfile({ customer, onClose }: { customer: Customer; onClose: (
           <h2 className="mt-1.5 text-2xl font-semibold tracking-[-0.01em]" style={{ color: COLORS.ink }}>{customer.name}</h2>
           <span className="mono mt-1.5 inline-block text-[11px]" style={{ color: COLORS.muted }}>{customer.id}</span>
         </div>
-        <button onClick={onClose} className="p-2 transition-colors" style={{ color: COLORS.muted, borderRadius: 8 }} onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.surfaceAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
-        </button>
+        <div className="flex items-center gap-2">
+          {onOpenFinancialCenter && (
+            <button
+              onClick={() => onOpenFinancialCenter(customer.customerId || customer.id)}
+              className="inline-flex items-center gap-2 border px-3 py-2 text-[11px] font-semibold transition-colors"
+              style={{ borderColor: COLORS.navy, color: '#fff', background: COLORS.navy, borderRadius: 8 }}
+            >
+              <Wallet className="h-3.5 w-3.5" /> Financial Center
+            </button>
+          )}
+          <button onClick={onClose} className="p-2 transition-colors" style={{ color: COLORS.muted, borderRadius: 8 }} onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.surfaceAlt; }} onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
       </header>
 
       <div className="grid gap-8 p-7 sm:p-8 lg:grid-cols-[0.9fr_1.1fr]">

@@ -12,6 +12,41 @@
 //   image_crop_mode  'contain' (whole photo) | 'cover' (fill the frame)
 import type { CSSProperties } from 'react';
 
+/**
+ * Turns a photo into a fixed frame. The Admin catalog's management table and
+ * management cards render every garment through this contract, so a portrait
+ * photo, a landscape photo and a transparent PNG product shot all occupy the
+ * same rectangle and no grid row ever looks ragged.
+ *
+ *   'fill'  the photo fills the frame and the overflow is cropped
+ *           (object-cover) — the right answer for a real photograph.
+ *   'mat'   the whole photo sits on the frame's mat, nothing cropped
+ *           (object-contain) — the right answer for a cut-out product shot
+ *           saved as PNG/SVG on transparency, where cropping would slice the
+ *           garment in half and filling would leave empty bands.
+ */
+export type ThumbFit = 'fill' | 'mat';
+
+/** PNG and SVG are the formats a cut-out product shot is saved in. */
+export function looksLikeProductShot(src?: string | null): boolean {
+  const path = (src || '').split('?')[0].split('#')[0].toLowerCase();
+  return path.endsWith('.png') || path.endsWith('.svg');
+}
+
+/**
+ * Chooses the frame for a photo. An explicit 'cover' on the record always wins
+ * (the Admin forced a fill in the Live Preview); otherwise a PNG/SVG product
+ * shot is matted and every other photo fills the frame.
+ *
+ * Note this is deliberately separate from `imageFramingStyle`: that renders the
+ * framing the Admin saved for the CUSTOMER-facing storefront card, while this
+ * standardises the Admin's own management surfaces.
+ */
+export function thumbFitFor({ src, cropMode }: { src?: string | null; cropMode?: 'contain' | 'cover' | null }): ThumbFit {
+  if (cropMode === 'cover') return 'fill';
+  return looksLikeProductShot(src) ? 'mat' : 'fill';
+}
+
 export type ImageCropMode = 'contain' | 'cover';
 
 export type ImageFraming = {

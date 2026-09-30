@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import frontDeskApi, { type Order } from '../../services/frontDeskApi';
 import { Scissors } from 'lucide-react';
+import { OrderGarmentImage } from '../components/OrderGarmentImage';
 
 function Label({ children }: { children: React.ReactNode }) {
   return <span className="text-[10px] uppercase tracking-[0.2em] text-[#8C7E74]" style={{ fontFamily: "'Space Mono', monospace" }}>{children}</span>;
@@ -65,15 +66,9 @@ function ChartTooltip({ active, payload, label }: any) {
 
 const peso = (amount: number) => formatPHP(amount);
 
-function referenceFiles(value?: string | null): string[] {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [value];
-  } catch { return [value]; }
-}
-
-function OrderDetails({ order, onClose, onHandoff }: { order: Order; onClose: () => void; onHandoff?: () => void }) {
+// The job-card details modal. Exported so the Customer Financial Center can
+// open a row's existing order details on top of itself and return there.
+export function OrderDetails({ order, onClose, onHandoff }: { order: Order; onClose: () => void; onHandoff?: () => void }) {
   const [barsIn, setBarsIn] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState(false);
   const [handoffError, setHandoffError] = useState<string | null>(null);
@@ -88,7 +83,6 @@ function OrderDetails({ order, onClose, onHandoff }: { order: Order; onClose: ()
   const balance = Number(order.remaining_balance) || 0;
   const paidPct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
   const stageIdx = STAGE_ORDER.indexOf(order.production_status);
-  const references = referenceFiles(order.reference_image);
 
   const donutData = [
     { name: 'Paid', value: paid || 0.0001, color: '#4E7357' },
@@ -124,21 +118,7 @@ function OrderDetails({ order, onClose, onHandoff }: { order: Order; onClose: ()
               <strong>Walk-in intake draft.</strong> Record measurements, fabric, due date, tailor, and required deposit before sending this job card to production.
             </div>
           )}
-          {/* Reference photo preference */}
-          {references.length > 0 && (
-            <div className="mb-5">
-              <Label>Attached design references</Label>
-              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {references.map((reference, index) => reference.toLowerCase().includes('.pdf') ? (
-                  <a key={reference} href={reference} target="_blank" rel="noreferrer" className="flex min-h-24 items-center justify-center rounded-xl border border-[#E2D7C7] bg-white px-3 text-center text-[11px] font-semibold text-[#8C6F3E]">Open PDF sketch {index + 1}</a>
-                ) : (
-                  <a key={reference} href={reference} target="_blank" rel="noreferrer" className="overflow-hidden rounded-xl border border-[#E2D7C7] bg-white">
-                    <img src={reference} alt={`Garment reference ${index + 1}`} className="h-28 w-full object-cover" />
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
+          <div className="mb-5"><Label>Garment</Label><div className="mt-2 h-48 overflow-hidden rounded-xl border border-[#E2D7C7] bg-white"><OrderGarmentImage order={order} className="h-full w-full" /></div></div>
 
           {/* Production journey stepper */}
           <Label>Production journey</Label>

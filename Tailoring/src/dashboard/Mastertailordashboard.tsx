@@ -5,6 +5,7 @@ import { TailorMeasurementsView } from '../Pages_Tailor/TailorMeasurements';
 import { TailorInventoryView } from '../Pages_Tailor/TailorInventory';
 import { TailorSettingsView } from '../Pages_Tailor/TailorSettings';
 import NotificationBell from '../components/NotificationBell';
+import { OrderGarmentImage } from '../components/OrderGarmentImage';
 import type { ReactNode } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer } from 'recharts';
 import {
@@ -225,6 +226,17 @@ interface JobCard {
   stageIndex: number;
   due: string;
   fabricUsed: string;
+  // The order photo, resolved through the one shared image contract so the
+  // workbench shows the same garment the customer sees. All optional: a bespoke
+  // order, or one created before catalog_item_id existed, falls back cleanly.
+  catalog_item_id?: number | string | null;
+  order_type?: string | null;
+  catalog_image?: string | null;
+  catalog_image_zoom?: number | null;
+  catalog_image_pos_x?: number | null;
+  catalog_image_pos_y?: number | null;
+  catalog_image_crop_mode?: 'contain' | 'cover' | null;
+  reference_image?: string | null;
 }
 // Measurement snapshots are per-job-card detail (label/value pairs) and are
 // fetched lazily from the job card endpoint the first time a card is opened.
@@ -778,6 +790,14 @@ function DashboardView() {
           stageIndex: Number.isFinite(o.stageIndex) ? o.stageIndex : Math.max(0, STAGES.indexOf(o.status)),
           due: formatDueDate(o.deadline),
           fabricUsed: o.fabricUsed || '',
+          catalog_item_id: o.catalog_item_id,
+          order_type: o.order_type,
+          catalog_image: o.catalog_image,
+          catalog_image_zoom: o.catalog_image_zoom,
+          catalog_image_pos_x: o.catalog_image_pos_x,
+          catalog_image_pos_y: o.catalog_image_pos_y,
+          catalog_image_crop_mode: o.catalog_image_crop_mode,
+          reference_image: o.reference_image,
         }));
         setCards(rows);
         setExpanded((cur) => cur ?? rows?.[0]?.id ?? null);
@@ -1040,11 +1060,8 @@ function DashboardView() {
                     className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left hover:bg-[var(--paper-dim)]/80 transition-colors"
                   >
                     <div className="flex items-center gap-4 min-w-0">
-                      <div
-                        className="w-9 h-9 rounded-[3px] bg-gradient-to-br from-[var(--brass-light)]/35 to-[var(--brass)]/15 text-[var(--brass-deep)] flex items-center justify-center flex-shrink-0 border border-[var(--brass)]/25"
-                        style={{ boxShadow: '0 1px 0 rgba(255,255,255,0.6) inset, 0 2px 6px -2px rgba(138,106,24,0.35)' }}
-                      >
-                        <Scissors className="w-4 h-4" strokeWidth={1.6} />
+                      <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-[3px] border border-[var(--line)] bg-[var(--paper-dim)]">
+                        <OrderGarmentImage order={card} className="h-full w-full" />
                       </div>
                       <div className="min-w-0">
                         <div className="text-[13.5px] text-[var(--ink)] font-medium truncate">{card.garment} — {card.customer}</div>

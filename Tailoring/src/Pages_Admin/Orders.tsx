@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, ChevronRight, ClipboardList, MapPin, PackageCheck, Shirt } from 'lucide-react';
 import { formatPHP } from '../utils/currency';
+import { OrderGarmentImage } from '../components/OrderGarmentImage';
 import {
   COLORS, FONT_IMPORT, PageHeader, StatCard, SearchField, Card, TableHeadRow, EmptyState,
   ModalShell, EyebrowLabel, Badge, shadowSm,
 } from './Theme';
 
-type Order = { id: string; customer: string; garment: string; fabric: string; stage: string; payment: 'Deposit paid' | 'Paid' | 'Balance due'; total: string; due: string; created: string; measurements: string; };
+type Order = { id: string; customer: string; garment: string; fabric: string; stage: string; payment: 'Deposit paid' | 'Paid' | 'Balance due'; total: string; due: string; created: string; measurements: string; catalog_item_id?: number | null; order_type?: string | null; reference_image?: string | null; catalog_image?: string | null; catalog_image_zoom?: number | null; catalog_image_pos_x?: number | null; catalog_image_pos_y?: number | null; catalog_image_crop_mode?: 'contain' | 'cover' | null; };
 
 const ORDERS: Order[] = [
   { id: 'JC-3021', customer: 'Reyna Fuentes', garment: 'Barong Tagalog', fabric: 'Piña Jusi — Ivory', stage: 'First Fitting', payment: 'Deposit paid', total: '₱4,800', due: 'Aug 05', created: 'Jul 27, 2026', measurements: 'CUS-001 measurement profile' },
@@ -44,6 +45,7 @@ export function AdminOrdersView({ externalQuery = '' }: { externalQuery?: string
           stage: o.stage, payment: o.payment === 'Paid' ? 'Paid' : 'Balance due',
           total: formatPHP(Number(o.total || 0)), due: o.due, created: o.created,
           measurements: 'Real-time from customer profile',
+          catalog_item_id: o.catalog_item_id, order_type: o.order_type, reference_image: o.reference_image, catalog_image: o.catalog_image, catalog_image_zoom: o.catalog_image_zoom, catalog_image_pos_x: o.catalog_image_pos_x, catalog_image_pos_y: o.catalog_image_pos_y, catalog_image_crop_mode: o.catalog_image_crop_mode,
         }));
         setRows(mapped);
       })
@@ -108,7 +110,7 @@ export function AdminOrdersView({ externalQuery = '' }: { externalQuery?: string
           >
             <span className="mono text-[12px]" style={{ color: COLORS.navy }}>{order.id}</span>
             <span className="font-medium" style={{ color: COLORS.ink }}>{order.customer}</span>
-            <span className="text-sm" style={{ color: COLORS.inkSoft }}>{order.garment}</span>
+            <span className="flex items-center gap-2 text-sm" style={{ color: COLORS.inkSoft }}><span className="h-9 w-9 shrink-0 overflow-hidden rounded bg-[#F8F3EB]"><OrderGarmentImage order={order} className="h-full w-full" /></span>{order.garment}</span>
             <span><Badge tone={STAGE_TONE[order.stage] ?? 'neutral'}>{order.stage}</Badge></span>
             <span className="text-sm font-medium" style={{ color: order.payment === 'Balance due' ? COLORS.danger : COLORS.success }}>{order.payment}</span>
             <span className="mono text-sm" style={{ color: COLORS.inkSoft }}>{order.due}</span>
@@ -140,6 +142,7 @@ function OrderDetails({ order, onClose }: { order: Order; onClose: () => void })
       </header>
 
       <div className="space-y-9 p-7 sm:p-8">
+        <div className="h-56 overflow-hidden rounded-lg border" style={{ borderColor: COLORS.border, background: COLORS.surfaceAlt }}><OrderGarmentImage order={order} className="h-full w-full" /></div>
         <div className="grid gap-4 sm:grid-cols-2">
           {[['Customer', order.customer], ['Garment', order.garment], ['Fabric', order.fabric], ['Measurement profile', order.measurements], ['Created', order.created], ['Due date', order.due], ['Total', order.total], ['Payment', order.payment]].map(([label, value]) => (
             <div key={label} className="border p-4" style={{ borderColor: COLORS.border, background: COLORS.surfaceAlt, borderRadius: 8 }}>

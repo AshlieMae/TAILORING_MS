@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useEffect, useState } from 'react';
-import { formatPHPExact, formatPHPCompact } from '../utils/currency';
+import { formatPHPExact as formatPeso, formatPHPCompact } from '../utils/currency';
 import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Shirt, Ruler, CalendarClock, Wallet, Settings, Bell, Search,
@@ -14,6 +14,7 @@ import {
   LineChart, BarChart, Bar,
 } from 'recharts';
 import NotificationBell from '../components/NotificationBell';
+import { OrderGarmentImage } from '../components/OrderGarmentImage';
 
 /* ============================================================
    ASHLIE'S TAILOR — Private Client Portal
@@ -47,12 +48,6 @@ const FONT_IMPORT = `
   border: 1px solid var(--line);
   border-radius: 14px;
   box-shadow: 0 1px 2px rgba(20,23,31,0.04), 0 8px 24px -12px rgba(20,23,31,0.10);
-}
-.swatch {
-  background-image:
-    repeating-linear-gradient(45deg, rgba(255,255,255,0.10) 0px, rgba(255,255,255,0.10) 1px, transparent 1px, transparent 6px),
-    linear-gradient(135deg, var(--swatch-a), var(--swatch-b));
-  box-shadow: inset 0 0 0 1px rgba(20,23,31,0.08), inset 0 -8px 14px rgba(20,23,31,0.12);
 }
 .input-field {
   width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
@@ -230,13 +225,6 @@ function DashboardView({ payments = [], onViewPayments, customerName = '', order
     return [0, 1, 2, 3, 4, 5, 6, 6][i];
   })();
   const stageLabel = stageName || STAGES[Math.min(stepIdx, STAGES.length - 1)] || 'Measuring';
-  const swatch = (() => {
-    const s = String(order?.fabric || order?.garment || 'atelier');
-    const h = [...s].reduce((a, c) => a + c.charCodeAt(0), 0);
-    return [`hsl(${h % 360} 34% 40%)`, `hsl(${(h * 7 + 40) % 360} 46% 64%)`];
-  })();
-  const swatchA = order?.swatchA || swatch[0];
-  const swatchB = order?.swatchB || swatch[1];
   const readyLabel = order?.due ? (/^[A-Za-z]{3}/.test(String(order.due)) ? order.due : (Number.isNaN(new Date(order.due).getTime()) ? 'Not scheduled' : new Date(order.due).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }))) : 'Not scheduled';
   const orderBalance = order ? Number(order.balance) || 0 : 0;
   const orderTotal = order ? Number(order.total ?? ((Number(order.paid) || 0) + orderBalance)) || 0 : 0;
@@ -305,9 +293,14 @@ function DashboardView({ payments = [], onViewPayments, customerName = '', order
           </div>
 
           <div className="flex items-center gap-4 mt-6">
-            <div className="swatch w-16 h-16 rounded-lg flex-shrink-0" style={{ '--swatch-a': swatchA, '--swatch-b': swatchB }} />
+            {/* The order's real garment photo — the same resolver and the same
+                catalog framing the customer sees in every other view. This
+                replaces the old generated fabric swatch. */}
+            <div className="w-16 h-16 overflow-hidden rounded-lg flex-shrink-0" style={{ background: 'var(--paper)' }}>
+              <OrderGarmentImage order={order} className="h-full w-full" />
+            </div>
             <div className="flex-1 min-w-0">
-              <Eyebrow>Fabric swatch on file</Eyebrow>
+              <Eyebrow>Garment on file</Eyebrow>
               <div className="text-[13px] mt-1" style={{ color: 'var(--ink)', fontFamily: "'Inter', sans-serif", fontWeight: 500 }}>{order.fabric || 'Fabric not specified'}</div>
             </div>
           </div>
@@ -545,13 +538,6 @@ function stageIndexForCustomer(stage) {
   const map = { Measuring: 0, 'Pattern Cutting': 1, 'Initial Assembly': 2, 'First Fitting': 3, 'Final Alterations': 4, 'Quality Review': 4, Completed: 5, 'Ready for Pickup': 6, Released: 6 };
   return map[stage] ?? 0;
 }
-function swatchForFabric(fabric) {
-  const name = String(fabric || '').trim();
-  let hash = 0;
-  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) % 360;
-  const hue = name ? hash : 42;
-  return { swatchA: `hsl(${hue}, 32%, 74%)`, swatchB: `hsl(${hue}, 42%, 42%)` };
-}
 function customerOrderFromRow(row) {
   const paid = Number(row.paid || 0);
   const balance = Number(row.balance || 0);
@@ -561,7 +547,14 @@ function customerOrderFromRow(row) {
     garment: row.garment || 'Custom garment',
     fabric: row.fabric || 'Fabric to be selected',
     stage: row.stage || '',
-    ...swatchForFabric(row.fabric),
+    catalog_item_id: row.catalog_item_id,
+    order_type: row.order_type,
+    reference_image: row.reference_image,
+    catalog_image: row.catalog_image,
+    catalog_image_zoom: row.catalog_image_zoom,
+    catalog_image_pos_x: row.catalog_image_pos_x,
+    catalog_image_pos_y: row.catalog_image_pos_y,
+    catalog_image_crop_mode: row.catalog_image_crop_mode,
     stageIndex: stageIndexForCustomer(row.stage),
     measuringVisit: row.measuringVisit ? new Date(`${String(row.measuringVisit).slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null,
     due: row.due ? new Date(row.due).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'To be scheduled',
@@ -591,7 +584,7 @@ function OrdersView({ orders = [] }) {
           <button key={o.id} onClick={() => setOpenId(o.id)} className="rise atelier-card p-6 text-left transition-transform hover:-translate-y-0.5" style={{ animationDelay: `${i * 0.06}s` }}>
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-4">
-                <div className="swatch w-12 h-12 rounded-lg flex-shrink-0" style={{ '--swatch-a': o.swatchA, '--swatch-b': o.swatchB }} />
+                <div className="w-12 h-12 overflow-hidden rounded-lg flex-shrink-0" style={{ background: 'var(--paper)' }}><OrderGarmentImage order={o} className="h-full w-full" /></div>
                 <div>
                   <Eyebrow>{o.id}</Eyebrow>
                   <Display as="div" className="text-xl mt-0.5" style={{ color: 'var(--ink)', fontWeight: 600 }}>{o.garment}</Display>
@@ -625,7 +618,7 @@ function OrdersView({ orders = [] }) {
             <Eyebrow>Order details · {open.id}</Eyebrow>
             <Display as="h2" className="text-2xl mt-1" style={{ color: 'var(--ink)', fontWeight: 600 }}>{open.garment}</Display>
             <div className="flex items-center gap-4 mt-5">
-              <div className="swatch w-14 h-14 rounded-lg flex-shrink-0" style={{ '--swatch-a': open.swatchA, '--swatch-b': open.swatchB }} />
+              <div className="w-14 h-14 overflow-hidden rounded-lg flex-shrink-0" style={{ background: 'var(--paper)' }}><OrderGarmentImage order={open} className="h-full w-full" /></div>
               <p className="text-[13px]" style={{ color: 'var(--muted)', fontFamily: "'Inter', sans-serif" }}>{open.fabric}</p>
             </div>
             <div className="mt-7">

@@ -16,6 +16,9 @@ export interface IntakeReceipt {
   quantity?: number;
   totalAmount: number;
   depositPaid: number;
+  /** Cash handed over and change returned for the deposit (optional). */
+  cashReceived?: number;
+  changeGiven?: number;
   remainingBalance: number;
   paymentMethod?: string;
   referenceNumber?: string;
@@ -91,6 +94,8 @@ export function printIntakeReceipt(receipt: IntakeReceipt): boolean {
     <div class="totals">
       <div><span>Total price</span><span>${peso(receipt.totalAmount)}</span></div>
       <div><span>Deposit paid${receipt.paymentMethod ? ` (${safe(receipt.paymentMethod)})` : ''}</span><span>${peso(receipt.depositPaid)}</span></div>
+      ${receipt.cashReceived != null ? `<div><span>Cash received</span><span>${peso(receipt.cashReceived)}</span></div>` : ''}
+      ${receipt.changeGiven != null ? `<div><span>Change given</span><span>${peso(receipt.changeGiven)}</span></div>` : ''}
       <div><span>Receipt reference</span><span>${safe(receipt.referenceNumber) || '—'}</span></div>
       <div class="grand"><span>Remaining balance</span><span>${peso(receipt.remainingBalance)}</span></div>
     </div>
