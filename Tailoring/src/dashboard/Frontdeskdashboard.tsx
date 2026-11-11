@@ -13,14 +13,11 @@ import { FinancialCenterProvider } from '../financialCenter/FinancialCenterConte
 import { RecordCashPaymentModal } from '../financialCenter/CashPaymentForm';
 import { FrontDeskSettingsView } from '../Pages_Frontdesk/Settingsdesk';
 import { FrontDeskGarmentCatalogView } from '../Pages_Frontdesk/GarmentCatalogdesk';
-import { GarmentIntakeModal, type GarmentIntakeData, type IntakeCartExtras, type IntakeCartIntent } from '../Pages_Frontdesk/GarmentIntakeModal';
-// THE DRAFT ORDER CART — the counter's multi-garment workspace. It is Front
+import { GarmentIntakeModal, type GarmentIntakeData, type IntakeOrderExtras } from '../Pages_Frontdesk/GarmentIntakeModal';
+// THE DRAFT ORDER CART â€” the counter's multi-garment workspace. It is Front
 // Desk state only (never a database table) and one checkout turns the whole
 // cart into separate job cards in a single transaction.
-import { DraftOrderCartProvider, newCartLineId, useDraftOrderCart, type DraftCartItem } from '../Pages_Frontdesk/DraftOrderCartContext';
-import type { PriorityLevel } from '../Pages_Frontdesk/garmentCatalogData';
-import { DraftOrderCartPanel } from '../Pages_Frontdesk/DraftOrderCartPanel';
-import { CheckoutReviewPanel } from '../Pages_Frontdesk/CheckoutReviewPanel';
+
 import { type CatalogDesign } from '../Pages_Frontdesk/garmentCatalogData';
 import frontDeskApi, { authToken, type Order, type Appointment, type Customer } from '../../services/frontDeskApi';
 import { RegisterCustomerModal, type NewCustomerForm } from '../pages/FrontDesk/FrontDeskModals';
@@ -54,7 +51,6 @@ import {
   BarChart3,
   Loader2,
   LayoutGrid,
-  ShoppingBag,
 } from 'lucide-react';
 
 function LiveDateTime() {
@@ -85,6 +81,20 @@ const FRONT_DESK_THEME = `
   border: 1px solid #ECE2D3;
   box-shadow: 0 1px 1px rgba(42,33,29,0.03), 0 12px 28px -16px rgba(42,33,29,0.14), inset 0 1px 0 rgba(255,255,255,0.7);
   position: relative;
+}
+.frontdesk-theme .dash-card:hover {
+  box-shadow: 0 2px 2px rgba(42,33,29,0.04), 0 18px 36px -18px rgba(42,33,29,0.2), inset 0 1px 0 rgba(255,255,255,0.8);
+}
+.frontdesk-theme .quick-action {
+  min-height: 176px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+.frontdesk-theme .quick-action:focus-visible,
+.frontdesk-theme button:focus-visible {
+  outline: 2px solid #B89255;
+  outline-offset: 3px;
 }
 .frontdesk-theme .dash-card::before {
   content: '';
@@ -167,7 +177,7 @@ function ScheduleFittingModal({
   const [saving, setSaving] = useState(false);
 
   // Job orders that already have a live visit booked are hidden from the
-  // selection — each job card keeps ONE live appointment, so its next stage is
+  // selection â€” each job card keeps ONE live appointment, so its next stage is
   // scheduled from that appointment's own details instead.
   const filteredOrders = orders.filter(
     (o) =>
@@ -177,7 +187,7 @@ function ScheduleFittingModal({
   );
   const selectedOrder = orders.find(o => o.order_id === form.orderId);
 
-  // The fitting stage is decided automatically — never by the user.
+  // The fitting stage is decided automatically â€” never by the user.
   const activeVisit = useMemo(() => findActiveAppointmentForJob(appointments, form.orderId), [appointments, form.orderId]);
   const plannedType = useMemo(() => {
     // Walk-in measuring is completed at intake; the first bookable visit is
@@ -239,7 +249,7 @@ function ScheduleFittingModal({
               <>
                 <span className="font-semibold uppercase tracking-[0.08em]">{selectedOrder.job_card_id}</span> already has a live{' '}
                 <span className="font-semibold uppercase tracking-[0.08em]">{activeVisit.appointment_type}</span> visit. Scheduling moves that same
-                appointment{plannedType && plannedType !== activeVisit.appointment_type ? <> to <span className="font-semibold uppercase tracking-[0.08em]">{plannedType}</span></> : null} — no duplicate is created.
+                appointment{plannedType && plannedType !== activeVisit.appointment_type ? <> to <span className="font-semibold uppercase tracking-[0.08em]">{plannedType}</span></> : null} â€” no duplicate is created.
               </>
             ) : (
               <>
@@ -273,7 +283,7 @@ function ScheduleFittingModal({
           {form.customerId && !filteredOrders.length && (
             <p className="text-[10px] leading-relaxed text-[#A3958B] sm:col-span-2">
               {orders.some(o => o.customer_id === form.customerId)
-                ? "Every job card for this customer already has a live visit scheduled — book their next stage from that appointment's details."
+                ? "Every job card for this customer already has a live visit scheduled â€” book their next stage from that appointment's details."
                 : "This customer has no job orders yet."}
             </p>
           )}
@@ -307,7 +317,7 @@ function ScheduleFittingModal({
               </span>
             </span>
           </div>
-          {/* Journey stepper — same visual language as the live fitting tracker */}
+          {/* Journey stepper â€” same visual language as the live fitting tracker */}
           <div className="relative mt-6 flex items-start justify-between px-1">
             <div className="absolute left-3 right-3 top-[11px] h-[2px] bg-[#EFE7DB]" />
             <div
@@ -330,7 +340,7 @@ function ScheduleFittingModal({
               );
             })}
           </div>
-          <p className="mt-2 px-1 text-[10px] text-[#A3958B]">Number in each node = visits booked at that stage · the pulsing node is the stage being scheduled now.</p>
+          <p className="mt-2 px-1 text-[10px] text-[#A3958B]">Number in each node = visits booked at that stage Â· the pulsing node is the stage being scheduled now.</p>
         </section>
 
         <div className="mt-7 flex gap-3">
@@ -355,7 +365,7 @@ function DashboardView({
   pendingIntakeCustomer,
   onIntakeCustomerConsumed,
 }: {
-  /** Garment chosen on the Garment Catalog page — opens intake pre-filled. */
+  /** Garment chosen on the Garment Catalog page â€” opens intake pre-filled. */
   pendingDesign?: CatalogDesign | null;
   onDesignConsumed?: () => void;
   /** Switch to the standalone Garment Catalog page. */
@@ -379,8 +389,8 @@ function DashboardView({
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  // Approved Master Tailors, for per-garment assignment inside the draft cart.
-  const [tailors, setTailors] = useState<{ id: number; full_name: string }[]>([]);
+  // Approved Master Tailors, for per-garment assignment.
+  const [_tailors, setTailors] = useState<{ id: number; full_name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<null | 'customer' | 'order' | 'payment' | 'fitting'>(null);
   // Garment handed to the intake form (from the catalog page or the picker).
@@ -399,7 +409,7 @@ function DashboardView({
   // Same display rules as the Appointments page: merge duplicate records
   // (same appointment ID) and keep only the latest active booking per
   // job card + fitting stage.
-  // APPOINTMENT PIPELINE — status counts plus the production visit types the
+  // APPOINTMENT PIPELINE â€” status counts plus the production visit types the
   // workshop suggests (First Fitting / Final Fitting / Pickup).
   const pipeline = useMemo(() => {
     const isActive = (a: Appointment) => ['Suggested', 'Approved', 'Rescheduled', 'Scheduled', 'Confirmed'].includes(a.status);
@@ -434,7 +444,7 @@ function DashboardView({
         frontDeskApi.searchCustomers(''),
         frontDeskApi.getAllOrders(),
         frontDeskApi.getAppointments(),
-        // Approved Master Tailors — the draft cart assigns one per garment.
+        // Approved Master Tailors â€” the draft cart assigns one per garment.
         frontDeskApi.getTailors().catch(() => []),
       ]);
       setStats(statsData);
@@ -496,106 +506,27 @@ function DashboardView({
   };
 
   /**
-   * THE DRAFT ORDER CART — Front Desk only.
+   * THE DRAFT ORDER CART â€” Front Desk only.
    *
    * `handleAddToCart` freezes one garment into the cart (nothing is written to
    * the database), and `handleCheckoutCompleted` refreshes the desks once the
    * checkout transaction has committed the job cards.
    */
-  const draftCart = useDraftOrderCart();
-  const [cartOpen, setCartOpen] = useState(false);
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
   // The cart line being edited: its saved values prefill the intake form.
-  const [editingCartLine, setEditingCartLine] = useState<DraftCartItem | null>(null);
 
-  const openIntake = (design: CatalogDesign | null = null, customerId = '', line: DraftCartItem | null = null) => {
+  const openIntake = (design: CatalogDesign | null = null, customerId = '') => {
     setIntakeDesign(design);
     setIntakeCustomerId(customerId);
-    setEditingCartLine(line);
     setActiveModal('order');
   };
 
-  const handleAddToCart = (data: GarmentIntakeData, extras: IntakeCartExtras, intent: IntakeCartIntent) => {
-    const tailorName = tailors.find((t) => String(t.id) === String(data.assignedTailorId))?.full_name || '';
-    // "Add & add another" always adds a NEW line; the other actions apply the
-    // correction to the line that was opened for editing.
-    const isEditing = Boolean(editingCartLine) && intent !== 'stay';
-    const lineId = isEditing ? (editingCartLine as DraftCartItem).lineId : newCartLineId();
-    const item: DraftCartItem = {
-      lineId,
-      customerId: data.customerId,
-      customerName: customers.find((c) => String(c.customer_id) === String(data.customerId))?.full_name || 'Walk-in customer',
-      orderType: data.orderType,
-      catalogItemId: data.catalogItemId ?? null,
-      catalogName: extras.catalogName,
-      garmentType: data.garmentType,
-      orderCategory: data.orderCategory,
-      styleDesign: data.styleDesign,
-      fabric: data.fabric,
-      fabricQuantity: data.fabricQuantity,
-      quantity: data.quantity,
-      priority: data.priority as PriorityLevel,
-      customizations: {
-        collar_type: data.collarStyle || undefined,
-        sleeve_type: data.sleeveStyle || undefined,
-        embroidery: data.embroidery && data.embroidery !== 'None' ? data.embroidery : undefined,
-        lining: data.lining || undefined,
-        pocket_style: data.pocketStyle || undefined,
-        buttons: data.buttons || undefined,
-        monogram: data.monogram || undefined,
-        rush_order: data.rushOrder || undefined,
-      },
-      specialInstructions: data.specialInstructions,
-      targetCompletionDate: data.targetCompletionDate,
-      assignedTailorId: data.assignedTailorId,
-      assignedTailorName: tailorName,
-      measurements: extras.measurements,
-      referenceImages: data.referenceImages || [],
-      color: data.color,
-      customizationNotes: data.customizationNotes,
-      additionalCharges: parseFloat(data.additionalCharges) || 0,
-      discount: parseFloat(data.discount) || 0,
-      image: extras.catalogImage,
-      unitPrice: extras.finalPrice,
-      finalPrice: extras.finalPrice,
-      depositRequired: extras.depositRequired,
-      amount: extras.allocatedAmount,
-      breakdown: extras.quote,
-      addedAt: new Date().toISOString(),
-    };
-
-    if (isEditing) {
-      // Editing an existing cart line never creates a second line.
-      draftCart.updateItem(lineId, item);
-      setEditingCartLine(null);
-      return { ok: true, message: `${item.garmentType} updated in the draft cart.` };
-    }
-
-    const outcome = draftCart.addItem(item);
-    if (!outcome.ok) return outcome;
-    // A garment captured while a line was being edited ends the edit, so the
-    // next garment the counter adds starts a fresh line.
-    if (editingCartLine) setEditingCartLine(null);
-    loadDashboardData(true);
-    return outcome;
-  };
-
   /** The whole cart committed: refresh every desk and clear the edit state. */
-  const handleCheckoutCompleted = () => {
-    setCheckoutOpen(false);
-    setCartOpen(false);
-    setEditingCartLine(null);
-    setBanner('Checkout completed — every garment now has its own job card, receipt and balance.');
-    loadDashboardData(true);
-    window.setTimeout(() => setBanner(''), 6000);
-  };
 
   // The single-order create handler is GONE on purpose: the Front Desk no
   // longer writes a job card from the intake form. The intake form adds to the
   // Draft Order Cart (handleAddToCart above) and the ONE server transaction at
   // checkout (POST /api/orders/checkout) creates the job cards, receipts and
   // payment allocations. There is no second order-creation path.
-
 
   // Payments are recorded through the shared cash form
   // (financialCenter/CashPaymentForm.tsx) which calls the one payment API, so
@@ -637,11 +568,18 @@ function DashboardView({
 
   return (
     <div className="space-y-8">
-      <div className="dash-in">
-        <MonoLabel>Front desk</MonoLabel>
-        <h1 className="text-2xl sm:text-3xl font-normal leading-tight mt-1 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>
-          Good afternoon — here's the counter today.
-        </h1>
+      <div className="dash-in flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <MonoLabel>Front desk / dashboard</MonoLabel>
+          <h1 className="text-2xl sm:text-3xl font-normal leading-tight mt-1 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>
+            Good afternoon, here's the counter today.
+          </h1>
+          <p className="mt-2 max-w-xl text-sm text-[#766A62]">Keep customer intake, payments, fittings, and releases moving from one clear workspace.</p>
+        </div>
+        <div className="flex items-center gap-2 self-start rounded-full border border-[#E2D7C7] bg-white/70 px-3 py-2 sm:self-auto">
+          <span className="h-2 w-2 rounded-full bg-[#6E8B68] shadow-[0_0_0_3px_rgba(110,139,104,0.14)]" />
+          <MonoLabel className="text-[#6E8B68]">Counter open</MonoLabel>
+        </div>
       </div>
 
       {banner && (
@@ -658,38 +596,15 @@ function DashboardView({
         </div>
       )}
 
-      <div className="dash-in grid grid-cols-2 lg:grid-cols-6 gap-4" style={{ animationDelay: '0.04s' }}>
+      <div className="dash-in grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4" style={{ animationDelay: '0.04s' }}>
         <QuickAction icon={<UserPlus className="w-5 h-5" strokeWidth={1.6} />} label="Register customer" hint="New profile" onClick={() => setActiveModal('customer')} />
-        <QuickAction icon={<LayoutGrid className="w-5 h-5" strokeWidth={1.6} />} label="Garment catalog" hint="Designs & fabrics" helper="Browse the shop's garments, uniform types, styles, fabrics and customization options with the customer — then start the order from there." onClick={() => { setActiveModal(null); onOpenCatalogPage?.(); }} />
-        <QuickAction icon={<FilePlus2 className="w-5 h-5" strokeWidth={1.6} />} label="New order" hint="Garment intake" helper="Guided intake: customer, garment, customization and measurements, pricing — then the garment joins the Draft Order Cart. Add as many garments as the customer needs before checking out once." onClick={() => openIntake(null)} />
-        <QuickAction icon={<ShoppingBag className="w-5 h-5" strokeWidth={1.6} />} label="Draft order cart" hint={draftCart.totals.lines ? `${draftCart.totals.lines} garment(s) waiting` : 'Multi-garment checkout'} helper="Review every garment the customer has chosen, assign a tailor per garment, then take ONE cash payment that creates a separate job card and receipt for each item." onClick={() => setCartOpen(true)} />
+        <QuickAction icon={<LayoutGrid className="w-5 h-5" strokeWidth={1.6} />} label="Garment catalog" hint="Designs & fabrics" helper="Browse the shop's garments, uniform types, styles, fabrics and customization options with the customer - then start the order from there." onClick={() => { setActiveModal(null); onOpenCatalogPage?.(); }} />
+        <QuickAction icon={<FilePlus2 className="w-5 h-5" strokeWidth={1.6} />} label="New order" hint="Garment intake" helper="Enter one garment, measurements, quotation, and initial payment." onClick={() => openIntake(null)} />
         <QuickAction icon={<Banknote className="w-5 h-5" strokeWidth={1.6} />} label="Record payment" hint="Existing job card" helper="Record additional payments for existing job cards." onClick={() => setActiveModal('payment')} />
         <QuickAction icon={<CalendarPlus className="w-5 h-5" strokeWidth={1.6} />} label="Manual exception" hint="Special follow-ups" helper="Only for exceptional follow-ups. Normal fitting and pickup visits are suggested automatically by production and approved on the Appointments page." onClick={() => setActiveModal('fitting')} />
       </div>
 
-      {draftCart.totals.lines > 0 && (
-        <button
-          type="button"
-          onClick={() => setCartOpen(true)}
-          className="dash-in flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-[#C9A15C]/50 bg-[#FBEDCB]/50 px-5 py-4 text-left transition-colors hover:bg-[#F9F4EB]"
-          style={{ animationDelay: '0.06s' }}
-        >
-          <span className="flex items-center gap-3">
-            <ShoppingBag className="h-5 w-5 text-[#8C6F3E]" strokeWidth={1.7} />
-            <span>
-              <span className="block text-[13.5px] font-semibold text-[#2A211D]">
-                Draft order cart · {draftCart.totals.lines} garment{draftCart.totals.lines === 1 ? '' : 's'} for {draftCart.customerName || 'the walk-in customer'}
-              </span>
-              <span className="mt-0.5 block text-[11.5px] text-[#7A5A1E]">
-                {formatPeso(draftCart.totals.total)} total · {formatPeso(draftCart.totals.depositDue)} deposits due · one cash payment at checkout
-              </span>
-            </span>
-          </span>
-          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8C6F3E]">
-            Review &amp; check out <ArrowUpRight className="h-3.5 w-3.5" />
-          </span>
-        </button>
-      )}
+
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard delay={0.1} label="Collected today" value={formatPeso(stats.todayCollected)} icon={<Wallet className="w-4 h-4" strokeWidth={1.6} />} />
@@ -698,7 +613,7 @@ function DashboardView({
         <StatCard delay={0.22} label="Ready for pickup" value={`${stats.readyForPickup}`} icon={<Package className="w-4 h-4" strokeWidth={1.6} />} tone="warn" />
       </div>
 
-      {/* APPOINTMENT PIPELINE — production-driven appointment counts. */}
+      {/* APPOINTMENT PIPELINE â€” production-driven appointment counts. */}
       <div className="dash-in dash-card rounded-xl p-6" style={{ animationDelay: '0.24s' }}>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -737,10 +652,10 @@ function DashboardView({
                   <div key={i} className="flex items-center gap-3.5 py-3 border-b border-dashed border-[#ECE3D8] last:border-b-0">
                     <div className="w-8 h-8 rounded-lg bg-[#F9F4EB] text-[#8C6F3E] flex items-center justify-center flex-shrink-0">
                       {entry.kind === 'customer' ? <UserPlus className="w-4 h-4" strokeWidth={1.8} /> :
-                       entry.kind === 'order' ? <FilePlus2 className="w-4 h-4" strokeWidth={1.8} /> :
-                       entry.kind === 'payment' ? <Banknote className="w-4 h-4" strokeWidth={1.8} /> :
-                       entry.kind === 'pickup' ? <PackageCheck className="w-4 h-4" strokeWidth={1.8} /> :
-                       <CalendarPlus className="w-4 h-4" strokeWidth={1.8} />}
+                        entry.kind === 'order' ? <FilePlus2 className="w-4 h-4" strokeWidth={1.8} /> :
+                          entry.kind === 'payment' ? <Banknote className="w-4 h-4" strokeWidth={1.8} /> :
+                            entry.kind === 'pickup' ? <PackageCheck className="w-4 h-4" strokeWidth={1.8} /> :
+                              <CalendarPlus className="w-4 h-4" strokeWidth={1.8} />}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline justify-between gap-3">
@@ -847,74 +762,54 @@ function DashboardView({
       )}
       {activeModal === 'order' && (
         <GarmentIntakeModal
-          onClose={() => { setActiveModal(null); setIntakeDesign(null); setIntakeCustomerId(''); setEditingCartLine(null); }}
-          onAddToCart={handleAddToCart}
-          onViewCart={() => { setActiveModal(null); setCartOpen(true); }}
-          onProceedToCheckout={() => { setActiveModal(null); setCheckoutOpen(true); }}
-          cartItemCount={draftCart.totals.lines}
+          onClose={() => { setActiveModal(null); setIntakeDesign(null); setIntakeCustomerId(''); }}
+          onConfirmOrder={async (data: GarmentIntakeData, extras: Omit<IntakeOrderExtras, 'catalogName' | 'catalogImage'>) => {
+            try {
+              const cashReceived = parseFloat(data.depositCashReceived) || 0;
+              await frontDeskApi.createOrder({
+                customerId: data.customerId,
+                cashReceived: cashReceived,
+                paymentMethod: 'Cash',
+                referenceNumber: data.depositReferenceNumber || undefined,
+                notes: data.specialInstructions || undefined,
+                garmentType: data.garmentType,
+                orderType: data.orderType,
+                catalogItemId: data.catalogItemId ?? undefined,
+                uniformCategory: data.orderCategory,
+                styleDesign: data.styleDesign,
+                fabric: data.fabric,
+                fabricQuantity: data.fabricQuantity ? Number(data.fabricQuantity) : undefined,
+                quantity: data.quantity,
+                priority: data.priority,
+                additionalCharges: data.additionalCharges ? Number(data.additionalCharges) : 0,
+                customizations: {
+                  collar_type: data.collarStyle || undefined,
+                  sleeve_type: data.sleeveStyle || undefined,
+                  embroidery: data.embroidery || undefined,
+                  lining: data.lining || undefined,
+                  pocket_style: data.pocketStyle || undefined,
+                  buttons: data.buttons || undefined,
+                  monogram: data.monogram || undefined,
+                  rush_order: data.rushOrder,
+                },
+                specialInstructions: data.specialInstructions || undefined,
+                targetCompletionDate: data.targetCompletionDate,
+                assignedTailorId: data.assignedTailorId || undefined,
+                referenceImage: data.referenceImages?.[0] || undefined,
+                measurements: extras.measurements,
+                amount: extras.allocatedAmount,
+              });
+              loadDashboardData();
+              return { ok: true, message: 'Order created successfully.' };
+            } catch (err) {
+              return { ok: false, message: err instanceof Error ? err.message : 'Order failed.' };
+            }
+          }}
           customers={customers}
           orders={orders}
           initial={intakeDesign}
-          initialState={editingCartLine ? {
-            customerId: editingCartLine.customerId,
-            orderCategory: editingCartLine.orderCategory,
-            garmentType: editingCartLine.garmentType,
-            styleDesign: editingCartLine.styleDesign,
-            fabric: editingCartLine.fabric,
-            fabricQuantity: editingCartLine.fabricQuantity,
-            quantity: editingCartLine.quantity,
-            specialInstructions: editingCartLine.specialInstructions,
-            targetCompletionDate: editingCartLine.targetCompletionDate,
-            assignedTailorId: editingCartLine.assignedTailorId,
-            orderType: editingCartLine.orderType,
-            catalogItemId: editingCartLine.catalogItemId,
-            priority: editingCartLine.priority,
-            collarStyle: editingCartLine.customizations.collar_type || '',
-            sleeveStyle: editingCartLine.customizations.sleeve_type || '',
-            embroidery: editingCartLine.customizations.embroidery || 'None',
-            lining: editingCartLine.customizations.lining || '',
-            pocketStyle: editingCartLine.customizations.pocket_style || '',
-            buttons: editingCartLine.customizations.buttons || '',
-            monogram: editingCartLine.customizations.monogram || '',
-            rushOrder: Boolean(editingCartLine.customizations.rush_order),
-            color: editingCartLine.color,
-            customizationNotes: editingCartLine.customizationNotes,
-            additionalCharges: String(editingCartLine.additionalCharges || ''),
-            discount: String(editingCartLine.discount || ''),
-            depositAmount: String(editingCartLine.amount || ''),
-            // The measurements frozen on the cart line come back into the form.
-            measurements: cartMeasurementsToIntake(editingCartLine.measurements),
-            useExistingMeasurements: false,
-          } : null}
-          initialCustomerId={intakeCustomerId || (editingCartLine?.customerId ?? '')}
-          onOpenCatalogPage={onOpenCatalogPage}
-        />
-      )}
-      {cartOpen && (
-        <DraftOrderCartPanel
-          onClose={() => setCartOpen(false)}
-          tailors={tailors}
-          onEditItem={(item) => {
-            setCartOpen(false);
-            // The design + measured body are carried back into the form so the
-            // counter corrects one field instead of re-keying the garment.
-            openIntake(designFromCartItem(item), item.customerId, item);
-          }}
-          onAddAnother={() => {
-            // 'Add another garment' keeps the SAME customer: that is the whole
-            // point of the draft cart (one cart = one customer).
-            setCartOpen(false);
-            openIntake(null, draftCart.customerId);
-          }}
-          onProceedToCheckout={() => { setCartOpen(false); setCheckoutOpen(true); }}
-        />
-      )}
-      {checkoutOpen && (
-        <CheckoutReviewPanel
-          onClose={() => setCheckoutOpen(false)}
-          onBackToCart={() => { setCheckoutOpen(false); setCartOpen(true); }}
-          customerName={draftCart.customerName}
-          onCompleted={handleCheckoutCompleted}
+          onOpenCatalogPage={() => { setActiveModal(null); onOpenCatalogPage?.(); setIntakeDesign(null); }}
+          initialCustomerId={intakeCustomerId}
         />
       )}
       {activeModal === 'payment' && (
@@ -929,8 +824,8 @@ function DashboardView({
         />
       )}
       {activeModal === 'fitting' && (
-        <ScheduleFittingModal 
-          onClose={() => setActiveModal(null)} 
+        <ScheduleFittingModal
+          onClose={() => setActiveModal(null)}
           onSchedule={handleScheduleFitting}
           customers={customers}
           orders={orders}
@@ -945,7 +840,7 @@ function QuickAction({ icon, label, hint, helper, onClick }: { icon: ReactNode; 
   return (
     <button
       onClick={onClick}
-      className="group text-left bg-[#2A211D] rounded-xl p-5 shadow-[0_10px_28px_-14px_rgba(42,33,29,0.55)] hover:bg-[#3D312B] hover:-translate-y-0.5 hover:shadow-[0_16px_34px_-14px_rgba(42,33,29,0.6)] transition-all border border-[#3D312B]"
+      className="quick-action group text-left bg-[#2A211D] rounded-xl p-5 shadow-[0_10px_28px_-14px_rgba(42,33,29,0.55)] hover:bg-[#3D312B] hover:-translate-y-0.5 hover:shadow-[0_16px_34px_-14px_rgba(42,33,29,0.6)] transition-all border border-[#3D312B]"
     >
       <div className="w-9 h-9 rounded-lg bg-[#FAF7F2]/10 text-[#E5C396] flex items-center justify-center mb-4 group-hover:bg-[#FAF7F2]/20 transition-colors ring-1 ring-[#E5C396]/20">
         {icon}
@@ -965,6 +860,7 @@ function StatCard({ label, value, icon, delay = 0, tone = 'default' }: { label: 
     <div className="dash-in dash-card rounded-xl p-5 sm:p-6 transition-shadow hover:shadow-md" style={{ animationDelay: `${delay}s` }}>
       <div className="flex items-center justify-between mb-4">
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${tone === 'warn' ? 'bg-[#FAF2F0] text-[#9E5B4B]' : 'bg-[#F9F4EB] text-[#8C6F3E]'}`}>{icon}</div>
+        <span className={`h-1.5 w-1.5 rounded-full ${tone === 'warn' ? 'bg-[#B96D5B]' : 'bg-[#B89255]'}`} aria-hidden="true" />
       </div>
       <div className="text-2xl font-normal mb-1 text-[#2A211D]" style={{ fontFamily: "'DM Serif Display', serif" }}>{value}</div>
       <MonoLabel className="block">{label}</MonoLabel>
@@ -973,62 +869,29 @@ function StatCard({ label, value, icon, delay = 0, tone = 'default' }: { label: 
 }
 
 /* ==================================================================
-   ROOT — sidebar drives which view renders
+   ROOT â€” sidebar drives which view renders
 ================================================================== */
 
-/** The intake form's measurement keys, so a cart line can be edited in place. */
-function cartMeasurementsToIntake(measurements: { label: string; value: string }[]): GarmentIntakeData['measurements'] {
-  const values = { Chest: '', Waist: '', Hips: '', Shoulder: '', Sleeve: '', Inseam: '', Height: '' };
-  for (const measurement of measurements) {
-    const label = measurement.label.toLowerCase();
-    if (label === 'chest' || label === 'bust') values.Chest = measurement.value;
-    else if (label === 'waist') values.Waist = measurement.value;
-    else if (label === 'hip' || label === 'hips') values.Hips = measurement.value;
-    else if (label === 'shoulder') values.Shoulder = measurement.value;
-    else if (label === 'sleeve' || label === 'sleeve length') values.Sleeve = measurement.value;
-    else if (label === 'inseam') values.Inseam = measurement.value;
-    else if (label === 'height') values.Height = measurement.value;
-  }
-  return values;
-}
+
 
 /**
  * A cart line reopened for editing needs the DESIGN it started from, otherwise
  * the intake form's step-2 rule ("a catalog order needs a catalog design")
  * would block a catalog garment from being corrected.
  */
-function designFromCartItem(item: DraftCartItem): CatalogDesign {
-  return {
-    source: item.orderType === 'catalog' ? 'catalog' : 'custom',
-    name: item.catalogName || item.garmentType,
-    catalogItemId: item.catalogItemId,
-    image: item.image,
-    description: '',
-    priceLabel: '',
-    suggestedFabrics: [],
-    suggestedColors: [],
-    garmentType: item.garmentType,
-    orderCategory: item.orderCategory,
-    styleDesign: item.styleDesign,
-  };
-}
 
 /**
- * THE FRONT DESK WORKSPACE — every side of the counter: dashboard, customers,
+ * THE FRONT DESK WORKSPACE â€” every side of the counter: dashboard, customers,
  * orders, measurements, appointments, the financial center, the catalog and the
  * multi-garment Draft Order Cart.
  *
  * The cart provider wraps the whole workspace so the badge, the intake form,
  * the cart panel and the checkout review all read ONE cart (React state +
- * sessionStorage — never a database table). The cart is Front Desk only: no
+ * sessionStorage â€” never a database table). The cart is Front Desk only: no
  * customer, tailor or admin surface can see it.
  */
 export default function FrontDeskDashboard(props: { initialView?: ViewKey }) {
-  return (
-    <DraftOrderCartProvider>
-      <FrontDeskWorkspace {...props} />
-    </DraftOrderCartProvider>
-  );
+  return <FrontDeskWorkspace {...props} />;
 }
 
 function FrontDeskWorkspace({ initialView = 'dashboard' }: { initialView?: ViewKey }) {
@@ -1036,6 +899,7 @@ function FrontDeskWorkspace({ initialView = 'dashboard' }: { initialView?: ViewK
   const [profile, setProfile] = useState(() => currentUser());
   const [navOpen, setNavOpen] = useState(false);
   const [view, setView] = useState<ViewKey>(initialView);
+  const [prevView, setPrevView] = useState<ViewKey>('dashboard');
   const [loading, setLoading] = useState(true);
   // Garment picked on the Garment Catalog page, waiting for the intake form.
   const [pendingDesign, setPendingDesign] = useState<CatalogDesign | null>(null);
@@ -1055,8 +919,9 @@ function FrontDeskWorkspace({ initialView = 'dashboard' }: { initialView?: ViewK
   const openFinancialCenter = useCallback((customerId?: string) => {
     setFcCustomer(customerId ?? null);
     setFcOpen(true);
+    setPrevView(view);
     setView('payments');
-  }, []);
+  }, [view]);
 
   // A row in the Financial Center's order ledger opens the EXISTING order
   // details on top of the Financial Center, so closing it returns here.
@@ -1141,6 +1006,7 @@ function FrontDeskWorkspace({ initialView = 'dashboard' }: { initialView?: ViewK
           <CustomerFinancialCenterView
             mode="front_desk"
             initialCustomerId={fcCustomer}
+            onBack={() => setView(prevView)}
             onNewOrder={(customerCode) => { setPendingIntakeCustomer(customerCode); setView('dashboard'); }}
             onOpenOrder={openOrderFromFinancialCenter}
           />
@@ -1190,11 +1056,10 @@ function FrontDeskWorkspace({ initialView = 'dashboard' }: { initialView?: ViewK
                 <button
                   key={item.label}
                   onClick={() => { setView(item.view); setNavOpen(false); }}
-                  className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-lg text-[14px] font-medium transition-all ${
-                    active
+                  className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-lg text-[14px] font-medium transition-all ${active
                       ? 'bg-[#FAF7F2] text-[#2A211D] shadow-sm border border-[#E2D7C7]'
                       : 'text-[#766A62] hover:text-[#2A211D] hover:bg-[#FAF7F2]/60'
-                  }`}
+                    }`}
                 >
                   <item.icon className={`w-4 h-4 ${active ? 'text-[#8C6F3E]' : 'text-[#A3958B]'}`} strokeWidth={active ? 2 : 1.6} />
                   {item.label}
@@ -1232,6 +1097,7 @@ function FrontDeskWorkspace({ initialView = 'dashboard' }: { initialView?: ViewK
             <button className="lg:hidden text-[#2A211D] flex-shrink-0" onClick={() => setNavOpen(true)} aria-label="Open menu">
               <Menu className="w-5 h-5" />
             </button>
+            {/* Removed Back button */}
             <div className="min-w-0">
               <MonoLabel className="block">Front desk / {currentNavLabel}</MonoLabel>
               <div className="text-[16px] font-normal text-[#2A211D] truncate" style={{ fontFamily: "'DM Serif Display', serif" }}>
