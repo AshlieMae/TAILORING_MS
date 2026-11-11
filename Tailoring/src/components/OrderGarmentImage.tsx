@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { imageFramingStyle } from '../utils/imageFraming';
 import { GARMENT_PLACEHOLDER, getOrderGarmentImage, type OrderGarmentImageSource } from '../utils/getOrderGarmentImage';
+import { resolveCatalogImageUrl } from '../utils/CatalogImage';
 
 /**
  * An order row as the server returns it. `catalog_*` are the garment_catalog
@@ -46,10 +47,13 @@ function framingNumber(value: number | string | null | undefined): number | unde
  */
 export function OrderGarmentImage({ order, className = '', alt }: { order: OrderImageSource; className?: string; alt?: string }) {
   const [failed, setFailed] = useState(false);
-  const source = failed ? GARMENT_PLACEHOLDER : getOrderGarmentImage(order);
+  const rawSource = getOrderGarmentImage(order);
+  const source = failed || rawSource === GARMENT_PLACEHOLDER
+    ? GARMENT_PLACEHOLDER
+    : resolveCatalogImageUrl(rawSource);
   // The placeholder is our own artwork: it keeps its natural shape centred in
   // the frame instead of inheriting a catalog photo's zoom and focal point.
-  const style = source === GARMENT_PLACEHOLDER
+  const style = rawSource === GARMENT_PLACEHOLDER || failed
     ? { objectFit: 'contain' as const }
     : imageFramingStyle({
       image_zoom: framingNumber(order.catalog_image_zoom),

@@ -14,7 +14,7 @@ import { buildDescriptionContext, generateGarmentDescription, type DescriptionEn
 import { DEFAULT_IMAGE_FRAMING, normalizeFraming } from '../utils/imageFraming';
 import { formatPHP } from '../utils/currency';
 import { CatalogThumb } from '../utils/CatalogThumb';
-import { CatalogImage } from '../utils/CatalogImage';
+import { CatalogImage, resolveCatalogImageUrl } from '../utils/CatalogImage';
 import { ChipSelect, FabricInventorySelect, OptionCard, type FabricOption } from './optionPickers';
 import { STYLE_DESIGNS, CUSTOMIZATION_OPTIONS } from '../Pages_Frontdesk/garmentCatalogData';
 import {
@@ -1647,7 +1647,7 @@ function GarmentForm({ garment, registry, rateCardState, onClose, onSave }: {
                   <div className="px-4 pb-4 pt-3">
                     <div className="flex items-center gap-3">
                       <div className="flex h-14 w-24 shrink-0 items-end overflow-hidden border" style={{ borderColor: COLORS.border, background: previewGradient, borderRadius: 10 }}>
-                        {form.image && <img src={form.image} alt="" className="h-full w-full object-contain p-1" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+                        {form.image && <img src={resolveCatalogImageUrl(form.image)} alt="" className="h-full w-full object-contain p-1" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
                       </div>
                       <div className="flex flex-1 flex-wrap gap-2">
                         {form.colors.map((color) => (
@@ -1784,7 +1784,7 @@ function ImageLightbox({ src, name, size, onClose }: { src: string; name: string
           </div>
           <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full border border-white/30 text-white transition-colors hover:bg-white/10" aria-label="Close"><X className="h-4 w-4" /></button>
         </div>
-        <img src={src} alt={name || 'Garment photo'} className="max-h-[78vh] w-auto max-w-full rounded-xl bg-white object-contain shadow-2xl" />
+        <img src={resolveCatalogImageUrl(src)} alt={name || 'Garment photo'} className="max-h-[78vh] w-auto max-w-full rounded-xl bg-white object-contain shadow-2xl" />
       </div>
     </div>
   ), document.body);

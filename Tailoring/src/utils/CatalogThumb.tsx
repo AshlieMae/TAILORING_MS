@@ -16,6 +16,7 @@
 // picker and the quotation previews are untouched.
 import { useState, type ReactNode } from 'react';
 import { thumbFitFor } from './imageFraming';
+import { resolveCatalogImageUrl } from './CatalogImage';
 
 /**
  * The fixed image frame. Give it a size through `className` (for example
@@ -37,6 +38,7 @@ export function CatalogThumb({ src, alt, cropMode, className = '', radius = 0, f
   const [broken, setBroken] = useState(false);
   const hasImage = Boolean(src) && !broken;
   const fit = thumbFitFor({ src, cropMode });
+  const resolvedSrc = src ? resolveCatalogImageUrl(src) : '';
 
   return (
     <div
@@ -44,11 +46,11 @@ export function CatalogThumb({ src, alt, cropMode, className = '', radius = 0, f
       style={{ background: '#F3F4F6', borderRadius: radius }}
     >
       {hasImage && fit === 'fill' && (
-        <img src={src as string} alt={alt} loading="lazy" draggable={false}
+        <img src={resolvedSrc} alt={alt} loading="lazy" draggable={false}
           onError={() => setBroken(true)} className="h-full w-full object-cover object-center" />
       )}
       {hasImage && fit === 'mat' && (
-        <img src={src as string} alt={alt} loading="lazy" draggable={false}
+        <img src={resolvedSrc} alt={alt} loading="lazy" draggable={false}
           onError={() => setBroken(true)} className={`max-h-full max-w-full object-contain object-center ${matPadding}`} />
       )}
       {!hasImage && fallback}
