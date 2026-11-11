@@ -7,9 +7,9 @@ function Label({ children }: { children: React.ReactNode }) {
   return <span className="text-[10px] uppercase tracking-[0.2em] text-[#8C7E74]" style={{ fontFamily: "'Space Mono', monospace" }}>{children}</span>;
 }
 
-function Section({ icon, title, description, children }: { icon: React.ReactNode; title: string; description: string; children: React.ReactNode }) {
+function Section({ icon, title, description, children, className = '' }: { icon: React.ReactNode; title: string; description: string; children: React.ReactNode; className?: string }) {
   return (
-    <section className="dash-in dash-card rounded-xl p-6 sm:p-7">
+    <section className={`dash-in dash-card rounded-2xl p-6 sm:p-7 ${className}`}>
       <div className="flex items-start gap-3">
         <span className="rounded-lg bg-[#F8F3EB] p-2 text-[#8C6F3E]">{icon}</span>
         <div>
@@ -38,8 +38,8 @@ function Toggle({ label, detail, checked, onChange }: { label: string; detail: s
         <span className="block text-sm font-medium text-[#2A211D]">{label}</span>
         <span className="mt-1 block text-xs text-[#766A62]">{detail}</span>
       </div>
-      <button type="button" onClick={() => onChange(!checked)} aria-pressed={checked} className={`relative h-6 w-11 rounded-full transition-colors ${checked ? 'bg-[#4E7357]' : 'bg-[#D9CFC4]'}`}>
-        <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
+      <button type="button" onClick={() => onChange(!checked)} aria-label={`${label}: ${checked ? 'enabled' : 'disabled'}`} aria-pressed={checked} className={`relative h-7 w-12 rounded-full border transition-colors ${checked ? 'border-[#4E7357] bg-[#4E7357]' : 'border-[#D9CFC4] bg-[#EEE8E0]'}`}>
+        <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
       </button>
     </div>
   );
@@ -173,11 +173,17 @@ export function FrontDeskSettingsView() {
   }
 
   return (
-    <div className="max-w-4xl space-y-7">
-      <div className="dash-in">
-        <Label>Front desk preferences</Label>
-        <h1 className="mt-1 text-2xl text-[#2A211D] sm:text-3xl" style={{ fontFamily: "'DM Serif Display', serif" }}>Settings</h1>
-        <p className="mt-2 text-sm text-[#766A62]">Manage your counter profile, alerts, and account preferences.</p>
+    <div className="w-full space-y-7">
+      <div className="dash-in flex flex-col gap-4 border-b border-[#E8DFD3] pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <Label>Front desk preferences</Label>
+          <h1 className="mt-1 text-2xl text-[#2A211D] sm:text-3xl" style={{ fontFamily: "'DM Serif Display', serif" }}>Settings</h1>
+          <p className="mt-2 max-w-xl text-sm text-[#766A62]">Manage the account details and alerts used at the customer counter.</p>
+        </div>
+        <div className="flex items-center gap-2 self-start rounded-full border border-[#DCE8DC] bg-[#F3F8F2] px-3 py-2 sm:self-auto">
+          <span className="h-2 w-2 rounded-full bg-[#4E7357]" />
+          <Label>Profile active</Label>
+        </div>
       </div>
 
       {saved && (
@@ -191,6 +197,7 @@ export function FrontDeskSettingsView() {
         </div>
       )}
 
+      <div className="grid gap-6 lg:grid-cols-[1.25fr_0.9fr]">
       <Section icon={<UserRound className="h-5 w-5" />} title="Counter profile" description="Information shown on your front-desk account.">
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Display name" value={settings.displayName} onChange={(value) => update('displayName', value)} />
@@ -206,14 +213,21 @@ export function FrontDeskSettingsView() {
           <Toggle label="Pickup reminders" detail="Alerts when completed garments are due for release." checked={settings.pickup} onChange={(value) => update('pickup', value)} />
         </div>
       </Section>
+      </div>
 
       <Section icon={<LockKeyhole className="h-5 w-5" />} title="Account security" description="Keep your front-desk account secure.">
         <PasswordChangePanel buttonClassName="rounded-lg border border-[#E2D7C7] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#5E5048] hover:bg-[#F8F3EB]" />
       </Section>
 
-      <button onClick={save} className="dash-in inline-flex items-center gap-2 rounded-lg bg-[#2A211D] px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white hover:bg-[#3D312B] transition-colors">
-        <Save className="h-4 w-4" /> Save settings
-      </button>
+      <div className="dash-in flex flex-col items-start justify-between gap-4 rounded-2xl border border-[#E2D7C7] bg-[#FCFAF7] px-5 py-4 sm:flex-row sm:items-center">
+        <div>
+          <p className="text-sm font-medium text-[#2A211D]">Ready to save your changes?</p>
+          <p className="mt-1 text-xs text-[#766A62]">Your profile details are shared with the front-desk account.</p>
+        </div>
+        <button onClick={save} className="inline-flex items-center gap-2 rounded-lg bg-[#2A211D] px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white shadow-sm transition-colors hover:bg-[#3D312B]">
+          <Save className="h-4 w-4" /> Save settings
+        </button>
+      </div>
     </div>
   );
 }

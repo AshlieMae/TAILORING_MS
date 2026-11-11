@@ -11,14 +11,12 @@
 //     never create a new receipt number
 //   * only an authorized Admin may void, and voiding never deletes the row
 import { useMemo, useState } from 'react';
-import { Ban, Printer, Search, ReceiptText, ShoppingBag } from 'lucide-react';
+import { Ban, Printer, Search, ReceiptText } from 'lucide-react';
 import type { FinancialPayment } from '../../services/frontDeskApi';
-import frontDeskApi from '../../services/frontDeskApi';
 import { COLORS } from '../Pages_Admin/Theme';
 import { formatPHP, formatPHPExact } from '../utils/currency';
 import { cashFigure } from './cash';
 import { Pill } from './OrderLedger';
-import { checkoutPrintDataFromSummary, printCheckoutSummary } from '../utils/printCheckoutSummary';
 
 const PAGE_SIZE = 8;
 
@@ -38,26 +36,6 @@ export function PaymentLedger({
   const [voiding, setVoiding] = useState<FinancialPayment | null>(null);
   const [voidReason, setVoidReason] = useState('');
   const [voidError, setVoidError] = useState('');
-  const [printingCheckout, setPrintingCheckout] = useState<string | null>(null);
-
-  /**
-   * Reprint the ONE checkout summary a payment belongs to. The document is
-   * rebuilt from the payment records that share the checkout reference (there
-   * is no stored summary document), so a voided allocation shows as voided.
-   */
-  async function printCheckout(payment: FinancialPayment) {
-    const reference = payment.checkout_reference;
-    if (!reference) return;
-    try {
-      setPrintingCheckout(reference);
-      const summary = await frontDeskApi.getCheckoutSummary(reference);
-      printCheckoutSummary(checkoutPrintDataFromSummary(summary));
-    } catch (err) {
-      setVoidError(err instanceof Error ? err.message : 'The checkout summary could not be loaded.');
-    } finally {
-      setPrintingCheckout(null);
-    }
-  }
 
   const types = useMemo(() => {
     const seen = new Set<string>();
@@ -164,11 +142,6 @@ export function PaymentLedger({
             <span className="mono text-[12px]" style={{ color: COLORS.ink }}>{payment.receipt_number}</span>
             <span className="mono text-[11.5px]" style={{ color: COLORS.inkSoft }}>
               {payment.job_card_number || '—'}
-              {payment.checkout_reference && (
-                <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ color: COLORS.brassDeep }}>
-                  {payment.checkout_reference}
-                </span>
-              )}
             </span>
             <span className="text-[12px]" style={{ color: COLORS.ink }}>{payment.payment_type}</span>
             <span className="mono text-[12.5px] font-medium" style={{ color: payment.is_voided ? COLORS.muted : COLORS.ink, textDecoration: payment.is_voided ? 'line-through' : 'none' }}>{formatPHPExact(payment.amount)}</span>
@@ -183,19 +156,6 @@ export function PaymentLedger({
               <button type="button" onClick={() => onViewReceipt(payment)} className="inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ borderColor: COLORS.border, color: COLORS.inkSoft, borderRadius: 6 }}>
                 <Printer className="h-3 w-3" /> Reprint
               </button>
-              {payment.checkout_reference && (
-                <button
-                  type="button"
-                  onClick={() => printCheckout(payment)}
-                  disabled={printingCheckout === payment.checkout_reference}
-                  className="inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.06em] disabled:opacity-50"
-                  style={{ borderColor: COLORS.brassSoftBorder, color: COLORS.brassDeep, borderRadius: 6 }}
-                  title={`Print the checkout summary for ${payment.checkout_reference}`}
-                >
-                  <ShoppingBag className="h-3 w-3" />
-                  {printingCheckout === payment.checkout_reference ? 'Loading…' : 'Checkout'}
-                </button>
-              )}
               {canVoid && !payment.is_voided && onVoid && (
                 <button type="button" onClick={() => { setVoiding(payment); setVoidError(''); }} className="inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ borderColor: COLORS.dangerBorder, color: COLORS.danger, borderRadius: 6 }}>
                   <Ban className="h-3 w-3" /> Void
@@ -227,25 +187,9 @@ export function PaymentLedger({
             </div>
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               <span className="text-[11px]" style={{ color: COLORS.muted }}>{payment.payment_type} · {payment.recorded_by_name}</span>
-              {payment.checkout_reference && (
-                <span className="mono text-[10.5px] font-semibold uppercase tracking-[0.08em]" style={{ color: COLORS.brassDeep }}>
-                  {payment.checkout_reference}
-                </span>
-              )}
               <button type="button" onClick={() => onViewReceipt(payment)} className="inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ borderColor: COLORS.border, color: COLORS.inkSoft, borderRadius: 6 }}>
                 <ReceiptText className="h-3 w-3" /> View receipt
               </button>
-              {payment.checkout_reference && (
-                <button
-                  type="button"
-                  onClick={() => printCheckout(payment)}
-                  disabled={printingCheckout === payment.checkout_reference}
-                  className="inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.06em] disabled:opacity-50"
-                  style={{ borderColor: COLORS.brassSoftBorder, color: COLORS.brassDeep, borderRadius: 6 }}
-                >
-                  <ShoppingBag className="h-3 w-3" /> Checkout summary
-                </button>
-              )}
               {canVoid && !payment.is_voided && onVoid && (
                 <button type="button" onClick={() => { setVoiding(payment); setVoidError(''); }} className="inline-flex items-center gap-1 border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.06em]" style={{ borderColor: COLORS.dangerBorder, color: COLORS.danger, borderRadius: 6 }}>
                   <Ban className="h-3 w-3" /> Void

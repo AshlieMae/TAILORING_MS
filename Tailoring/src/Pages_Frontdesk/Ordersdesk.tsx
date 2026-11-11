@@ -78,9 +78,14 @@ export function OrderDetails({ order, onClose, onHandoff }: { order: Order; onCl
     return () => clearTimeout(t);
   }, [order.order_id]);
 
-  const total = Number(order.total_amount) || 0;
-  const paid = Number(order.deposit_paid) || 0;
-  const balance = Number(order.remaining_balance) || 0;
+  // Prefer final_price (frozen quote) as the authoritative total — same logic
+  // used by the Customer Financial Center so both screens always agree.
+  const rawFinal = Number((order as any).final_price) || 0;
+  const total = rawFinal > 0 ? rawFinal : Number(order.total_amount) || 0;
+  const paid  = Number(order.deposit_paid) || 0;
+  // Always derive balance from total − paid so stale DB `remaining_balance`
+  // values can never cause the donut / bar to claim "Fully Paid" incorrectly.
+  const balance = Math.max(0, total - paid);
   const paidPct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
   const stageIdx = STAGE_ORDER.indexOf(order.production_status);
 
@@ -115,7 +120,7 @@ export function OrderDetails({ order, onClose, onHandoff }: { order: Order; onCl
         <div className="p-6">
           {order.production_status === 'Draft' && (
             <div className="mb-5 rounded-lg border border-[#ECD8A7] bg-[#FFF7E3] px-4 py-3 text-sm text-[#765818]">
-              <strong>Walk-in intake draft.</strong> Record measurements, fabric, due date, tailor, and required deposit before sending this job card to production.
+              <strong>Walk-in intake draft.</strong> Record measurements, fabric, due date, tailor, and required downpayment before sending this job card to production.
             </div>
           )}
           <div className="mb-5"><Label>Garment</Label><div className="mt-2 h-48 overflow-hidden rounded-xl border border-[#E2D7C7] bg-white"><OrderGarmentImage order={order} className="h-full w-full" /></div></div>
@@ -181,7 +186,7 @@ export function OrderDetails({ order, onClose, onHandoff }: { order: Order; onCl
               ['Fabric', order.fabric || 'Not set'],
               ['Quantity', `${order.quantity} pcs`],
               ['Target completion', new Date(order.target_completion_date).toLocaleDateString()],
-              ['Payment status', order.payment_status],
+              ['Payment status', balance <= 0 ? 'Fully Paid' : paid <= 0 ? 'No Payment' : 'Partially Paid'],
             ] as [string, string][]).map(([label, value], i) => (
               <div key={label} className="jd-pop rounded-lg border border-[#E2D7C7] bg-white p-3" style={{ animationDelay: `${120 + i * 60}ms` }}>
                 <Label>{label}</Label>
@@ -223,7 +228,7 @@ export function OrderDetails({ order, onClose, onHandoff }: { order: Order; onCl
                 <Scissors className="w-3.5 h-3.5" />
                 {handoffLoading ? 'Sending…' : 'Send to Production'}
               </button>
-                                                        <p className="mt-1.5 text-[11px] text-[#8C7E74]">Hand the job card to your Master Tailor. The system validates that the customer, measurements, garment, fabric, deadline, tailor, and deposit are all complete before moving the job into production.</p>
+                                                        <p className="mt-1.5 text-[11px] text-[#8C7E74]">Hand the job card to your Master Tailor. The system validates that the customer, measurements, garment, fabric, deadline, tailor, and downpayment are all complete before moving the job into production.</p>
                         </div>
           )}
       </div>

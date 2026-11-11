@@ -32,6 +32,9 @@ export interface CatalogItem {
   garment_type: string;
   base_price: number | null;
   production_workflow: string;
+  production_min_days?: number | null;
+  production_max_days?: number | null;
+  production_time?: string | null;
   allowed_styles: string[];
   allowed_fabrics: string[];
   allowed_customizations: string[];
@@ -784,26 +787,29 @@ const frontDeskApi = {
   // Order endpoints
   createOrder: async (data: {
     customerId: string;
+    cashReceived: number;
+    paymentMethod: string;
+    referenceNumber?: string;
+    notes?: string;
     garmentType: string;
     uniformCategory?: string;
     styleDesign: string;
     fabric: string;
-    fabricQuantity: number;
+    fabricQuantity?: number;
     quantity: number;
-    specialInstructions: string;
+    specialInstructions?: string;
     targetCompletionDate: string;
-    assignedTailorId: string;
-    measurementSnapshotId: string;
-    orderNotes: string;
-    // --- Structured intake (catalog vs bespoke + pricing architecture) ---
+    assignedTailorId?: string;
+    referenceImage?: string;
     orderType?: 'catalog' | 'bespoke';
     catalogItemId?: number | null;
     customizations?: OrderCustomizations;
-    priority?: 'Normal' | 'High' | 'Rush' | string;
+    priority?: string;
     additionalCharges?: number;
     discount?: number;
-    referenceImage?: string;
-  }): Promise<Order> => {
+    measurements?: any[];
+    amount?: number;
+  }): Promise<{ok: boolean, order: Order, paymentId?: number, receiptNumber?: string}> => {
     const response = await fetch(`${API_URL}/orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken()}` },

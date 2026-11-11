@@ -142,10 +142,21 @@ export interface RecordCashPaymentModalProps {
 export function RecordCashPaymentModal({ orders, initialOrderRef, customerName, onClose, onRecorded }: RecordCashPaymentModalProps) {
   const payable = useMemo(() => orders.filter((order) => Number(order.remaining_balance) > 0), [orders]);
   const [orderRef, setOrderRef] = useState(() => {
-    const match = payable.find((order) => String(order.order_id) === String(initialOrderRef) || order.job_card_id === initialOrderRef);
-    return match ? String(match.order_id) : '';
+    if (initialOrderRef) {
+      const match = payable.find((order) => String(order.order_id) === String(initialOrderRef) || order.job_card_id === initialOrderRef);
+      if (match) return String(match.order_id);
+    }
+    if (payable.length === 1) return String(payable[0].order_id);
+    return '';
   });
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(() => {
+    let match;
+    if (initialOrderRef) {
+      match = payable.find((order) => String(order.order_id) === String(initialOrderRef) || order.job_card_id === initialOrderRef);
+    }
+    if (!match && payable.length === 1) match = payable[0];
+    return match ? String(match.remaining_balance) : '';
+  });
   const [cashReceived, setCashReceived] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
@@ -209,21 +220,36 @@ export function RecordCashPaymentModal({ orders, initialOrderRef, customerName, 
         </header>
 
         <div className="space-y-5 px-6 pb-6">
-          <FieldShell label="Job card">
-            <select
-              value={orderRef}
-              onChange={(event) => { setOrderRef(event.target.value); setError(''); }}
-              className={INPUT}
-              style={{ borderColor: COLORS.border, borderRadius: 8, color: COLORS.ink }}
-            >
-              <option value="">Select the job card…</option>
-              {payable.map((order) => (
-                <option key={String(order.order_id)} value={String(order.order_id)}>
-                  {order.job_card_id} — {order.garment_type} — balance {formatPHP(order.remaining_balance)}
-                </option>
-              ))}
-            </select>
-          </FieldShell>
+          {Boolean(initialOrderRef) || payable.length === 1 ? (
+            <FieldShell label="Job card">
+              <div className="flex w-full flex-col justify-center border bg-white px-3 py-2" style={{ borderColor: COLORS.border, borderRadius: 8, height: '42px' }}>
+                <span className="text-[13px] font-medium" style={{ color: COLORS.ink }}>
+                  {selected ? `${selected.job_card_id} — ${selected.garment_type}` : '—'}
+                </span>
+              </div>
+            </FieldShell>
+          ) : (
+            <FieldShell label="Job card">
+              <select
+                value={orderRef}
+                onChange={(event) => {
+                  setOrderRef(event.target.value);
+                  const selectedOrder = payable.find(o => String(o.order_id) === event.target.value);
+                  if (selectedOrder) setAmount(String(selectedOrder.remaining_balance));
+                  setError('');
+                }}
+                className={INPUT}
+                style={{ borderColor: COLORS.border, borderRadius: 8, color: COLORS.ink }}
+              >
+                <option value="">Select the job card…</option>
+                {payable.map((order) => (
+                  <option key={String(order.order_id)} value={String(order.order_id)}>
+                    {order.job_card_id} — {order.garment_type} — balance {formatPHP(order.remaining_balance)}
+                  </option>
+                ))}
+              </select>
+            </FieldShell>
+          )}
 
           {!payable.length && (
             <p className="border px-3 py-2 text-[12px]" style={{ borderColor: COLORS.border, background: COLORS.surfaceAlt, color: COLORS.muted, borderRadius: 8 }}>

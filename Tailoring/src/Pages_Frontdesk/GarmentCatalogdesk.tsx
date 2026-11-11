@@ -516,8 +516,8 @@ function ratePriceLabel(ratePrice: number | null | undefined): string {
               <div>
                 <div className="overflow-hidden rounded-xl border border-[#E2D7C7] bg-[#F8F3EB]">
                   {card.source === 'custom'
-                    ? <div className="flex h-64 items-center justify-center"><Sparkles className="h-10 w-10 text-[#8C6F3E]" strokeWidth={1.4} /></div>
-                    : <SmartImage src={card.image} alt={card.name} garmentType={card.garmentType} framing={card.imageFraming} className="h-64 w-full object-cover" />}
+                    ? <div className="flex h-[420px] items-center justify-center"><Sparkles className="h-10 w-10 text-[#8C6F3E]" strokeWidth={1.4} /></div>
+                    : <SmartImage src={card.image} alt={card.name} garmentType={card.garmentType} framing={card.imageFraming} className="h-[420px] w-full object-contain" />}
                 </div>
                 <p className="mt-2 text-[10.5px] leading-relaxed text-[#A3958B]">
                   Design reference shown to the customer at the counter. The garment, style and fabric recorded on the job card come from live inventory — nothing is typed by hand.

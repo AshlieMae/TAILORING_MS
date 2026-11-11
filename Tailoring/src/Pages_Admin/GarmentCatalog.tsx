@@ -41,6 +41,8 @@ type Garment = {
   garment_type: string;
   base_price: string;
   production_workflow: string;
+  production_min_days?: number | null;
+  production_max_days?: number | null;
   allowed_styles: string[];
   allowed_fabrics: string[];
   allowed_customizations: string[];
@@ -166,6 +168,7 @@ const DEFAULT_CATALOG: Garment[] = [
 const emptyGarment: Garment = {
   name: '', price: '', description: '', fabrics: [], image: '', colors: ['#E6DED1', '#B58A3A'],
   garment_category: '', garment_type: '', base_price: '', production_workflow: 'standard',
+  production_min_days: null, production_max_days: null,
   allowed_styles: [], allowed_fabrics: [], allowed_customizations: [],
   measurement_profile: 'full_body', active: 1,
   ...DEFAULT_IMAGE_FRAMING,
@@ -841,7 +844,7 @@ function GarmentDetailsDrawer({ garment, registry, onClose, onEdit, onArchive, o
   return createPortal((
     <div className="fixed inset-0 z-40">
       <button onClick={onClose} className="absolute inset-0" style={{ background: 'rgba(13,22,40,0.45)', backdropFilter: 'blur(2px)' }} aria-label="Close details" />
-      <aside className="rise-in absolute right-0 top-0 flex h-full w-full max-w-md flex-col overflow-y-auto bg-white shadow-2xl" style={{ borderLeft: `1px solid ${COLORS.border}` }}>
+      <aside className="rise-in absolute right-0 top-0 flex h-full w-full max-w-2xl flex-col overflow-y-auto bg-white shadow-2xl" style={{ borderLeft: `1px solid ${COLORS.border}` }}>
         <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: `1px solid ${COLORS.border}` }}>
           <div>
             <EyebrowLabel color={COLORS.brassDeep}>Catalog record #{garment.id ?? '—'}</EyebrowLabel>
@@ -852,8 +855,8 @@ function GarmentDetailsDrawer({ garment, registry, onClose, onEdit, onArchive, o
         <div className="flex-1 space-y-5 p-6">
           <div className="overflow-hidden" style={{ borderRadius: 12, border: `1px solid ${COLORS.border}`, background: COLORS.surfaceAlt }}>
             {garment.image
-              ? <CatalogImage src={garment.image} alt={garment.name} framing={garment} className="h-52 w-full bg-white" />
-              : <div className="flex h-52 items-center justify-center text-xs" style={{ color: COLORS.faint }}>No photo attached</div>}
+              ? <CatalogImage src={garment.image} alt={garment.name} framing={garment} className="h-96 w-full bg-white" />
+              : <div className="flex h-96 items-center justify-center text-xs" style={{ color: COLORS.faint }}>No photo attached</div>}
           </div>
           <StatusBadge active={garment.active} />
           {garment.description && <p className="text-sm leading-relaxed" style={{ color: COLORS.inkSoft }}>{garment.description}</p>}
@@ -1430,6 +1433,14 @@ function GarmentForm({ garment, registry, rateCardState, onClose, onSave }: {
                     {WORKFLOWS.map((wf) => <option key={wf} value={wf}>{WORKFLOW_LABELS[wf] || wf}</option>)}
                   </select>
                 </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Minimum business days" hint="Excludes Sundays and configured holidays.">
+                    <input type="number" min={0} step={1} value={form.production_min_days ?? ''} onChange={(e) => update('production_min_days', e.target.value === '' ? null : Number(e.target.value))} style={fieldStyle} />
+                  </Field>
+                  <Field label="Maximum business days">
+                    <input type="number" min={0} step={1} value={form.production_max_days ?? ''} onChange={(e) => update('production_max_days', e.target.value === '' ? null : Number(e.target.value))} style={fieldStyle} />
+                  </Field>
+                </div>
                 <Field label="Measurement profile" hint="What intake asks to measure">
                   <select value={form.measurement_profile} onChange={(e) => update('measurement_profile', e.target.value)} style={fieldStyle}>
                     {MEASUREMENT_PROFILES.map((profile) => <option key={profile.value} value={profile.value}>{profile.label}</option>)}

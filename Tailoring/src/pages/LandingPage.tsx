@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
 import type { ComponentType, FormEvent, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import frontDeskApi from '../../services/frontDeskApi';
+import { CatalogImage } from '../utils/CatalogImage';
+import { GarmentIllustration } from '../Pages_Frontdesk/GarmentIllustration';
+import {
+  buildCatalogCards,
+  SAMPLE_CATALOG_ITEMS,
+  groupForCategory,
+  type CatalogCard,
+} from '../Pages_Frontdesk/garmentCatalogData';
 import {
   Menu,
   X,
@@ -13,7 +22,6 @@ import {
   LogIn,
   Scissors,
   Ruler,
-  Shirt,
   Sparkles,
   Check,
   ChevronLeft,
@@ -106,9 +114,8 @@ function Label({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-2.5 text-[10px] uppercase tracking-[0.28em] ${
-        dark ? 'text-[#C8A46A]' : 'text-[#8a6d38]'
-      } ${className}`}
+      className={`inline-flex items-center gap-2.5 text-[10px] uppercase tracking-[0.28em] ${dark ? 'text-[#C8A46A]' : 'text-[#8a6d38]'
+        } ${className}`}
       style={{ fontFamily: MONO }}
     >
       <span className="relative inline-block h-3 w-3 shrink-0 rounded-full border border-[#C8A46A]">
@@ -152,56 +159,6 @@ const QUICK_FACTS: { icon: IconType; title: string; body: string }[] = [
   },
 ];
 
-const SERVICES: {
-  icon: IconType;
-  title: string;
-  body: string;
-  image: string;
-  alt: string;
-}[] = [
-  {
-    icon: Shirt,
-    title: 'Custom Suits & Blazers',
-    body: 'Measured, cut and finished for your frame — for the office, a wedding, or everyday wear.',
-    image: '/landing/hero-tailor-measuring.jpg',
-    alt: 'Tailor taking a client’s back measurement with a tape measure',
-  },
-  {
-    icon: Sparkles,
-    title: 'Dresses & Gowns',
-    body: 'Occasion pieces built from your measurements, from the first fitting to the final press.',
-    image: '/landing/gowns&dress.jpg',
-    alt: 'Tailor working at her bench in the atelier',
-  },
-  {
-    icon: Scissors,
-    title: 'Alterations & Repairs',
-    body: 'Hems, tapering, sleeves, seams and zips — bring the garment exactly as it is.',
-    image: '/landing/hands-edge-finishing.jpg',
-    alt: 'Hands finishing the edge of a garment',
-  },
-  {
-    icon: Users,
-    title: 'Uniforms & Workwear',
-    body: 'School, office and team uniforms cut to the same standard, batch after batch.',
-    image: '/landing/uniforms.jpg',
-    alt: 'Tailoring workshop detail',
-  },
-  {
-    icon: Ruler,
-    title: 'Fabric & Fit Consultation',
-    body: 'Not sure what a piece needs? We read the fabric, the drape and the fit, then tell you honestly.',
-    image: '/landing/detail-thread-library.jpg',
-    alt: 'Wooden drawers filled with reels of thread',
-  },
-  {
-    icon: CalendarClock,
-    title: 'Wedding Parties & Events',
-    body: 'Bring the whole party in to be measured together and we will keep every profile on file.',
-    image: '/landing/atelier-shelves.jpg',
-    alt: 'Shelves inside the tailoring atelier',
-  },
-];
 
 /* The walk-in journey, in five steps. */
 const WALK_IN_STEPS: { icon: IconType; step: string; title: string; body: string }[] = [
@@ -638,58 +595,7 @@ export default function LandingPage() {
             </div>
           </section>
           {/* ---------- services ---------- */}
-          <section id="services" className="mx-auto w-full max-w-[1400px] px-5 py-16 sm:px-8 lg:py-24">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-2xl">
-                <Label>What we make and mend</Label>
-                <h2
-                  className="mt-5 text-[1.75rem] leading-tight tracking-[-0.01em] sm:text-[2.25rem] lg:text-[2.75rem]"
-                  style={{ fontFamily: SERIF, fontWeight: 600 }}
-                >
-                  Bring the garment — <span className="italic text-[#8a6d38]">we will fit the occasion.</span>
-                </h2>
-              </div>
-              <p className="max-w-md text-[14px] leading-relaxed text-[#2B2B2B]">
-                Everything below can be started at the counter. If you are not sure which one you need, walk in
-                with the piece and we will tell you honestly.
-              </p>
-            </div>
-
-            <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-              {SERVICES.map(({ icon: ServiceIcon, title, body, image, alt }) => (
-                <article
-                  key={title}
-                  className="group overflow-hidden rounded-sm border border-[#0B1220]/10 bg-[#FFFDF9] transition-all duration-500 hover:-translate-y-1 hover:border-[#C8A46A]/60 hover:shadow-[0_26px_55px_-32px_rgba(11,18,32,0.6)]"
-                >
-                  <div className="relative h-44 overflow-hidden sm:h-48">
-                    <img
-                      src={image}
-                      alt={alt}
-                      loading="lazy"
-                      className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.06]"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0B1220]/50 via-transparent to-transparent" />
-                    <span className="absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-[#F8F5EF]/90 text-[#8a6d38] backdrop-blur-sm">
-                      <ServiceIcon className="h-4 w-4" strokeWidth={1.7} />
-                    </span>
-                  </div>
-                  <div className="p-6">
-                    <h3 className="text-[19px] leading-snug" style={{ fontFamily: SERIF, fontWeight: 600 }}>
-                      {title}
-                    </h3>
-                    <p className="mt-2.5 text-[13.5px] leading-relaxed text-[#2B2B2B]">{body}</p>
-                    <p
-                      className="mt-5 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-[#8a6d38]"
-                      style={{ fontFamily: MONO }}
-                    >
-                      <Scissors className="h-3 w-3" strokeWidth={2} />
-                      Available to walk-ins
-                    </p>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
+          <ServicesCatalog />
           {/* ---------- why choose us + trust statement ---------- */}
           <section className="border-y border-[#0B1220]/10 bg-[#FFFDF9]">
             <div className="mx-auto grid w-full max-w-[1400px] grid-cols-1 gap-12 px-5 py-16 sm:px-8 lg:grid-cols-12 lg:gap-16 lg:py-24">
@@ -1248,6 +1154,159 @@ function SiteFooter({ onClientLogin }: { onClientLogin: () => void }) {
         </div>
       </div>
     </footer>
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   SERVICES CATALOG — replaces static list with live Garment Catalog
+--------------------------------------------------------------------------- */
+
+function SmartImage({ src, alt, garmentType, className, framing }: { src: string; alt: string; garmentType: string; className?: string; framing?: any }) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => { setBroken(false); }, [src]);
+  if (!src || broken) {
+    return (
+      <div className={`flex items-center justify-center bg-gradient-to-br from-[#F8F3EB] to-[#F2ECE1] ${className || ''}`}>
+        <GarmentIllustration type={garmentType} className="h-24 w-20" />
+      </div>
+    );
+  }
+  return <CatalogImage src={src} alt={alt} framing={framing} className={className} onBroken={() => setBroken(true)} />;
+}
+
+function ServicesCatalog() {
+  const [items, setItems] = useState<CatalogCard[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    frontDeskApi.getGarmentCatalog()
+      .then((res) => {
+        if (res.length > 0) {
+          setItems(buildCatalogCards(res));
+        } else {
+          setItems(buildCatalogCards(SAMPLE_CATALOG_ITEMS));
+        }
+      })
+      .catch(() => setItems(buildCatalogCards(SAMPLE_CATALOG_ITEMS)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <section id="services" className="mx-auto w-full max-w-[1400px] px-5 py-16 sm:px-8 lg:py-24">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-2xl">
+          <Label>Design Catalog</Label>
+          <h2
+            className="mt-5 text-[1.75rem] leading-tight tracking-[-0.01em] sm:text-[2.25rem] lg:text-[2.75rem]"
+            style={{ fontFamily: "'Fraunces', serif", fontWeight: 600 }}
+          >
+            Bring the garment — <span className="italic text-[#8a6d38]">we will fit the occasion.</span>
+          </h2>
+        </div>
+        <p className="max-w-md text-[14px] leading-relaxed text-[#2B2B2B]">
+          Everything below can be started at the counter. If you are not sure which one you need, walk in
+          with the piece and we will tell you honestly.
+        </p>
+      </div>
+
+      <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+        {loading ? (
+          Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-96 animate-pulse rounded-2xl border border-[#0B1220]/10 bg-[#FFFDF9]" />
+          ))
+        ) : (
+          items.map((card) => {
+            const isCustom = card.source === 'custom';
+            return (
+              <article key={card.key} className="group flex flex-col overflow-hidden rounded-2xl border border-[#ECE2D3] bg-white shadow-[0_1px_1px_rgba(42,33,29,0.03),0_10px_24px_-18px_rgba(42,33,29,0.18)] transition-all duration-300 hover:-translate-y-1 hover:border-[#E5C396]/70 hover:shadow-[0_24px_44px_-22px_rgba(42,33,29,0.34)]">
+                <div className={`relative w-full overflow-hidden h-48 bg-[#F2ECE1]`}>
+                  {isCustom
+                    ? (
+                      <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-[#FFFCF8] to-[#FBF4E8]">
+                        <Sparkles className="h-7 w-7 text-[#8C6F3E]" strokeWidth={1.5} />
+                        <span className="text-[10px] uppercase tracking-[0.16em] text-[#8C6F3E]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Bespoke</span>
+                      </div>
+                    )
+                    : (
+                      <SmartImage
+                        src={card.image}
+                        alt={card.name}
+                        garmentType={card.garmentType}
+                        className="h-full w-full transition-transform duration-500 group-hover:scale-[1.03]" framing={card.imageFraming}
+                      />
+                    )}
+                  <span className="absolute left-2.5 top-2.5 rounded-full bg-white/92 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.1em] text-[#5E5048] shadow-sm backdrop-blur-sm">
+                    {groupForCategory(card.category)}
+                  </span>
+                  <span className="absolute right-2.5 top-2.5 rounded-full bg-[#2A211D]/88 px-2.5 py-1 text-[10px] font-semibold text-[#F5EAD5] shadow" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                    {card.startingPrice > 0 ? card.priceLabel : 'No Starting Price'}
+                  </span>
+                </div>
+
+                <div className="flex flex-1 flex-col p-4">
+                  <h3 className="text-[15.5px] font-semibold leading-snug text-[#2A211D]" style={{ fontFamily: "'Fraunces', serif" }}>{card.name}</h3>
+                  <p className="mt-0.5 text-[10.5px] uppercase tracking-[0.12em] text-[#A3958B]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                    {card.orderCategory} · {card.garmentType}
+                  </p>
+
+                  {!isCustom && card.startingPrice > 0 && (
+                    <p className="mt-2 rounded-lg border border-[#E5D5AE] bg-[#FFFBEE] px-2.5 py-1.5 text-[10.5px] font-medium leading-relaxed text-[#8A6618]" role="status">
+                      {card.priceLabel}
+                    </p>
+                  )}
+                  {card.description && (
+                    <p className="mt-2 line-clamp-2 text-[12px] leading-relaxed text-[#766A62]">{card.description}</p>
+                  )}
+
+                  <div className="mt-3">
+                    <span className="text-[10px] uppercase tracking-[0.2em] text-[#8C7E74]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Available styles</span>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {card.styles.map((style) => (
+                        <span key={style} className="rounded-full border border-[#E2D7C7] px-2 py-0.5 text-[9.5px] font-medium text-[#766A62]">{style}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-3">
+                    <span className="text-[10px] uppercase tracking-[0.2em] text-[#8C7E74]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Available fabrics</span>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {card.fabrics.length > 0
+                        ? card.fabrics.slice(0, 3).map((fabric) => (
+                          <span key={fabric} className="rounded-full bg-[#F9F4EB] px-2 py-0.5 text-[9.5px] font-medium text-[#8C6F3E]">{fabric}</span>
+                        ))
+                        : <span className="text-[10px] text-[#A3958B]">Fabric chosen from live inventory at intake</span>}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 rounded-lg border border-[#F0EAE2] bg-[#FCFAF7] px-3 py-2.5">
+                    <div className="min-w-0">
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-[#8C7E74]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Styles</span>
+                      <p className="mt-0.5 truncate text-[11.5px] font-medium text-[#2A211D]">{card.styles.length} available</p>
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-[#8C7E74]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Est. Prod. Time</span>
+                      <p className="mt-1 flex items-center gap-1.5 truncate text-[11.5px] font-semibold text-[#2A211D]">
+                        <Clock className="h-3 w-3 flex-shrink-0 text-[#8C6F3E]" strokeWidth={1.8} /> {card.productionTime}
+                      </p>
+                    </div>
+                  </div>
+
+                  {card.colors.length > 0 && (
+                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-[#8C7E74]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>Colours</span>
+                      {card.colors.slice(0, 6).map((color, index) => (
+                        <span key={`${color}-${index}`} title={color} className="h-4 w-4 rounded-full border border-[#E2D7C7] shadow-inner" style={{ backgroundColor: color }} />
+                      ))}
+                    </div>
+                  )}
+
+                </div>
+              </article>
+            );
+          })
+        )}
+      </div>
+    </section>
   );
 }
 

@@ -33,3 +33,33 @@ export function formatProductionTime(value?: string | null): string {
   if (single) return `${single[1]} ${BUSINESS_DAY_UNIT}`;
   return raw.endsWith(BUSINESS_DAY_UNIT) ? raw : `${raw} ${BUSINESS_DAY_UNIT}`;
 }
+
+export function productionDayRange(value?: string | null): { min: number; max: number } | null {
+  const match = String(value || '').match(/(\d+)\s*[\u2013\u2014-]\s*(\d+)/);
+  if (match) return { min: Number(match[1]), max: Number(match[2]) };
+  const single = String(value || '').match(/(\d+)/);
+  return single ? { min: Number(single[1]), max: Number(single[1]) } : null;
+}
+
+/** Add shop business days. Sundays and configured dates are excluded. */
+export function addBusinessDays(startDate: string | Date, days: number, excludedDates: string[] = []): string {
+  const date = new Date(`${typeof startDate === 'string' ? startDate : startDate.toISOString().slice(0, 10)}T12:00:00`);
+  const excluded = new Set(excludedDates);
+  let added = 0;
+  while (added < Math.max(0, days)) {
+    date.setDate(date.getDate() + 1);
+    const iso = date.toISOString().slice(0, 10);
+    if (date.getDay() !== 0 && !excluded.has(iso)) added += 1;
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+export function configuredNonWorkingDays(): string[] {
+  try {
+    const raw = localStorage.getItem('tailoring.nonWorkingDays');
+    const values = raw ? JSON.parse(raw) : [];
+    return Array.isArray(values) ? values.filter((value): value is string => /^\d{4}-\d{2}-\d{2}$/.test(value)) : [];
+  } catch {
+    return [];
+  }
+}

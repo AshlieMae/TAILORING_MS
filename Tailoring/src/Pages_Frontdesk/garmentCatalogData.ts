@@ -195,6 +195,7 @@ export interface CatalogDesign {
   basePrice?: number | null;
   /** Production workflow key from the catalog item. */
   productionWorkflow?: string;
+  productionTime?: string;
   /** Styles the catalog item allows. */
   allowedStyles?: string[];
   image: string;
@@ -328,6 +329,8 @@ export interface CatalogCard {
   description: string;
   /** The shop's usual turnaround for this garment type. */
   productionTime: string;
+  productionMinDays?: number | null;
+  productionMaxDays?: number | null;
   /** Image framing saved from the Admin Live Preview (shared everywhere). */
   imageFraming?: ImageFraming;
 }
@@ -355,7 +358,11 @@ export function buildCatalogCards(items: CatalogItem[], inventoryFabrics: string
       colors: item.colors || [],
       image: item.image || '',
       description: item.description || '',
-      productionTime: productionTimeFor(garmentType),
+      productionTime: item.production_time || (item.production_min_days && item.production_max_days
+        ? businessDayRange(Number(item.production_min_days), Number(item.production_max_days))
+        : productionTimeFor(garmentType)),
+      productionMinDays: item.production_min_days,
+      productionMaxDays: item.production_max_days,
       imageFraming: normalizeFraming(item),
     };
   });
@@ -400,6 +407,8 @@ export function cardToDesign(card: CatalogCard): CatalogDesign {
     orderCategory: card.orderCategory,
     styleDesign: card.styles[0] || '',
     category: card.category,
+    productionTime: card.productionTime,
+    productionWorkflow: undefined,
   };
 }
 
